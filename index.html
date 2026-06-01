@@ -1686,28 +1686,10 @@ function SchedulerPanel({
     return unsub;
   }, [year, month]);
 
-  // Save schedule to Firestore when it changes (debounced)
+  // PUSH-only saving — no auto-save to prevent accidental overwrites
   const scheduleSaveTimer = useRef(null);
   const scheduleFromFirebase = useRef(false);
   const scheduleInitialized = useRef(false);
-  useEffect(() => {
-    if (scheduleFromFirebase.current) {
-      scheduleFromFirebase.current = false;
-      scheduleInitialized.current = true;
-      return; // skip — just loaded from Firebase
-    }
-    if (!scheduleInitialized.current) {
-      // Haven't loaded from Firebase yet — don't save empty initial state
-      return;
-    }
-    clearTimeout(scheduleSaveTimer.current);
-    scheduleSaveTimer.current = setTimeout(async () => {
-      const ok = await fsSet("firehawk", "schedule_" + year + "_" + month, {
-        daysJson: JSON.stringify(schedule)
-      });
-      setSyncStatus(ok ? "synced" : "offline");
-    }, 800);
-  }, [schedule, year, month]);
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDay(year, month);
   const rpicCrew = crew.filter(c => c.role === "RPIC" && !c.reserve);
