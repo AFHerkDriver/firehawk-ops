@@ -3744,12 +3744,16 @@ function WeatherModal({
     setStatus("loading");
     try {
       // Fetch METAR from FAA AWC — free, no key
-      const metarRes = await fetch("https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false");
+      const metarRes = await fetch("https://corsproxy.io/?url=https://aviationweather.gov/api/data/metar?ids=KSKF%26format=json%26taf=false");
       const metarData = await metarRes.json();
       const m = metarData[0];
 
       // Fetch NWS alerts for Bexar County
-      const alertRes = await fetch("https://api.weather.gov/alerts/active?zone=TXZ205");
+      const alertRes = await fetch("https://corsproxy.io/?url=https://api.weather.gov/alerts/active?zone=TXZ205", {
+        headers: {
+          "Accept": "application/geo+json"
+        }
+      });
       const alertData = await alertRes.json();
       const activeAlerts = (alertData.features || []).map(f => ({
         event: f.properties.event,
