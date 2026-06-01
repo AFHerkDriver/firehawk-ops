@@ -1638,6 +1638,7 @@ function SchedulerPanel({
   const [year, setYear] = useState(today.getFullYear());
   const [syncStatus, setSyncStatus] = useState("connecting");
   const [showWeather, setShowWeather] = useState(false);
+  const [showThermal, setShowThermal] = useState(false);
   const [schedule, setSchedule] = useState({});
   const [tab, setTab] = useState("calendar");
   const [selectedDay, setSelectedDay] = useState(null);
@@ -3698,6 +3699,952 @@ function SchedulerPanel({
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ── Thermal Config Modal ─────────────────────────────────────────────────────
+
+const MISSIONS = [{
+  id: "structure_fire",
+  icon: "🏠",
+  label: "Structure Fire",
+  sub: "Exterior recon, hot spot ID, exposure monitoring",
+  color: "#FF6B35",
+  dayNight: false,
+  config: {
+    gain: "HIGH",
+    gainReason: "High gain captures subtle temperature differences in building materials — identifies extension before it's visible",
+    palette: "White Hot",
+    paletteReason: "White Hot provides highest contrast for smoke penetration and hot spot identification",
+    isotherm: {
+      enabled: true,
+      low: 300,
+      high: 600,
+      unit: "°F"
+    },
+    isothermsReason: "Set 300–600°F to highlight active fire and hot spots through smoke obscuration",
+    zoom: "1–3x",
+    altitude: "150–250ft AGL",
+    tips: ["Scan eaves, roof penetrations, and party walls for thermal extension signatures", "Use isotherm to cut through smoke — hot spots appear as highlighted zones", "Circle the structure at 200ft for full perimeter view before moving to roof ops", "Watch for delayed ignition — rescan suppressed areas every 5–10 minutes"]
+  }
+}, {
+  id: "wildland_fire",
+  icon: "🌲",
+  label: "Wildland Fire",
+  sub: "Perimeter mapping, spotting, suppression support",
+  color: "#FF3B30",
+  dayNight: false,
+  config: {
+    gain: "HIGH",
+    gainReason: "High gain defines fire perimeter and detects spot fires against varied terrain temperatures",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow is the standard for wildland fire — excellent perimeter contrast across terrain",
+    isotherm: {
+      enabled: true,
+      low: 200,
+      high: 500,
+      unit: "°F"
+    },
+    isothermsReason: "Isolates active fire from cooling ash — identifies unburned islands and spot fire risk",
+    zoom: "1x wide",
+    altitude: "300–400ft AGL",
+    tips: ["Fly the perimeter first at 300ft to map active fire edge before going overhead", "Use isotherm to distinguish active fire from smoldering ash — they read differently", "Spot fires appear as isolated bright signatures — report bearing and distance from main", "Wind direction affects thermal plume — stay upwind for clearest imaging"]
+  }
+}, {
+  id: "sar",
+  icon: "🔦",
+  label: "Search & Rescue",
+  sub: "Missing person, lost hiker, water search",
+  color: "#34C759",
+  dayNight: true,
+  configDay: {
+    gain: "HIGH",
+    gainReason: "Day SAR requires high gain — solar loading on ground creates thermal clutter, high gain helps separate subject from background",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow separates human warmth from solar-heated surfaces better than White Hot during daylight hours",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — solar-heated terrain creates too much false isotherm activation during the day",
+    zoom: "1x search, zoom to confirm",
+    altitude: "150–200ft AGL",
+    tips: ["Daytime solar loading makes humans harder to distinguish — fly in shadow areas when possible", "Shaded ground reads cooler, making warm subjects stand out — prioritize shaded search areas", "Clothing type matters — dark clothing absorbs more solar heat and reads warmer", "Early morning and late afternoon (golden hour) offer best thermal contrast of the day"]
+  },
+  configNight: {
+    gain: "LOW",
+    gainReason: "Night SAR — low gain keeps body temp (98.6°F) centered in the scale for maximum contrast against cool dark ground",
+    palette: "White Hot",
+    paletteReason: "White Hot makes warm subjects appear bright against cool dark ground — easiest to spot at a glance",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — subjects stand out naturally at night, full gradient gives better situational awareness",
+    zoom: "1x search, zoom to confirm",
+    altitude: "100–150ft AGL",
+    tips: ["Body temp is ~98.6°F — look for bright white blobs against cool dark ground", "Check dense vegetation edges — subjects often shelter against trees or structures", "If subject is wet or hypothermic, signature weakens — scan for residual ground warmth", "Fly slow grid at 120ft — human signatures are strongest within 200ft"]
+  }
+}, {
+  id: "water_rescue",
+  icon: "🌊",
+  label: "Water Rescue",
+  sub: "Victim in water, swimmer, flood ops",
+  color: "#4A90D9",
+  dayNight: false,
+  config: {
+    gain: "LOW",
+    gainReason: "Water temperature is relatively uniform — human body temp stands out strongly at low gain",
+    palette: "White Hot",
+    paletteReason: "White Hot gives maximum contrast between warm victim and cold water — especially effective at night",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — human signature is strong against water, full gradient gives better area coverage",
+    zoom: "1x search, 3x to confirm and direct",
+    altitude: "100–200ft AGL",
+    tips: ["Hypothermia sets in fast — thermal signature weakens over time. Speed is critical.", "Even a partially submerged victim is detectable — look for bright white against dark water", "Debris, foam, and turbulence can create false positives — confirm with zoom", "Use rangefinder to give rescue teams precise distance and bearing to victim"]
+  }
+}, {
+  id: "hazmat",
+  icon: "☣️",
+  label: "Hazmat",
+  sub: "Heat source ID, chemical plume, container monitoring",
+  color: "#FFC107",
+  dayNight: false,
+  config: {
+    gain: "HIGH",
+    gainReason: "High gain detects subtle temperature differentials in containers, piping, and spill areas",
+    palette: "Rainbow",
+    paletteReason: "Rainbow maps temperature gradients across a wide range — ideal for container heat differentials",
+    isotherm: {
+      enabled: true,
+      low: 120,
+      high: 250,
+      unit: "°F"
+    },
+    isothermsReason: "Isolates dangerously hot containers or exothermic reactions from ambient environment",
+    zoom: "3–5x",
+    altitude: "200–300ft AGL",
+    tips: ["Stay upwind — thermal plumes indicate chemical release direction and extent", "Hot containers appear bright — compare to adjacent containers for anomalies", "Document with thermal + visible split-screen for incident records", "Coordinate with HazMat IC — provide real-time thermal feed to ground team"]
+  }
+}, {
+  id: "damage_assessment",
+  icon: "🏗",
+  label: "Damage Assessment",
+  sub: "Post-incident structural survey, hot spot verification",
+  color: "#7D3C98",
+  dayNight: false,
+  config: {
+    gain: "HIGH",
+    gainReason: "High gain reveals residual heat in structural materials — identifies hidden hot spots before overhaul",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow differentiates residual heat, ambient temperature, and water-cooled areas clearly",
+    isotherm: {
+      enabled: true,
+      low: 150,
+      high: 400,
+      unit: "°F"
+    },
+    isothermsReason: "Highlights residual hot spots above ambient — guides overhaul crews to specific areas",
+    zoom: "2–5x",
+    altitude: "100–200ft AGL",
+    tips: ["Systematically grid the structure in overlapping passes for complete coverage", "Residual heat in walls and ceilings persists hours after suppression — do not assume clear", "Water-saturated materials read cooler than ambient — distinguish from true cold spots", "Document GPS-tagged thermal anomalies for incident report"]
+  }
+}, {
+  id: "storm_damage",
+  icon: "🌪",
+  label: "Storm / Severe Weather",
+  sub: "Post-tornado survey, hail damage, gas leak detection",
+  color: "#64B5F6",
+  dayNight: false,
+  config: {
+    gain: "HIGH",
+    gainReason: "High gain detects subtle structural heat differentials and gas leak signatures against ambient background",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow shows wide temperature range in damaged structures — differentiates insulation loss, exposed materials, gas leaks",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — wide area survey benefits from full gradient; turn on if gas leak suspected (set narrow band around ambient +5°F)",
+    zoom: "1x survey, 3x for detail",
+    altitude: "200–300ft AGL",
+    tips: ["Post-tornado: grid entire impact path first before detailing individual structures", "Gas leaks appear as cool plumes (natural gas expands and cools) — look for cold anomalies near meter locations", "Exposed insulation loss reads warmer than intact roofs — helps prioritize structure inspections", "Coordinate with utilities — gas and power shut-off status affects thermal signatures significantly"]
+  }
+}, {
+  id: "mci",
+  icon: "🚑",
+  label: "Mass Casualty / MCI",
+  sub: "Triage support, locating unresponsive victims",
+  color: "#E91E63",
+  dayNight: true,
+  configDay: {
+    gain: "HIGH",
+    gainReason: "High gain needed during day — solar heating creates background clutter that masks victims in crowded scenes",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow separates body heat from solar-heated vehicles and pavement in chaotic daytime scenes",
+    isotherm: {
+      enabled: true,
+      low: 90,
+      high: 105,
+      unit: "°F"
+    },
+    isothermsReason: "Narrow isotherm at human body temp (90–105°F) highlights living victims and flags hypothermia/hyperthermia cases",
+    zoom: "1x for scene, zoom to assess individuals",
+    altitude: "150–200ft AGL",
+    tips: ["Use body-temp isotherm to rapidly identify warm victims in debris — speeds triage significantly", "Unresponsive victims on hot pavement may be hard to distinguish — look for limb position and isotherm color", "Coordinate with triage teams — mark victim locations with GPS waypoints for ground crews", "Thermal can identify hyperthermia victims (reading hotter than normal) before they become critical"]
+  },
+  configNight: {
+    gain: "LOW",
+    gainReason: "Night MCI — low gain centers body temp perfectly, cool background makes every victim clearly visible",
+    palette: "White Hot",
+    paletteReason: "White Hot is fastest for triage scanning at night — warm victims appear as distinct bright shapes instantly",
+    isotherm: {
+      enabled: true,
+      low: 90,
+      high: 105,
+      unit: "°F"
+    },
+    isothermsReason: "Body-temp isotherm at night quickly flags all living victims and highlights hypothermia cases as cooler-than-normal",
+    zoom: "1x wide scan, zoom to assess",
+    altitude: "100–150ft AGL",
+    tips: ["Night MCI is the optimal thermal scenario — body heat stands out dramatically against cool ground", "Isotherm at 90–105°F will light up every living victim in the scene automatically", "Scan from perimeter inward — identifies victims outside the main treatment area", "Flag non-moving isotherm signatures as priority — may indicate unconscious or trapped victims"]
+  }
+}, {
+  id: "power_infra",
+  icon: "🔌",
+  label: "Power / Infrastructure",
+  sub: "Electrical fault, transformer hot spots, utility inspection",
+  color: "#FFB300",
+  dayNight: false,
+  config: {
+    gain: "HIGH",
+    gainReason: "High gain essential for detecting subtle overheating in electrical components before failure",
+    palette: "Rainbow",
+    paletteReason: "Rainbow palette maps exact temperature gradients across electrical components — standard for electrical inspection",
+    isotherm: {
+      enabled: true,
+      low: 140,
+      high: 300,
+      unit: "°F"
+    },
+    isothermsReason: "Flags components significantly above ambient — transformers, splice points, and overloaded conductors glow clearly",
+    zoom: "5–10x",
+    altitude: "100–150ft AGL",
+    tips: ["Transformers run warm normally — look for asymmetric heating or components significantly hotter than neighbors", "Overloaded conductors appear as a continuous bright line — compare phases for load imbalance", "Splice connections and insulators are failure points — zoom in and document temperature readings", "Coordinate with utility company before any close approach to energized infrastructure"]
+  }
+}, {
+  id: "overwatch",
+  icon: "👁",
+  label: "General Overwatch",
+  sub: "LE support, crowd monitoring, perimeter security",
+  color: "#C8A84B",
+  dayNight: true,
+  configDay: {
+    gain: "HIGH",
+    gainReason: "Daytime overwatch requires high gain — solar-heated vehicles and pavement create thermal clutter",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow separates personnel from hot vehicles and pavement during day ops",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — situational awareness requires full scene context, not just a temperature band",
+    zoom: "1x area, zoom to track",
+    altitude: "200–300ft AGL",
+    tips: ["Daytime urban environments are thermally noisy — look for movement, not just heat signatures", "Hot pavement and vehicles create false signatures — zoom before reporting a person", "Position upwind of exhaust sources — diesel and engine heat degrades image quality", "Maintain 250ft+ for wide area coverage in daytime crowd situations"]
+  },
+  configNight: {
+    gain: "LOW",
+    gainReason: "Night overwatch — low gain keeps subjects clear and distinct in cool nighttime thermal environment",
+    palette: "White Hot",
+    paletteReason: "White Hot is standard for personnel tracking at night — warm bodies appear bright and distinct",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — situational awareness needs full scene view, not just a temperature band",
+    zoom: "1x area, zoom to track individuals",
+    altitude: "200–300ft AGL",
+    tips: ["Vehicles read hot for 30+ minutes after engine off — don't confuse with personnel", "Night thermal overwatch is highly effective — subjects have nowhere to hide thermally", "Coordinate sector assignments with IC — avoid overlap with ground unit comms", "HVAC exhaust and concrete heat retention can create false signatures in urban environments"]
+  }
+}, {
+  id: "large_animal",
+  icon: "🐄",
+  label: "Large Animal / Wildlife",
+  sub: "Livestock rescue, wildlife SAR, rural operations",
+  color: "#8D6E63",
+  dayNight: true,
+  configDay: {
+    gain: "HIGH",
+    gainReason: "Daytime large animal ops — solar loading makes ground hot; high gain separates animal body temp from background",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow distinguishes animal heat from solar-heated terrain — better contrast than White Hot during the day",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — wide area search benefits from full gradient; animal signatures are large enough to spot without isotherm",
+    zoom: "1x search, 2x confirm",
+    altitude: "150–250ft AGL",
+    tips: ["Large animals (cattle, horses) read significantly warmer than terrain — easy to spot even in daylight", "Animals in distress may separate from herd — scan perimeter areas and dense brush", "Check water sources and shade structures first — animals seek these in Texas heat", "Coordinate with property owner — fencing and pen locations help focus search area"]
+  },
+  configNight: {
+    gain: "LOW",
+    gainReason: "Night animal ops — large body mass reads very warm against cool ground, low gain prevents saturation",
+    palette: "White Hot",
+    paletteReason: "White Hot makes large warm animal signatures highly visible against cool dark terrain at night",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — large animals are very visible at night without isotherm, full scene view helps avoid missing subjects",
+    zoom: "1x wide search, zoom to ID species",
+    altitude: "100–200ft AGL",
+    tips: ["Large animals are extremely visible at night — cattle and horses appear as large bright signatures", "Groups cluster together — a single isolated signature may indicate an injured or trapped animal", "Use rangefinder to give ground teams precise location in rural terrain", "Wildlife may flee from aircraft — approach slowly and from altitude to avoid scattering herd"]
+  }
+}, {
+  id: "pursuit",
+  icon: "🚗",
+  label: "Vehicle Pursuit",
+  sub: "LE overwatch — DFR future capability",
+  color: "#475569",
+  dayNight: false,
+  config: {
+    gain: "LOW",
+    gainReason: "Engine and exhaust heat is intense — low gain prevents image saturation and keeps vehicle in frame",
+    palette: "White Hot",
+    paletteReason: "White Hot tracks vehicle heat signature clearly — exhaust and engine compartment appear bright",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — situational awareness during pursuit needs full scene context",
+    zoom: "1–3x",
+    altitude: "200–300ft AGL",
+    tips: ["Engine and exhaust read extremely hot — stay in low gain to prevent image saturation", "Foot bail: suspect on foot appears bright white against dark pavement — switch scan mode immediately", "Call direction of travel and cross streets continuously for IC awareness", "Note: Current capability limited. DFR integration planned for future deployment."]
+  }
+}];
+const PALETTES = {
+  "White Hot": {
+    colors: ["#0d1117", "#1e3a5f", "#2d6a9f", "#5ba3d0", "#96cfe8", "#c8e8f5", "#ffffff"],
+    desc: "Warm = bright white"
+  },
+  "Black Hot": {
+    colors: ["#ffffff", "#d0d0d0", "#a0a0a0", "#707070", "#404040", "#181818", "#000000"],
+    desc: "Warm = dark black"
+  },
+  "Iron Bow": {
+    colors: ["#0a0a3e", "#1a1a8e", "#5530b0", "#a020a0", "#d04020", "#e88000", "#ffff30"],
+    desc: "Cool blue → warm yellow"
+  },
+  "Rainbow": {
+    colors: ["#0000cc", "#0066ff", "#00ccff", "#00ff88", "#ffff00", "#ff8800", "#ff0000"],
+    desc: "Full spectrum gradient"
+  }
+};
+function ThermalModal({
+  onClose
+}) {
+  const [selected, setSelected] = useState(null);
+  const [timeOfDay, setTimeOfDay] = useState("night");
+  const [quickView, setQuickView] = useState(false);
+  const mission = selected ? MISSIONS.find(m => m.id === selected) : null;
+  const getConfig = m => {
+    if (!m) return null;
+    if (!m.dayNight) return m.config;
+    return timeOfDay === "day" ? m.configDay : m.configNight;
+  };
+  const config = getConfig(mission);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "#07090F",
+      zIndex: 999,
+      overflowY: "auto",
+      fontFamily: "'DM Mono','Courier New',monospace",
+      color: "#CBD5E1"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#07090F",
+      minHeight: "100vh",
+      fontFamily: "'DM Mono','Courier New',monospace",
+      color: "#CBD5E1",
+      maxWidth: 480,
+      margin: "0 auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "linear-gradient(135deg,rgba(255,107,53,0.15),transparent 55%)",
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
+      padding: "14px 18px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      position: "sticky",
+      top: 0,
+      backdropFilter: "blur(10px)",
+      zIndex: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "serif",
+      fontSize: 16,
+      letterSpacing: 3,
+      color: "#FF6B35",
+      fontWeight: 900
+    }
+  }, "THERMAL CONFIG"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3,
+      marginTop: 2
+    }
+  }, "M30T \xB7 M4T \xB7 M4TD \xB7 DRONESENSE")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center"
+    }
+  }, mission && config && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setQuickView(!quickView),
+    style: {
+      background: quickView ? "rgba(255,107,53,0.2)" : "rgba(255,255,255,0.05)",
+      border: `1px solid ${quickView ? "rgba(255,107,53,0.5)" : "rgba(255,255,255,0.1)"}`,
+      borderRadius: 8,
+      padding: "6px 10px",
+      color: quickView ? "#FF6B35" : "#94A3B8",
+      fontSize: 9,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      letterSpacing: 1
+    }
+  }, "\u26A1 QUICK"), mission && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setSelected(null);
+      setQuickView(false);
+    },
+    style: {
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.1)",
+      borderRadius: 8,
+      padding: "6px 12px",
+      color: "#94A3B8",
+      fontSize: 10,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, "\u2190 Back"))), !mission ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#334155",
+      letterSpacing: 3,
+      marginBottom: 12,
+      paddingLeft: 2
+    }
+  }, "SELECT MISSION TYPE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, MISSIONS.map(m => /*#__PURE__*/React.createElement("button", {
+    key: m.id,
+    onClick: () => setSelected(m.id),
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.07)",
+      borderRadius: 12,
+      padding: "14px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      textAlign: "left",
+      width: "100%",
+      transition: "border 0.15s"
+    },
+    onMouseEnter: e => e.currentTarget.style.borderColor = `${m.color}55`,
+    onMouseLeave: e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      flexShrink: 0
+    }
+  }, m.icon), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      color: "#E2E8F0",
+      fontWeight: 600
+    }
+  }, m.label), m.dayNight && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      background: "rgba(74,144,217,0.15)",
+      border: "1px solid rgba(74,144,217,0.3)",
+      borderRadius: 3,
+      padding: "1px 5px",
+      color: "#4A90D9",
+      letterSpacing: 1
+    }
+  }, "DAY/NIGHT")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      letterSpacing: 0.5,
+      marginTop: 3
+    }
+  }, m.sub)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#334155"
+    }
+  }, "\u2192"))))) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 12,
+      paddingBottom: 40
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: `${mission.color}12`,
+      border: `1px solid ${mission.color}30`,
+      borderRadius: 14,
+      padding: "14px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 26
+    }
+  }, mission.icon), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      color: "#E2E8F0",
+      fontWeight: 700,
+      letterSpacing: 1
+    }
+  }, mission.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 2
+    }
+  }, mission.sub)), mission.dayNight && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 8,
+      overflow: "hidden",
+      flexShrink: 0
+    }
+  }, ["day", "night"].map(t => /*#__PURE__*/React.createElement("button", {
+    key: t,
+    onClick: () => setTimeOfDay(t),
+    style: {
+      background: timeOfDay === t ? "rgba(74,144,217,0.25)" : "transparent",
+      border: "none",
+      padding: "6px 10px",
+      color: timeOfDay === t ? "#4A90D9" : "#475569",
+      fontSize: 9,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      letterSpacing: 1
+    }
+  }, t === "day" ? "☀️ DAY" : "🌙 NIGHT")))), quickView && config && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#0A0F1E",
+      border: `2px solid ${mission.color}60`,
+      borderRadius: 16,
+      padding: "20px",
+      boxShadow: `0 0 30px ${mission.color}20`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3,
+      marginBottom: 16,
+      textAlign: "center"
+    }
+  }, "\u26A1 QUICK LAUNCH \u2014 ", mission.label.toUpperCase(), mission.dayNight ? ` · ${timeOfDay.toUpperCase()}` : ""), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr 1fr",
+      gap: 8,
+      marginBottom: 16
+    }
+  }, [{
+    label: "GAIN",
+    value: config.gain,
+    color: config.gain === "HIGH" ? "#FF6B35" : "#4A90D9"
+  }, {
+    label: "PALETTE",
+    value: config.palette.replace(" ", "\n"),
+    color: "#E2E8F0"
+  }, {
+    label: "ISOTHERM",
+    value: config.isotherm.enabled ? `ON\n${config.isotherm.low}–${config.isotherm.high}°` : "OFF",
+    color: config.isotherm.enabled ? "#FFC107" : "#475569"
+  }, {
+    label: "ALT",
+    value: config.altitude.split("–")[0],
+    color: "#E2E8F0"
+  }].map((item, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 10,
+      padding: "12px 8px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 7,
+      color: "#334155",
+      letterSpacing: 1.5,
+      marginBottom: 6
+    }
+  }, item.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      fontWeight: 900,
+      color: item.color,
+      lineHeight: 1.2,
+      whiteSpace: "pre-line"
+    }
+  }, item.value)))), PALETTES[config.palette] && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 2,
+      borderRadius: 6,
+      overflow: "hidden",
+      height: 16,
+      marginBottom: 4
+    }
+  }, PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      flex: 1,
+      background: c
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#334155"
+    }
+  }, "COOL"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#475569"
+    }
+  }, config.palette), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#334155"
+    }
+  }, "HOT")))), !quickView && config && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.07)",
+      borderRadius: 14,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.03)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      padding: "10px 16px",
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3
+    }
+  }, "QUICK REFERENCE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 0
+    }
+  }, [{
+    label: "GAIN",
+    value: config.gain,
+    color: config.gain === "HIGH" ? "#FF6B35" : "#4A90D9"
+  }, {
+    label: "PALETTE",
+    value: config.palette,
+    color: "#E2E8F0"
+  }, {
+    label: "ISOTHERM",
+    value: config.isotherm.enabled ? `ON · ${config.isotherm.low}–${config.isotherm.high}${config.isotherm.unit}` : "OFF",
+    color: config.isotherm.enabled ? "#FFC107" : "#475569"
+  }, {
+    label: "ALTITUDE",
+    value: config.altitude,
+    color: "#E2E8F0"
+  }].map((item, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      padding: "12px 16px",
+      borderBottom: "1px solid rgba(255,255,255,0.03)",
+      borderRight: i % 2 === 0 ? "1px solid rgba(255,255,255,0.03)" : "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 2,
+      marginBottom: 5
+    }
+  }, item.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: item.color,
+      fontWeight: 700
+    }
+  }, item.value)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "12px 16px",
+      borderTop: "1px solid rgba(255,255,255,0.03)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 2,
+      marginBottom: 5
+    }
+  }, "ZOOM"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#E2E8F0",
+      fontWeight: 700
+    }
+  }, config.zoom))), PALETTES[config.palette] && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.06)",
+      borderRadius: 14,
+      padding: "14px 16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3,
+      marginBottom: 10
+    }
+  }, "PALETTE \u2014 ", config.palette.toUpperCase()), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 3,
+      borderRadius: 6,
+      overflow: "hidden",
+      height: 24,
+      marginBottom: 8
+    }
+  }, PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      flex: 1,
+      background: c
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: "#334155"
+    }
+  }, "COOL"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: "#475569"
+    }
+  }, PALETTES[config.palette].desc), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: "#334155"
+    }
+  }, "HOT"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.06)",
+      borderRadius: 14,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.03)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      padding: "10px 16px",
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3
+    }
+  }, "WHY THESE SETTINGS"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px 16px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, [{
+    label: "Gain",
+    icon: "⚡",
+    text: config.gainReason
+  }, {
+    label: "Palette",
+    icon: "🎨",
+    text: config.paletteReason
+  }, {
+    label: "Isotherm",
+    icon: "🌡",
+    text: config.isothermsReason
+  }].map((item, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: 10,
+      alignItems: "flex-start"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      flexShrink: 0
+    }
+  }, item.icon), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      letterSpacing: 1
+    }
+  }, item.label, ": "), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: "#CBD5E1",
+      lineHeight: 1.6
+    }
+  }, item.text)))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.06)",
+      borderRadius: 14,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.03)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      padding: "10px 16px",
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3
+    }
+  }, "OPERATIONAL TIPS"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px 16px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, config.tips.map((tip, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: 10,
+      alignItems: "flex-start"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: mission.color,
+      flexShrink: 0,
+      marginTop: 2,
+      fontWeight: 700
+    }
+  }, String(i + 1).padStart(2, '0')), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#94A3B8",
+      lineHeight: 1.7
+    }
+  }, tip))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.01)",
+      border: "1px solid rgba(255,255,255,0.04)",
+      borderRadius: 10,
+      padding: "10px 14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 2,
+      marginBottom: 5
+    }
+  }, "DRONESENSE SETTINGS PATH"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#475569",
+      lineHeight: 1.7
+    }
+  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)"))))));
+}
+
 // ── Weather Modal ────────────────────────────────────────────────────────────
 function WeatherModal({
   onClose
@@ -4535,6 +5482,7 @@ function FirehawkOps() {
   const [bulletins, setBulletins] = useState([]);
   const [syncStatus, setSyncStatus] = useState("connecting");
   const [showWeather, setShowWeather] = useState(false);
+  const [showThermal, setShowThermal] = useState(false);
   const [now, setNow] = useState(new Date());
   const [isManager, setIsManager] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -5028,6 +5976,55 @@ function FirehawkOps() {
     style: {
       fontSize: 12,
       color: "#4A90D9",
+      opacity: 0.6
+    }
+  }, "\u2192")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowThermal(true),
+    style: {
+      width: "100%",
+      background: "linear-gradient(135deg,rgba(255,107,53,0.15),rgba(255,107,53,0.08))",
+      border: "1px solid rgba(255,107,53,0.35)",
+      borderRadius: 10,
+      padding: "13px 16px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      cursor: "pointer",
+      fontFamily: "inherit",
+      color: "#FF6B35"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 18
+    }
+  }, "\uD83C\uDF21"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      letterSpacing: 2,
+      color: "#FF6B35"
+    }
+  }, "THERMAL CONFIG"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 1,
+      marginTop: 2
+    }
+  }, "M30T \xB7 M4T \xB7 M4TD \xB7 Mission settings"))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#FF6B35",
       opacity: 0.6
     }
   }, "\u2192")), expiring.length > 0 && /*#__PURE__*/React.createElement("div", {
@@ -5552,6 +6549,8 @@ function FirehawkOps() {
     setCrew: setCrew
   })), showWeather && /*#__PURE__*/React.createElement(WeatherModal, {
     onClose: () => setShowWeather(false)
+  }), showThermal && /*#__PURE__*/React.createElement(ThermalModal, {
+    onClose: () => setShowThermal(false)
   }), tab === "links" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
