@@ -5496,38 +5496,54 @@ function WeatherModal({
   async function fetchWeather() {
     setStatus("loading");
     try {
-      // Fetch METAR from FAA AWC via CORS proxy
-      const metarRes = await fetch("https://corsproxy.io/?url=https://aviationweather.gov/api/data/metar?ids=KSKF%26format=json%26taf=false");
-      if (!metarRes.ok) throw new Error("METAR fetch failed: " + metarRes.status);
-      const metarText = await metarRes.text();
-      let metarData;
-      try {
-        metarData = JSON.parse(metarText);
-      } catch (e) {
-        throw new Error("METAR parse failed");
+      // Fetch METAR from FAA AWC — try primary proxy, fall back to alternate if it fails
+      const METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false";
+      let metarData = null;
+      const proxies = ["https://corsproxy.io/?url=https://aviationweather.gov/api/data/metar?ids=KSKF%26format=json%26taf=false", "https://api.allorigins.win/raw?url=" + encodeURIComponent(METAR_URL)];
+      for (const purl of proxies) {
+        try {
+          const r = await fetch(purl);
+          if (!r.ok) continue;
+          const t = await r.text();
+          const parsed = JSON.parse(t);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            metarData = parsed;
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
       }
-      if (!metarData || !Array.isArray(metarData) || metarData.length === 0) throw new Error("No METAR data");
+      if (!metarData) throw new Error("All METAR sources failed");
       const m = metarData[0];
 
-      // Fetch NWS alerts for Bexar County
-      const alertRes = await fetch("https://corsproxy.io/?url=https://api.weather.gov/alerts/active?zone=TXZ205", {
-        headers: {
-          "Accept": "application/geo+json"
+      // Fetch NWS alerts for Bexar County — isolated so a failure here never blocks weather
+      let activeAlerts = [];
+      try {
+        const alertRes = await fetch("https://corsproxy.io/?url=https://api.weather.gov/alerts/active?zone=TXZ205", {
+          headers: {
+            "Accept": "application/geo+json"
+          }
+        });
+        if (alertRes.ok) {
+          const alertText = await alertRes.text();
+          const alertData = JSON.parse(alertText);
+          activeAlerts = (alertData.features || []).map(f => ({
+            event: f.properties.event,
+            headline: f.properties.headline,
+            severity: f.properties.severity,
+            urgency: f.properties.urgency,
+            description: f.properties.description?.split("\n")[0] || "",
+            ends: f.properties.ends ? new Date(f.properties.ends).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZoneName: 'short'
+            }) : "Until further notice"
+          }));
         }
-      });
-      const alertData = await alertRes.json();
-      const activeAlerts = (alertData.features || []).map(f => ({
-        event: f.properties.event,
-        headline: f.properties.headline,
-        severity: f.properties.severity,
-        urgency: f.properties.urgency,
-        description: f.properties.description?.split("\n")[0] || "",
-        ends: f.properties.ends ? new Date(f.properties.ends).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZoneName: 'short'
-        }) : "Until further notice"
-      }));
+      } catch (e) {
+        activeAlerts = [];
+      }
       setAlerts(activeAlerts);
 
       // Parse METAR fields
