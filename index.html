@@ -1639,6 +1639,7 @@ function SchedulerPanel({
   const [syncStatus, setSyncStatus] = useState("connecting");
   const [showWeather, setShowWeather] = useState(false);
   const [showThermal, setShowThermal] = useState(false);
+  const [showAirspace, setShowAirspace] = useState(false);
   const [schedule, setSchedule] = useState({});
   const [tab, setTab] = useState("calendar");
   const [selectedDay, setSelectedDay] = useState(null);
@@ -3700,6 +3701,1083 @@ function SchedulerPanel({
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── Airspace Modal ──────────────────────────────────────────────────────────
+// Bexar County key airports and their airspace info
+const AIRPORTS = [{
+  id: "KSAT",
+  name: "San Antonio Intl",
+  class: "C",
+  classColor: "#C8A84B",
+  classBg: "rgba(200,168,75,0.12)",
+  classBorder: "rgba(200,168,75,0.35)",
+  distance: "11nm NE of district center",
+  laanc: true,
+  description: "Class C airspace — LAANC available. Ceiling varies by grid, 0–400ft in outer ring.",
+  grids: [{
+    label: "Surface Area",
+    alt: 0,
+    color: "#FF3B30",
+    note: "No ops without COA"
+  }, {
+    label: "Inner Ring (5nm)",
+    alt: 100,
+    color: "#FFC107",
+    note: "LAANC auto-approval"
+  }, {
+    label: "Outer Ring (10nm)",
+    alt: 400,
+    color: "#34C759",
+    note: "LAANC auto-approval"
+  }],
+  impact: "high"
+}, {
+  id: "KSKF",
+  name: "Kelly Field (Lackland)",
+  class: "D",
+  classColor: "#4A90D9",
+  classBg: "rgba(74,144,217,0.12)",
+  classBorder: "rgba(74,144,217,0.35)",
+  distance: "In District 2 operating area",
+  laanc: true,
+  description: "Class D airspace — LAANC available. Military joint-use field. Coordinate with Lackland when operating nearby.",
+  grids: [{
+    label: "Surface Area (4nm)",
+    alt: 0,
+    color: "#FF3B30",
+    note: "No ops without authorization"
+  }, {
+    label: "Outer D (5nm)",
+    alt: 200,
+    color: "#FFC107",
+    note: "LAANC auto-approval"
+  }, {
+    label: "Beyond D",
+    alt: 400,
+    color: "#34C759",
+    note: "Class E — Part 107 standard"
+  }],
+  impact: "high"
+}, {
+  id: "KSSF",
+  name: "Stinson Municipal",
+  class: "D",
+  classColor: "#4A90D9",
+  classBg: "rgba(74,144,217,0.12)",
+  classBorder: "rgba(74,144,217,0.35)",
+  distance: "South District boundary",
+  laanc: true,
+  description: "Class D airspace — LAANC available. Active GA airport, coordinate with traffic advisories.",
+  grids: [{
+    label: "Surface Area (4nm)",
+    alt: 0,
+    color: "#FF3B30",
+    note: "No ops without authorization"
+  }, {
+    label: "Outer D (5nm)",
+    alt: 200,
+    color: "#FFC107",
+    note: "LAANC auto-approval"
+  }, {
+    label: "Beyond D",
+    alt: 400,
+    color: "#34C759",
+    note: "Class E — Part 107 standard"
+  }],
+  impact: "moderate"
+}, {
+  id: "KRND",
+  name: "Randolph AFB",
+  class: "D",
+  classColor: "#7D3C98",
+  classBg: "rgba(125,60,152,0.12)",
+  classBorder: "rgba(125,60,152,0.35)",
+  distance: "17nm NE",
+  laanc: false,
+  description: "Class D — Military. LAANC NOT available. Requires FAA DroneZone authorization. Allow 90 days.",
+  grids: [{
+    label: "Surface Area",
+    alt: 0,
+    color: "#FF3B30",
+    note: "Military — no LAANC"
+  }, {
+    label: "Outer D",
+    alt: 0,
+    color: "#FF3B30",
+    note: "DroneZone COA required"
+  }, {
+    label: "Beyond D",
+    alt: 400,
+    color: "#34C759",
+    note: "Class E — Part 107 standard"
+  }],
+  impact: "low"
+}];
+
+// Mock TFRs — in real app these come from FAA TFR XML feed
+const MOCK_TFRS = [{
+  id: "6/0412",
+  type: "Stadium",
+  typeIcon: "🏟",
+  facility: "Alamodome TFR",
+  location: "San Antonio, TX",
+  altitude: "SFC to 3,000ft AGL",
+  radius: "3nm",
+  effective: "Jun 1, 2026 1900L",
+  expires: "Jun 1, 2026 2300L",
+  notam: "FDC 6/0412",
+  distance: "8nm from district center",
+  impact: "low",
+  color: "#FFC107"
+}, {
+  id: "6/0398",
+  type: "VIP",
+  typeIcon: "🔒",
+  facility: "Presidential Movement",
+  location: "San Antonio, TX — KSAT",
+  altitude: "SFC to 18,000ft MSL",
+  radius: "30nm",
+  effective: "Jun 3, 2026 0600L",
+  expires: "Jun 3, 2026 2000L",
+  notam: "FDC 6/0398",
+  distance: "11nm from district center",
+  impact: "high",
+  color: "#FF3B30"
+}];
+const AIRSPACE_CLASS_INFO = {
+  B: {
+    label: "Class B",
+    color: "#4A90D9",
+    desc: "Major airports. LAANC required. 0ft default.",
+    icon: "🔵"
+  },
+  C: {
+    label: "Class C",
+    color: "#C8A84B",
+    desc: "Busy airports. LAANC available. Varies by ring.",
+    icon: "🟡"
+  },
+  D: {
+    label: "Class D",
+    color: "#4A90D9",
+    desc: "Towered airports. LAANC available (non-military).",
+    icon: "🔵"
+  },
+  E: {
+    label: "Class E",
+    color: "#34C759",
+    desc: "Controlled. Part 107 — 400ft AGL by rule.",
+    icon: "🟢"
+  },
+  G: {
+    label: "Class G",
+    color: "#34C759",
+    desc: "Uncontrolled. Part 107 — 400ft AGL by rule.",
+    icon: "🟢"
+  }
+};
+const QUICK_LINKS = [{
+  label: "Aloft LAANC",
+  sub: "Get instant authorization",
+  url: "https://www.aloft.ai/",
+  icon: "✈️",
+  color: "#4A90D9"
+}, {
+  label: "B4UFLY App",
+  sub: "FAA mobile airspace check",
+  url: "https://www.faa.gov/uas/recreational_flyers/where_can_i_fly/b4ufly",
+  icon: "📱",
+  color: "#34C759"
+}, {
+  label: "FAA DroneZone",
+  sub: "COA & waiver applications",
+  url: "https://faadronezone.faa.gov/",
+  icon: "🏛",
+  color: "#FF6B35"
+}, {
+  label: "TFR Map",
+  sub: "Live TFR visualization",
+  url: "https://tfr.faa.gov/tfr3/",
+  icon: "🗺",
+  color: "#FFC107"
+}, {
+  label: "UASFM Viewer",
+  sub: "Grid altitude lookup",
+  url: "https://uas-faa.opendata.arcgis.com/maps/faa::faa-uas-facilitymap-data/explore",
+  icon: "📊",
+  color: "#7D3C98"
+}, {
+  label: "SA VFR Chart",
+  sub: "SkyVector sectional",
+  url: "https://skyvector.com/?ll=29.5,-98.5&chart=301&zoom=1",
+  icon: "🗂",
+  color: "#C0392B"
+}];
+function AirspaceModal({
+  onClose
+}) {
+  const [tab, setTab] = useState("status");
+  const [selectedAirport, setSelectedAirport] = useState(null);
+  const [showTFRDetail, setShowTFRDetail] = useState(null);
+  const highTFRs = MOCK_TFRS.filter(t => t.impact === "high");
+  const hasHighImpact = highTFRs.length > 0;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "#07090F",
+      zIndex: 999,
+      overflowY: "auto",
+      fontFamily: "'DM Mono','Courier New',monospace",
+      color: "#CBD5E1"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "linear-gradient(135deg,rgba(52,199,89,0.12),transparent 55%)",
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
+      padding: "14px 18px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      position: "sticky",
+      top: 0,
+      backdropFilter: "blur(10px)",
+      zIndex: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "serif",
+      fontSize: 16,
+      letterSpacing: 3,
+      color: "#34C759",
+      fontWeight: 900
+    }
+  }, "AIRSPACE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3,
+      marginTop: 2
+    }
+  }, "LAANC \xB7 TFR \xB7 BEXAR COUNTY")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, hasHighImpact && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,59,48,0.15)",
+      border: "1px solid rgba(255,59,48,0.4)",
+      borderRadius: 6,
+      padding: "3px 8px",
+      fontSize: 8,
+      color: "#FF3B30",
+      letterSpacing: 1
+    }
+  }, "\u26A0 ", highTFRs.length, " HIGH IMPACT TFR"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.1)",
+      borderRadius: 8,
+      padding: "6px 12px",
+      color: "#94A3B8",
+      fontSize: 10,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, "\u2715"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      padding: "10px 14px",
+      borderBottom: "1px solid rgba(255,255,255,0.05)"
+    }
+  }, [["status", "Status"], ["airports", "Airports"], ["tfr", "TFRs"], ["links", "Quick Links"]].map(([id, label]) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    onClick: () => setTab(id),
+    style: {
+      background: tab === id ? "rgba(52,199,89,0.15)" : "rgba(255,255,255,0.03)",
+      border: `1px solid ${tab === id ? "rgba(52,199,89,0.4)" : "rgba(255,255,255,0.07)"}`,
+      borderRadius: 7,
+      padding: "6px 10px",
+      color: tab === id ? "#34C759" : "#475569",
+      fontSize: 9,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      letterSpacing: 1
+    }
+  }, label))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px",
+      paddingBottom: 40
+    }
+  }, tab === "status" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: hasHighImpact ? "rgba(255,59,48,0.08)" : "rgba(52,199,89,0.08)",
+      border: `1px solid ${hasHighImpact ? "rgba(255,59,48,0.3)" : "rgba(52,199,89,0.3)"}`,
+      borderRadius: 14,
+      padding: "16px 18px",
+      display: "flex",
+      alignItems: "center",
+      gap: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 28
+    }
+  }, hasHighImpact ? "🔴" : "🟢"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 900,
+      color: hasHighImpact ? "#FF3B30" : "#34C759",
+      letterSpacing: 2,
+      lineHeight: 1
+    }
+  }, hasHighImpact ? "AIRSPACE RESTRICTED" : "AIRSPACE CLEAR"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 4,
+      letterSpacing: 1
+    }
+  }, MOCK_TFRS.length, " active TFR", MOCK_TFRS.length !== 1 ? "s" : "", " in 50nm radius \xB7 ", new Date().toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }), " local"))), MOCK_TFRS.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.06)",
+      borderRadius: 14,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.03)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      padding: "10px 16px",
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3
+    }
+  }, "ACTIVE TFRs \u2014 50nm RADIUS"), MOCK_TFRS.map((tfr, i) => /*#__PURE__*/React.createElement("div", {
+    key: tfr.id,
+    onClick: () => {
+      setShowTFRDetail(tfr);
+      setTab("tfr");
+    },
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      padding: "13px 16px",
+      borderBottom: i < MOCK_TFRS.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 18,
+      flexShrink: 0
+    }
+  }, tfr.typeIcon), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#E2E8F0",
+      fontWeight: 600
+    }
+  }, tfr.facility), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 2
+    }
+  }, tfr.distance, " \xB7 ", tfr.altitude)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: tfr.impact === "high" ? "rgba(255,59,48,0.12)" : "rgba(255,193,7,0.12)",
+      border: `1px solid ${tfr.impact === "high" ? "rgba(255,59,48,0.3)" : "rgba(255,193,7,0.3)"}`,
+      borderRadius: 5,
+      padding: "3px 8px",
+      fontSize: 8,
+      color: tfr.color,
+      letterSpacing: 1
+    }
+  }, tfr.impact.toUpperCase())))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.06)",
+      borderRadius: 14,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.03)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      padding: "10px 16px",
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3
+    }
+  }, "DISTRICT AIRPORTS"), AIRPORTS.filter(a => a.impact !== "low").map((ap, i) => /*#__PURE__*/React.createElement("div", {
+    key: ap.id,
+    onClick: () => {
+      setSelectedAirport(ap);
+      setTab("airports");
+    },
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      padding: "13px 16px",
+      borderBottom: i < AIRPORTS.filter(a => a.impact !== "low").length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: ap.classBg,
+      border: `1px solid ${ap.classBorder}`,
+      borderRadius: 8,
+      width: 36,
+      height: 36,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      fontWeight: 900,
+      color: ap.classColor
+    }
+  }, "Class", /*#__PURE__*/React.createElement("br", null), ap.class)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#E2E8F0",
+      fontWeight: 600
+    }
+  }, ap.id, " \xB7 ", ap.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 2
+    }
+  }, ap.distance)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 4
+    }
+  }, ap.laanc && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      background: "rgba(52,199,89,0.1)",
+      border: "1px solid rgba(52,199,89,0.3)",
+      borderRadius: 4,
+      padding: "2px 6px",
+      color: "#34C759",
+      letterSpacing: 1
+    }
+  }, "LAANC"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#334155"
+    }
+  }, "\u2192"))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.06)",
+      borderRadius: 14,
+      padding: "14px 16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3,
+      marginBottom: 10
+    }
+  }, "AIRSPACE CLASS REFERENCE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, Object.entries(AIRSPACE_CLASS_INFO).map(([cls, info]) => /*#__PURE__*/React.createElement("div", {
+    key: cls,
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      flexShrink: 0
+    }
+  }, info.icon), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: info.color,
+      fontWeight: 700
+    }
+  }, info.label, ": "), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: "#94A3B8"
+    }
+  }, info.desc))))))), tab === "airports" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, !selectedAirport ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#334155",
+      letterSpacing: 3,
+      marginBottom: 4
+    }
+  }, "TAP FOR GRID DETAILS"), AIRPORTS.map(ap => /*#__PURE__*/React.createElement("button", {
+    key: ap.id,
+    onClick: () => setSelectedAirport(ap),
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.07)",
+      borderRadius: 12,
+      padding: "14px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      textAlign: "left",
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: ap.classBg,
+      border: `1px solid ${ap.classBorder}`,
+      borderRadius: 10,
+      width: 44,
+      height: 44,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: ap.classColor,
+      letterSpacing: 1
+    }
+  }, "CLASS"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 18,
+      fontWeight: 900,
+      color: ap.classColor,
+      lineHeight: 1
+    }
+  }, ap.class)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#E2E8F0",
+      fontWeight: 600
+    }
+  }, ap.id, " \xB7 ", ap.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 3
+    }
+  }, ap.distance), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginTop: 6
+    }
+  }, ap.laanc && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      background: "rgba(52,199,89,0.1)",
+      border: "1px solid rgba(52,199,89,0.3)",
+      borderRadius: 4,
+      padding: "2px 6px",
+      color: "#34C759"
+    }
+  }, "LAANC"), !ap.laanc && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      background: "rgba(255,59,48,0.1)",
+      border: "1px solid rgba(255,59,48,0.3)",
+      borderRadius: 4,
+      padding: "2px 6px",
+      color: "#FF3B30"
+    }
+  }, "NO LAANC"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 4,
+      padding: "2px 6px",
+      color: "#475569"
+    }
+  }, "Impact: ", ap.impact))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#334155"
+    }
+  }, "\u2192")))) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setSelectedAirport(null),
+    style: {
+      background: "none",
+      border: "none",
+      color: "#475569",
+      fontSize: 10,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      textAlign: "left",
+      padding: 0
+    }
+  }, "\u2190 All airports"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: selectedAirport.classBg,
+      border: `1px solid ${selectedAirport.classBorder}`,
+      borderRadius: 14,
+      padding: "16px 18px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: selectedAirport.classBg,
+      border: `1px solid ${selectedAirport.classBorder}`,
+      borderRadius: 10,
+      width: 50,
+      height: 50,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: selectedAirport.classColor
+    }
+  }, "CLASS"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 22,
+      fontWeight: 900,
+      color: selectedAirport.classColor,
+      lineHeight: 1
+    }
+  }, selectedAirport.class)), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      color: "#E2E8F0",
+      fontWeight: 700
+    }
+  }, selectedAirport.id), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#94A3B8",
+      marginTop: 2
+    }
+  }, selectedAirport.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 2
+    }
+  }, selectedAirport.distance))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#94A3B8",
+      marginTop: 12,
+      lineHeight: 1.7
+    }
+  }, selectedAirport.description)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.06)",
+      borderRadius: 14,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.03)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      padding: "10px 16px",
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3
+    }
+  }, "UASFM GRID ALTITUDES"), selectedAirport.grids.map((grid, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      padding: "13px 16px",
+      borderBottom: i < selectedAirport.grids.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 8,
+      height: 8,
+      borderRadius: "50%",
+      background: grid.color,
+      flexShrink: 0,
+      boxShadow: `0 0 6px ${grid.color}`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#E2E8F0",
+      fontWeight: 600
+    }
+  }, grid.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 2
+    }
+  }, grid.note)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: grid.alt === 0 ? "rgba(255,59,48,0.1)" : grid.alt < 300 ? "rgba(255,193,7,0.1)" : "rgba(52,199,89,0.1)",
+      border: `1px solid ${grid.color}50`,
+      borderRadius: 6,
+      padding: "4px 10px",
+      fontSize: 12,
+      fontWeight: 900,
+      color: grid.color,
+      minWidth: 60,
+      textAlign: "center"
+    }
+  }, grid.alt === 0 ? "0ft" : `${grid.alt}ft`)))), selectedAirport.laanc && /*#__PURE__*/React.createElement("a", {
+    href: "https://www.aloft.ai/",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      background: "rgba(52,199,89,0.08)",
+      border: "1px solid rgba(52,199,89,0.25)",
+      borderRadius: 10,
+      padding: 12,
+      color: "#34C759",
+      fontSize: 11,
+      textDecoration: "none",
+      letterSpacing: 1
+    }
+  }, "\u2708\uFE0F Get LAANC Authorization \u2014 Aloft"), !selectedAirport.laanc && /*#__PURE__*/React.createElement("a", {
+    href: "https://faadronezone.faa.gov/",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      background: "rgba(255,107,53,0.08)",
+      border: "1px solid rgba(255,107,53,0.25)",
+      borderRadius: 10,
+      padding: 12,
+      color: "#FF6B35",
+      fontSize: 11,
+      textDecoration: "none",
+      letterSpacing: 1
+    }
+  }, "\uD83C\uDFDB FAA DroneZone \u2014 COA Required"))), tab === "tfr" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#334155",
+      letterSpacing: 3
+    }
+  }, MOCK_TFRS.length, " ACTIVE TFRs \xB7 50nm RADIUS"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#1E293B"
+    }
+  }, "Updated ", new Date().toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }))), MOCK_TFRS.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(52,199,89,0.06)",
+      border: "1px solid rgba(52,199,89,0.2)",
+      borderRadius: 14,
+      padding: "32px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 28,
+      marginBottom: 8
+    }
+  }, "\u2705"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      color: "#34C759",
+      letterSpacing: 2,
+      fontWeight: 700,
+      marginBottom: 6
+    }
+  }, "NO ACTIVE TFRs"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#475569"
+    }
+  }, "No TFRs within 50nm of San Antonio")) : MOCK_TFRS.map(tfr => /*#__PURE__*/React.createElement("div", {
+    key: tfr.id,
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: `1px solid ${tfr.impact === "high" ? "rgba(255,59,48,0.3)" : "rgba(255,193,7,0.25)"}`,
+      borderRadius: 14,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: tfr.impact === "high" ? "rgba(255,59,48,0.08)" : "rgba(255,193,7,0.06)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      padding: "12px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 18
+    }
+  }, tfr.typeIcon), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#E2E8F0",
+      fontWeight: 700
+    }
+  }, tfr.facility), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 2
+    }
+  }, "NOTAM ", tfr.notam, " \xB7 ", tfr.type)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: tfr.impact === "high" ? "rgba(255,59,48,0.15)" : "rgba(255,193,7,0.12)",
+      border: `1px solid ${tfr.color}50`,
+      borderRadius: 5,
+      padding: "3px 8px",
+      fontSize: 8,
+      color: tfr.color,
+      letterSpacing: 1,
+      fontWeight: 700
+    }
+  }, tfr.impact.toUpperCase())), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 0
+    }
+  }, [{
+    label: "LOCATION",
+    value: tfr.location
+  }, {
+    label: "DISTANCE",
+    value: tfr.distance
+  }, {
+    label: "ALTITUDE",
+    value: tfr.altitude
+  }, {
+    label: "RADIUS",
+    value: tfr.radius
+  }, {
+    label: "EFFECTIVE",
+    value: tfr.effective
+  }, {
+    label: "EXPIRES",
+    value: tfr.expires
+  }].map((item, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      padding: "10px 16px",
+      borderBottom: "1px solid rgba(255,255,255,0.03)",
+      borderRight: i % 2 === 0 ? "1px solid rgba(255,255,255,0.03)" : "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 2,
+      marginBottom: 3
+    }
+  }, item.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#CBD5E1"
+    }
+  }, item.value)))))), /*#__PURE__*/React.createElement("a", {
+    href: "https://tfr.faa.gov/tfr3/",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      background: "rgba(255,255,255,0.03)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 10,
+      padding: 12,
+      color: "#475569",
+      fontSize: 10,
+      textDecoration: "none",
+      letterSpacing: 1
+    }
+  }, "\uD83D\uDDFA View Full TFR Map \u2014 FAA")), tab === "links" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#334155",
+      letterSpacing: 3,
+      marginBottom: 4
+    }
+  }, "AIRSPACE RESOURCES"), QUICK_LINKS.map(link => /*#__PURE__*/React.createElement("a", {
+    key: link.label,
+    href: link.url,
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.07)",
+      borderRadius: 12,
+      padding: "14px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+      textDecoration: "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      background: `${link.color}18`,
+      border: `1px solid ${link.color}35`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 18,
+      flexShrink: 0
+    }
+  }, link.icon), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#E2E8F0",
+      fontWeight: 600
+    }
+  }, link.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#475569",
+      marginTop: 3
+    }
+  }, link.sub)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#334155"
+    }
+  }, "\u2197"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,255,255,0.01)",
+      border: "1px solid rgba(255,255,255,0.04)",
+      borderRadius: 10,
+      padding: "10px 14px",
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 2,
+      marginBottom: 4
+    }
+  }, "EMERGENCY OPS NOTE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#1E293B",
+      lineHeight: 1.7
+    }
+  }, "BC2FD operates under a COA for emergency response operations. LAANC authorization is required for non-emergency ops in controlled airspace. Contact UAS PM for current COA details.")))));
+}
+
 // ── Thermal Config Modal ─────────────────────────────────────────────────────
 
 const MISSIONS = [{
@@ -5495,6 +6573,7 @@ function FirehawkOps() {
   const [syncStatus, setSyncStatus] = useState("connecting");
   const [showWeather, setShowWeather] = useState(false);
   const [showThermal, setShowThermal] = useState(false);
+  const [showAirspace, setShowAirspace] = useState(false);
   const [now, setNow] = useState(new Date());
   const [isManager, setIsManager] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -6039,6 +7118,54 @@ function FirehawkOps() {
       color: "#FF6B35",
       opacity: 0.6
     }
+  }, "\u2192")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowAirspace(true),
+    style: {
+      width: "100%",
+      background: "linear-gradient(135deg,rgba(52,199,89,0.15),rgba(52,199,89,0.08))",
+      border: "1px solid rgba(52,199,89,0.35)",
+      borderRadius: 10,
+      padding: "13px 16px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 18
+    }
+  }, "\u2708\uFE0F"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      letterSpacing: 2,
+      color: "#34C759"
+    }
+  }, "AIRSPACE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 1,
+      marginTop: 2
+    }
+  }, "LAANC \xB7 TFR \xB7 District airports"))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#34C759",
+      opacity: 0.6
+    }
   }, "\u2192")), expiring.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,193,7,0.08)",
@@ -6563,6 +7690,8 @@ function FirehawkOps() {
     onClose: () => setShowWeather(false)
   }), showThermal && /*#__PURE__*/React.createElement(ThermalModal, {
     onClose: () => setShowThermal(false)
+  }), showAirspace && /*#__PURE__*/React.createElement(AirspaceModal, {
+    onClose: () => setShowAirspace(false)
   }), tab === "links" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
