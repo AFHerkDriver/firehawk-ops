@@ -5496,11 +5496,12 @@ function WeatherModal({
   async function fetchWeather() {
     setStatus("loading");
     try {
-      // Fetch METAR from FAA AWC — try primary proxy, fall back to alternate if it fails
+      // FAA AWC blocks direct browser fetch (no CORS header), so route through proxies.
+      // Try several proxies in order — first one that returns valid data wins.
       const METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false";
+      const makeProxies = target => ["https://api.allorigins.win/raw?url=" + encodeURIComponent(target), "https://corsproxy.io/?url=" + encodeURIComponent(target), "https://thingproxy.freeboard.io/fetch/" + target, "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(target)];
       let metarData = null;
-      const proxies = ["https://corsproxy.io/?url=https://aviationweather.gov/api/data/metar?ids=KSKF%26format=json%26taf=false", "https://api.allorigins.win/raw?url=" + encodeURIComponent(METAR_URL)];
-      for (const purl of proxies) {
+      for (const purl of makeProxies(METAR_URL)) {
         try {
           const r = await fetch(purl);
           if (!r.ok) continue;
@@ -5517,29 +5518,32 @@ function WeatherModal({
       if (!metarData) throw new Error("All METAR sources failed");
       const m = metarData[0];
 
-      // Fetch NWS alerts for Bexar County — isolated so a failure here never blocks weather
+      // Fetch NWS alerts for Bexar County — isolated, multi-proxy, never blocks weather
       let activeAlerts = [];
       try {
-        const alertRes = await fetch("https://corsproxy.io/?url=https://api.weather.gov/alerts/active?zone=TXZ205", {
-          headers: {
-            "Accept": "application/geo+json"
+        const ALERT_URL = "https://api.weather.gov/alerts/active?zone=TXZ205";
+        for (const purl of makeProxies(ALERT_URL)) {
+          try {
+            const r = await fetch(purl);
+            if (!r.ok) continue;
+            const t = await r.text();
+            const alertData = JSON.parse(t);
+            activeAlerts = (alertData.features || []).map(f => ({
+              event: f.properties.event,
+              headline: f.properties.headline,
+              severity: f.properties.severity,
+              urgency: f.properties.urgency,
+              description: f.properties.description?.split("\n")[0] || "",
+              ends: f.properties.ends ? new Date(f.properties.ends).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short'
+              }) : "Until further notice"
+            }));
+            break;
+          } catch (e) {
+            continue;
           }
-        });
-        if (alertRes.ok) {
-          const alertText = await alertRes.text();
-          const alertData = JSON.parse(alertText);
-          activeAlerts = (alertData.features || []).map(f => ({
-            event: f.properties.event,
-            headline: f.properties.headline,
-            severity: f.properties.severity,
-            urgency: f.properties.urgency,
-            description: f.properties.description?.split("\n")[0] || "",
-            ends: f.properties.ends ? new Date(f.properties.ends).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZoneName: 'short'
-            }) : "Until further notice"
-          }));
         }
       } catch (e) {
         activeAlerts = [];
@@ -5561,26 +5565,34 @@ function WeatherModal({
       const skyLayers = m.clouds || [];
       const ceiling = skyLayers.filter(l => l.cover === "BKN" || l.cover === "OVC").reduce((min, l) => Math.min(min, l.base * 100), 99999);
 
-      // Fetch winds aloft for KSAT (3000ft)
+      // Fetch winds aloft (3000ft) — best effort, falls back to surface wind if unavailable
       let windAloft3k = {
         dir: windDir,
         speed: windSpd
       };
       try {
-        const aloftRes = await fetch("https://aviationweather.gov/api/data/windtemp?region=us&level=lo&fcst=06");
-        const aloftText = await aloftRes.text();
-        // Parse KSAT from winds aloft text — look for SAT station
-        const satLine = aloftText.split('\n').find(l => l.startsWith('SAT') || l.startsWith('KSAT'));
-        if (satLine) {
-          const parts = satLine.trim().split(/\s+/);
-          const code3k = parts[1];
-          if (code3k && code3k.length >= 4) {
-            const dir3k = parseInt(code3k.substring(0, 2)) * 10;
-            const spd3k = parseInt(code3k.substring(2, 4));
-            windAloft3k = {
-              dir: dir3k,
-              speed: spd3k
-            };
+        const ALOFT_URL = "https://aviationweather.gov/api/data/windtemp?region=us&level=lo&fcst=06";
+        for (const purl of makeProxies(ALOFT_URL)) {
+          try {
+            const r = await fetch(purl);
+            if (!r.ok) continue;
+            const aloftText = await r.text();
+            const satLine = aloftText.split('\n').find(l => l.startsWith('SAT') || l.startsWith('KSAT'));
+            if (satLine) {
+              const parts = satLine.trim().split(/\s+/);
+              const code3k = parts[1];
+              if (code3k && code3k.length >= 4) {
+                const dir3k = parseInt(code3k.substring(0, 2)) * 10;
+                const spd3k = parseInt(code3k.substring(2, 4));
+                if (!isNaN(dir3k) && !isNaN(spd3k)) windAloft3k = {
+                  dir: dir3k,
+                  speed: spd3k
+                };
+              }
+            }
+            break;
+          } catch (e) {
+            continue;
           }
         }
       } catch (e) {}
