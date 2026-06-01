@@ -5579,7 +5579,8 @@ function WeatherModal({
 
       // SECONDARY (non-critical): NWS alerts + FAA raw METAR via proxy. If these fail,
       // weather still shows — they're bonuses, not load-bearing.
-      const makeProxies = target => ["https://api.allorigins.win/raw?url=" + encodeURIComponent(target), "https://corsproxy.io/?url=" + encodeURIComponent(target), "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(target)];
+      // Your own Cloudflare Worker — reliable, no rate limits, no flaky public proxies
+      const makeProxies = target => ["https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(target)];
 
       // NWS alerts
       let activeAlerts = [];
