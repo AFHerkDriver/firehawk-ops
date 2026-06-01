@@ -5458,6 +5458,7 @@ function WeatherModal({
 }) {
   const [wx, setWx] = useState(null);
   const [status, setStatus] = useState("loading");
+  const [errMsg, setErrMsg] = useState("");
   const [alertsExpanded, setAlertsExpanded] = useState(true);
   const AIRCRAFT = [{
     id: "M30T",
@@ -5497,16 +5498,26 @@ function WeatherModal({
   }
   async function fetchWeather() {
     setStatus("loading");
+    setErrMsg("");
     try {
       // PRIMARY: Open-Meteo — supports CORS directly, no proxy, no key. This carries
       // all the operational go/no-go data and never depends on a flaky proxy.
       const KSKF_LAT = 29.384,
         KSKF_LON = -98.581;
       const omUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + KSKF_LAT + "&longitude=" + KSKF_LON + "&current=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,weather_code,cloud_cover,cloud_cover_low,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility" + "&hourly=wind_speed_80m,wind_direction_80m,cloud_cover_low" + "&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=America/Chicago&forecast_days=1";
-      const omRes = await fetch(omUrl);
-      if (!omRes.ok) throw new Error("Open-Meteo fetch failed: " + omRes.status);
+
+      // Timeout so it fails fast instead of hanging forever
+      const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+      let omRes;
+      try {
+        omRes = await withTimeout(fetch(omUrl), 8000);
+      } catch (e) {
+        throw new Error("Open-Meteo unreachable (" + e.message + ")");
+      }
+      if (!omRes.ok) throw new Error("Open-Meteo HTTP " + omRes.status);
       const om = await omRes.json();
       const cur = om.current;
+      if (!cur) throw new Error("Open-Meteo returned no current data");
 
       // Wind (already mph from Open-Meteo)
       const windDir = Math.round(cur.wind_direction_10m);
@@ -5647,6 +5658,7 @@ function WeatherModal({
       });
       setStatus("loaded");
     } catch (e) {
+      setErrMsg(e.message || "Unknown error");
       setStatus("error");
     }
   }
@@ -5885,9 +5897,17 @@ function WeatherModal({
     style: {
       fontSize: 10,
       color: "#475569",
-      marginBottom: 16
+      marginBottom: 8
     }
-  }, "Could not reach aviation weather servers."), /*#__PURE__*/React.createElement("button", {
+  }, "Could not load weather data."), errMsg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#FFC107",
+      marginBottom: 16,
+      fontFamily: "monospace",
+      wordBreak: "break-word"
+    }
+  }, errMsg), /*#__PURE__*/React.createElement("button", {
     onClick: fetchWeather,
     style: {
       background: "rgba(74,144,217,0.15)",
