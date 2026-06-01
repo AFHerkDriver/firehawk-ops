@@ -1869,7 +1869,7 @@ function SchedulerPanel({
       color: "#475569",
       letterSpacing: 2
     }
-  }, syncStatus === "synced" ? "SYNCED" : syncStatus === "connecting" ? "SAVING..." : "OFFLINE"), isUASManager && /*#__PURE__*/React.createElement("button", {
+  }, syncStatus === "synced" ? "SYNCED" : syncStatus === "connecting" ? "SAVING..." : "OFFLINE"), isUASManager && (year > 2026 || year === 2026 && month >= 5) && /*#__PURE__*/React.createElement("button", {
     onClick: async () => {
       setSyncStatus("connecting");
       setPushConfirmed(false);
@@ -4231,22 +4231,30 @@ function FirehawkOps() {
     }
   }, bulletins[0].date)), /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: "14px 16px"
+      padding: "14px 16px",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
       color: "#E2E8F0",
-      fontWeight: 600,
-      marginBottom: 6
+      fontWeight: 600
     }
-  }, bulletins[0].title), /*#__PURE__*/React.createElement("div", {
+  }, bulletins[0].title), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setTab("bulletin"),
     style: {
-      fontSize: 12,
-      color: "#94A3B8",
-      lineHeight: 1.6
+      background: "none",
+      border: "none",
+      color: "#475569",
+      cursor: "pointer",
+      fontSize: 10,
+      fontFamily: "inherit",
+      flexShrink: 0,
+      marginLeft: 10
     }
-  }, bulletins[0].body)), bulletins.length > 1 && /*#__PURE__*/React.createElement("div", {
+  }, "View \u2192")), bulletins.length > 1 && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "8px 16px",
       borderTop: "1px solid rgba(255,255,255,0.05)"
