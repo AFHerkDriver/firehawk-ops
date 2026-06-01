@@ -24,6 +24,7 @@ const FS_PROJECT = "firehawk-scheduler";
 const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
 const FS_BASE = "https://firestore.googleapis.com/v1/projects/" + FS_PROJECT + "/databases/(default)/documents";
 // Store schedule as a single JSON string to avoid Firestore field name restrictions
+const USE_JSON_STRING = true;
 function fromFSVal(v) {
   if (!v) return null;
   if ("stringValue" in v) return v.stringValue;
@@ -1654,19 +1655,28 @@ function SchedulerPanel({
     setSyncStatus("connecting");
     const docPath = "firehawk/schedule_" + year + "_" + month;
     const unsub = fsListenPath(docPath, data => {
-      if (data && data.days && Object.keys(data.days).length > 0) {
-        // Real data from Firebase — load it and flag so we don't immediately re-save it
+      // Handle both daysJson (string) and days (object) formats
+      let days = null;
+      if (data && data.daysJson) {
+        try {
+          days = JSON.parse(data.daysJson);
+        } catch (e) {}
+      } else if (data && data.days) {
+        days = data.days;
+      }
+      if (days && Object.keys(days).length > 0) {
+        // Real data from Firebase — load it
         scheduleFromFirebase.current = true;
-        setSchedule(data.days);
+        scheduleInitialized.current = true;
+        setSchedule(days);
       } else {
-        // Nothing in Firebase for this month — seed from history if available, otherwise start fresh
+        // Nothing in Firebase — use historical data, don't save back
         const hist = getMonthHistory(year, month, getDaysInMonth(year, month));
         if (hist && Object.keys(hist).length > 0) {
           scheduleFromFirebase.current = true;
+          scheduleInitialized.current = true;
           setSchedule(hist);
-          // Don't seed to Firebase — let user explicitly PUSH when ready
         } else {
-          // Fresh month with no history — don't set the flag, let any edits save normally
           scheduleInitialized.current = true;
           setSchedule({});
         }
@@ -4242,7 +4252,13 @@ function FirehawkOps() {
       fontWeight: 600,
       marginBottom: 6
     }
-  }, bulletins[0].title)), bulletins.length > 1 && /*#__PURE__*/React.createElement("div", {
+  }, bulletins[0].title), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#94A3B8",
+      lineHeight: 1.6
+    }
+  }, bulletins[0].body)), bulletins.length > 1 && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "8px 16px",
       borderTop: "1px solid rgba(255,255,255,0.05)"
@@ -4748,7 +4764,6 @@ function FirehawkOps() {
     }
   }, "\u2192")))))));
 }
-
 
 
 const domRoot = ReactDOM.createRoot(document.getElementById('root'));
