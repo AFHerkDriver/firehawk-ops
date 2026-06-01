@@ -5487,8 +5487,10 @@ function WeatherModal({
     maxTemp: 113,
     ip: "IP54"
   }];
-  function ktToMph(kt) {
-    return kt * 1.15078;
+
+  // Wind values are stored in mph (Open-Meteo native unit), so this is a passthrough.
+  function ktToMph(v) {
+    return v;
   }
   function tempF(c) {
     return c * 9 / 5 + 32;
@@ -5496,29 +5498,78 @@ function WeatherModal({
   async function fetchWeather() {
     setStatus("loading");
     try {
-      // FAA AWC blocks direct browser fetch (no CORS header), so route through proxies.
-      // Try several proxies in order — first one that returns valid data wins.
-      const METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false";
-      const makeProxies = target => ["https://api.allorigins.win/raw?url=" + encodeURIComponent(target), "https://corsproxy.io/?url=" + encodeURIComponent(target), "https://thingproxy.freeboard.io/fetch/" + target, "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(target)];
-      let metarData = null;
-      for (const purl of makeProxies(METAR_URL)) {
-        try {
-          const r = await fetch(purl);
-          if (!r.ok) continue;
-          const t = await r.text();
-          const parsed = JSON.parse(t);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            metarData = parsed;
-            break;
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-      if (!metarData) throw new Error("All METAR sources failed");
-      const m = metarData[0];
+      // PRIMARY: Open-Meteo — supports CORS directly, no proxy, no key. This carries
+      // all the operational go/no-go data and never depends on a flaky proxy.
+      const KSKF_LAT = 29.384,
+        KSKF_LON = -98.581;
+      const omUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + KSKF_LAT + "&longitude=" + KSKF_LON + "&current=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,weather_code,cloud_cover,cloud_cover_low,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility" + "&hourly=wind_speed_80m,wind_direction_80m,cloud_cover_low" + "&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=America/Chicago&forecast_days=1";
+      const omRes = await fetch(omUrl);
+      if (!omRes.ok) throw new Error("Open-Meteo fetch failed: " + omRes.status);
+      const om = await omRes.json();
+      const cur = om.current;
 
-      // Fetch NWS alerts for Bexar County — isolated, multi-proxy, never blocks weather
+      // Wind (already mph from Open-Meteo)
+      const windDir = Math.round(cur.wind_direction_10m);
+      const windMph = cur.wind_speed_10m;
+      const gustMph = cur.wind_gusts_10m || null;
+
+      // Temp/dewpoint already in °F
+      const tempFval = cur.temperature_2m;
+      const dewpFval = cur.dew_point_2m;
+      // Convert back to C for storage (downstream tempF() expects C)
+      const tempC = (tempFval - 32) * 5 / 9;
+      const dewpC = (dewpFval - 32) * 5 / 9;
+
+      // Visibility: Open-Meteo gives meters → statute miles
+      const visM = cur.visibility != null ? cur.visibility : 16000;
+      const visSM = Math.round(visM / 1609.34 * 10) / 10;
+
+      // Pressure msl (hPa) → inHg
+      const altim = cur.pressure_msl ? Math.round(cur.pressure_msl * 0.02953 * 100) / 100 : 29.92;
+
+      // Precipitation & weather code (WMO codes)
+      const wc = cur.weather_code;
+      const precip = cur.precipitation > 0 || wc >= 51 && wc <= 67 || wc >= 80 && wc <= 82 || wc >= 71 && wc <= 77;
+      const thunderstorm = wc >= 95 && wc <= 99;
+
+      // Ceiling estimate from low cloud cover (Open-Meteo has no direct ceiling).
+      // If low cloud cover is high, treat cloud base as a ceiling; otherwise unlimited.
+      const lowCloud = cur.cloud_cover_low != null ? cur.cloud_cover_low : cur.cloud_cover;
+      let ceiling = 99999;
+      if (lowCloud >= 88) ceiling = 1500; // OVC-ish low
+      else if (lowCloud >= 63) ceiling = 3500; // BKN-ish
+      else if (lowCloud >= 40) ceiling = 6000; // SCT
+      // else few/clear → unlimited
+
+      // Flight category — computed from ceiling + visibility (standard FAA thresholds)
+      let flightCat;
+      if (ceiling < 500 || visSM < 1) flightCat = "LIFR";else if (ceiling < 1000 || visSM < 3) flightCat = "IFR";else if (ceiling <= 3000 || visSM <= 5) flightCat = "MVFR";else flightCat = "VFR";
+
+      // Wind at ~260ft (80m) — closest Open-Meteo level to UAS operating altitude
+      let windAloft3k = {
+        dir: windDir,
+        speed: windMph
+      };
+      try {
+        if (om.hourly && om.hourly.wind_speed_80m) {
+          // Find the current hour index
+          const nowIso = new Date().toISOString().substring(0, 13);
+          let idx = om.hourly.time.findIndex(t => t.substring(0, 13) === nowIso);
+          if (idx < 0) idx = 0;
+          const spd80 = om.hourly.wind_speed_80m[idx];
+          const dir80 = om.hourly.wind_direction_80m[idx];
+          if (spd80 != null) windAloft3k = {
+            dir: Math.round(dir80),
+            speed: spd80
+          };
+        }
+      } catch (e) {}
+
+      // SECONDARY (non-critical): NWS alerts + FAA raw METAR via proxy. If these fail,
+      // weather still shows — they're bonuses, not load-bearing.
+      const makeProxies = target => ["https://api.allorigins.win/raw?url=" + encodeURIComponent(target), "https://corsproxy.io/?url=" + encodeURIComponent(target), "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(target)];
+
+      // NWS alerts
       let activeAlerts = [];
       try {
         const ALERT_URL = "https://api.weather.gov/alerts/active?zone=TXZ205";
@@ -5526,13 +5577,10 @@ function WeatherModal({
           try {
             const r = await fetch(purl);
             if (!r.ok) continue;
-            const t = await r.text();
-            const alertData = JSON.parse(t);
+            const alertData = JSON.parse(await r.text());
             activeAlerts = (alertData.features || []).map(f => ({
               event: f.properties.event,
-              headline: f.properties.headline,
               severity: f.properties.severity,
-              urgency: f.properties.urgency,
               description: f.properties.description?.split("\n")[0] || "",
               ends: f.properties.ends ? new Date(f.properties.ends).toLocaleTimeString('en-US', {
                 hour: '2-digit',
@@ -5550,47 +5598,19 @@ function WeatherModal({
       }
       setAlerts(activeAlerts);
 
-      // Parse METAR fields
-      const windDir = m.wdir || 0;
-      const windSpd = m.wspd || 0;
-      const windGust = m.wgst || null;
-      const vis = m.visib ? parseFloat(m.visib) : 10;
-      const temp = m.temp != null ? m.temp : 25;
-      const dewp = m.dewp != null ? m.dewp : 15;
-      const altim = m.altim || 29.92;
-      const rawText = m.rawOb || "";
-      const flightCat = m.flightCategory || "VFR";
-      const precip = rawText.includes("RA") || rawText.includes("DZ") || rawText.includes("SN") || rawText.includes("TSRA");
-      const thunderstorm = rawText.includes("TS");
-      const skyLayers = m.clouds || [];
-      const ceiling = skyLayers.filter(l => l.cover === "BKN" || l.cover === "OVC").reduce((min, l) => Math.min(min, l.base * 100), 99999);
-
-      // Fetch winds aloft (3000ft) — best effort, falls back to surface wind if unavailable
-      let windAloft3k = {
-        dir: windDir,
-        speed: windSpd
-      };
+      // FAA raw METAR — purely for the "for pilots" line. Hidden if unavailable.
+      let rawText = "";
       try {
-        const ALOFT_URL = "https://aviationweather.gov/api/data/windtemp?region=us&level=lo&fcst=06";
-        for (const purl of makeProxies(ALOFT_URL)) {
+        const METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false";
+        for (const purl of makeProxies(METAR_URL)) {
           try {
             const r = await fetch(purl);
             if (!r.ok) continue;
-            const aloftText = await r.text();
-            const satLine = aloftText.split('\n').find(l => l.startsWith('SAT') || l.startsWith('KSAT'));
-            if (satLine) {
-              const parts = satLine.trim().split(/\s+/);
-              const code3k = parts[1];
-              if (code3k && code3k.length >= 4) {
-                const dir3k = parseInt(code3k.substring(0, 2)) * 10;
-                const spd3k = parseInt(code3k.substring(2, 4));
-                if (!isNaN(dir3k) && !isNaN(spd3k)) windAloft3k = {
-                  dir: dir3k,
-                  speed: spd3k
-                };
-              }
+            const parsed = JSON.parse(await r.text());
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].rawOb) {
+              rawText = parsed[0].rawOb;
+              break;
             }
-            break;
           } catch (e) {
             continue;
           }
@@ -5599,17 +5619,20 @@ function WeatherModal({
       setWx({
         station: "KSKF",
         name: "Kelly Field",
-        time: m.obsTime ? new Date(m.obsTime).toISOString().substring(11, 16) + "Z" : "----Z",
+        time: new Date().toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit'
+        }) + " local",
         raw: rawText,
         wind: {
           dir: windDir,
-          speed: windSpd,
-          gust: windGust
+          speed: windMph,
+          gust: gustMph
         },
-        visibility: vis,
+        visibility: visSM,
         ceiling,
-        temp,
-        dewpoint: dewp,
+        temp: tempC,
+        dewpoint: dewpC,
         altimeter: altim,
         category: flightCat,
         precip,
@@ -5619,7 +5642,8 @@ function WeatherModal({
           tango: false,
           zulu: false
         },
-        windAloft3k
+        windAloft3k,
+        source: "Open-Meteo + FAA"
       });
       setStatus("loaded");
     } catch (e) {
