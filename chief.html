@@ -108,7 +108,13 @@ async function get(col,doc) {
     const r=await fetch(FS_BASE+"/"+col+"/"+doc+"?key="+FS_API_KEY);
     if(!r.ok) return null;
     const d=await r.json();
-    return d.fields?fromFields(d.fields):null;
+    if(!d.fields) return null;
+    const result = fromFields(d.fields);
+    // If daysJson is a string, parse it
+    if(result && typeof result.daysJson === 'string') {
+      try { result.days = JSON.parse(result.daysJson); } catch(e){}
+    }
+    return result;
   } catch(e){return null;}
 }
 
