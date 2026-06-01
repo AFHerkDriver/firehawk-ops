@@ -5496,9 +5496,17 @@ function WeatherModal({
   async function fetchWeather() {
     setStatus("loading");
     try {
-      // Fetch METAR from FAA AWC — free, no key
+      // Fetch METAR from FAA AWC via CORS proxy
       const metarRes = await fetch("https://corsproxy.io/?url=https://aviationweather.gov/api/data/metar?ids=KSKF%26format=json%26taf=false");
-      const metarData = await metarRes.json();
+      if (!metarRes.ok) throw new Error("METAR fetch failed: " + metarRes.status);
+      const metarText = await metarRes.text();
+      let metarData;
+      try {
+        metarData = JSON.parse(metarText);
+      } catch (e) {
+        throw new Error("METAR parse failed");
+      }
+      if (!metarData || !Array.isArray(metarData) || metarData.length === 0) throw new Error("No METAR data");
       const m = metarData[0];
 
       // Fetch NWS alerts for Bexar County
