@@ -1637,6 +1637,7 @@ function SchedulerPanel({
   const [month, setMonth] = useState(today.getMonth());
   const [year, setYear] = useState(today.getFullYear());
   const [syncStatus, setSyncStatus] = useState("connecting");
+  const [showWeather, setShowWeather] = useState(false);
   const [schedule, setSchedule] = useState({});
   const [tab, setTab] = useState("calendar");
   const [selectedDay, setSelectedDay] = useState(null);
@@ -3697,11 +3698,839 @@ function SchedulerPanel({
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════
+// ── Weather Modal ────────────────────────────────────────────────────────────
+function WeatherModal({
+  onClose
+}) {
+  const [wx, setWx] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [status, setStatus] = useState("loading");
+  const [alertsExpanded, setAlertsExpanded] = useState(true);
+  const AIRCRAFT = [{
+    id: "M30T",
+    label: "M30T",
+    maxWind: 33.6,
+    maxGust: 33.6,
+    precip: true,
+    minTemp: -4,
+    maxTemp: 122,
+    ip: "IP55"
+  }, {
+    id: "M4TD",
+    label: "M4TD",
+    maxWind: 26.8,
+    maxGust: 30,
+    precip: true,
+    minTemp: -22,
+    maxTemp: 122,
+    ip: "IP55"
+  }, {
+    id: "M4T",
+    label: "M4T",
+    maxWind: 26.8,
+    maxGust: 26.8,
+    precip: false,
+    minTemp: -4,
+    maxTemp: 113,
+    ip: "IP54"
+  }];
+  function ktToMph(kt) {
+    return kt * 1.15078;
+  }
+  function tempF(c) {
+    return c * 9 / 5 + 32;
+  }
+  async function fetchWeather() {
+    setStatus("loading");
+    try {
+      // Fetch METAR from FAA AWC — free, no key
+      const metarRes = await fetch("https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false");
+      const metarData = await metarRes.json();
+      const m = metarData[0];
+
+      // Fetch NWS alerts for Bexar County
+      const alertRes = await fetch("https://api.weather.gov/alerts/active?zone=TXZ205");
+      const alertData = await alertRes.json();
+      const activeAlerts = (alertData.features || []).map(f => ({
+        event: f.properties.event,
+        headline: f.properties.headline,
+        severity: f.properties.severity,
+        urgency: f.properties.urgency,
+        description: f.properties.description?.split("\n")[0] || "",
+        ends: f.properties.ends ? new Date(f.properties.ends).toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        }) : "Until further notice"
+      }));
+      setAlerts(activeAlerts);
+
+      // Parse METAR fields
+      const windDir = m.wdir || 0;
+      const windSpd = m.wspd || 0;
+      const windGust = m.wgst || null;
+      const vis = m.visib ? parseFloat(m.visib) : 10;
+      const temp = m.temp != null ? m.temp : 25;
+      const dewp = m.dewp != null ? m.dewp : 15;
+      const altim = m.altim || 29.92;
+      const rawText = m.rawOb || "";
+      const flightCat = m.flightCategory || "VFR";
+      const precip = rawText.includes("RA") || rawText.includes("DZ") || rawText.includes("SN") || rawText.includes("TSRA");
+      const thunderstorm = rawText.includes("TS");
+      const skyLayers = m.clouds || [];
+      const ceiling = skyLayers.filter(l => l.cover === "BKN" || l.cover === "OVC").reduce((min, l) => Math.min(min, l.base * 100), 99999);
+
+      // Fetch winds aloft for KSAT (3000ft)
+      let windAloft3k = {
+        dir: windDir,
+        speed: windSpd
+      };
+      try {
+        const aloftRes = await fetch("https://aviationweather.gov/api/data/windtemp?region=us&level=lo&fcst=06");
+        const aloftText = await aloftRes.text();
+        // Parse KSAT from winds aloft text — look for SAT station
+        const satLine = aloftText.split('\n').find(l => l.startsWith('SAT') || l.startsWith('KSAT'));
+        if (satLine) {
+          const parts = satLine.trim().split(/\s+/);
+          const code3k = parts[1];
+          if (code3k && code3k.length >= 4) {
+            const dir3k = parseInt(code3k.substring(0, 2)) * 10;
+            const spd3k = parseInt(code3k.substring(2, 4));
+            windAloft3k = {
+              dir: dir3k,
+              speed: spd3k
+            };
+          }
+        }
+      } catch (e) {}
+      setWx({
+        station: "KSKF",
+        name: "Kelly Field",
+        time: m.obsTime ? new Date(m.obsTime).toISOString().substring(11, 16) + "Z" : "----Z",
+        raw: rawText,
+        wind: {
+          dir: windDir,
+          speed: windSpd,
+          gust: windGust
+        },
+        visibility: vis,
+        ceiling,
+        temp,
+        dewpoint: dewp,
+        altimeter: altim,
+        category: flightCat,
+        precip,
+        thunderstorm,
+        airmet: {
+          sierra: false,
+          tango: false,
+          zulu: false
+        },
+        windAloft3k
+      });
+      setStatus("loaded");
+    } catch (e) {
+      setStatus("error");
+    }
+  }
+  useEffect(() => {
+    fetchWeather();
+  }, []);
+  function getAircraftStatus(ac, w) {
+    const wind = ktToMph(w.wind.speed);
+    const gust = w.wind.gust ? ktToMph(w.wind.gust) : null;
+    const temp = tempF(w.temp);
+    const reasons = [];
+    if (wind > ac.maxWind) reasons.push(`Wind ${wind.toFixed(0)}mph > ${ac.maxWind}mph limit`);else if (wind > ac.maxWind * 0.8) reasons.push(`Wind ${wind.toFixed(0)}mph near limit`);
+    if (gust && gust > ac.maxGust) reasons.push(`Gust ${gust.toFixed(0)}mph > ${ac.maxGust}mph limit`);else if (gust && gust > ac.maxGust * 0.85) reasons.push(`Gust ${gust.toFixed(0)}mph near limit`);
+    if (!ac.precip && w.precip) reasons.push("Precip — not rated");
+    if (w.thunderstorm) reasons.push("Thunderstorm active");
+    if (temp < ac.minTemp) reasons.push(`Temp ${temp.toFixed(0)}°F below limit`);
+    if (temp > ac.maxTemp) reasons.push(`Temp ${temp.toFixed(0)}°F above limit`);
+    if (w.visibility < 3) reasons.push(`Vis ${w.visibility}SM < 3SM`);
+    if (w.ceiling < 300) reasons.push(`Ceiling ${w.ceiling}ft < 300ft`);
+    const hardStop = wind > ac.maxWind || gust && gust > ac.maxGust || !ac.precip && w.precip || w.thunderstorm || temp < ac.minTemp || temp > ac.maxTemp || w.visibility < 2 || w.ceiling < 300 || w.category === "IFR" || w.category === "LIFR";
+    if (hardStop) return {
+      status: "GROUND",
+      color: "#FF3B30",
+      bg: "rgba(255,59,48,0.1)",
+      border: "rgba(255,59,48,0.3)",
+      reasons
+    };
+    if (!hardStop && reasons.length > 0) return {
+      status: "CAUTION",
+      color: "#FFC107",
+      bg: "rgba(255,193,7,0.1)",
+      border: "rgba(255,193,7,0.3)",
+      reasons
+    };
+    return {
+      status: "GO",
+      color: "#34C759",
+      bg: "rgba(52,199,89,0.1)",
+      border: "rgba(52,199,89,0.3)",
+      reasons: []
+    };
+  }
+  function getOverallStatus(w) {
+    const s = AIRCRAFT.map(ac => getAircraftStatus(ac, w));
+    if (s.every(x => x.status === "GO")) return {
+      label: "FLIGHT OPS — GO",
+      color: "#34C759",
+      bg: "rgba(52,199,89,0.08)",
+      border: "rgba(52,199,89,0.3)",
+      icon: "🟢"
+    };
+    if (s.every(x => x.status === "GROUND")) return {
+      label: "DO NOT FLY",
+      color: "#FF3B30",
+      bg: "rgba(255,59,48,0.08)",
+      border: "rgba(255,59,48,0.3)",
+      icon: "🔴"
+    };
+    if (s.some(x => x.status === "GROUND")) return {
+      label: "PARTIAL OPERATIONS",
+      color: "#FFC107",
+      bg: "rgba(255,193,7,0.08)",
+      border: "rgba(255,193,7,0.3)",
+      icon: "🟡"
+    };
+    return {
+      label: "USE CAUTION",
+      color: "#FFC107",
+      bg: "rgba(255,193,7,0.08)",
+      border: "rgba(255,193,7,0.3)",
+      icon: "🟡"
+    };
+  }
+  function getCatStyle(cat) {
+    const map = {
+      VFR: {
+        color: "#34C759",
+        bg: "rgba(52,199,89,0.15)",
+        border: "rgba(52,199,89,0.4)"
+      },
+      MVFR: {
+        color: "#4A90D9",
+        bg: "rgba(74,144,217,0.15)",
+        border: "rgba(74,144,217,0.4)"
+      },
+      IFR: {
+        color: "#FF3B30",
+        bg: "rgba(255,59,48,0.15)",
+        border: "rgba(255,59,48,0.4)"
+      },
+      LIFR: {
+        color: "#FF2D55",
+        bg: "rgba(255,45,85,0.15)",
+        border: "rgba(255,45,85,0.4)"
+      }
+    };
+    return map[cat] || {
+      color: "#94A3B8",
+      bg: "rgba(148,163,184,0.15)",
+      border: "rgba(148,163,184,0.4)"
+    };
+  }
+  function getAlertStyle(severity) {
+    if (severity === "Extreme") return {
+      color: "#FF2D55",
+      bg: "rgba(255,45,85,0.1)",
+      border: "rgba(255,45,85,0.35)",
+      dot: "#FF2D55"
+    };
+    if (severity === "Severe") return {
+      color: "#FF3B30",
+      bg: "rgba(255,59,48,0.1)",
+      border: "rgba(255,59,48,0.3)",
+      dot: "#FF3B30"
+    };
+    if (severity === "Moderate") return {
+      color: "#FFC107",
+      bg: "rgba(255,193,7,0.08)",
+      border: "rgba(255,193,7,0.25)",
+      dot: "#FFC107"
+    };
+    return {
+      color: "#94A3B8",
+      bg: "rgba(148,163,184,0.08)",
+      border: "rgba(148,163,184,0.2)",
+      dot: "#94A3B8"
+    };
+  }
+  const DIRS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  function compassDir(deg) {
+    return DIRS[Math.round(deg / 22.5) % 16];
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "#07090F",
+      zIndex: 999,
+      overflowY: "auto",
+      fontFamily: "'DM Mono','Courier New',monospace",
+      color: "#CBD5E1"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "linear-gradient(135deg,rgba(74,144,217,0.15),transparent 60%)",
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
+      padding: "14px 18px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      position: "sticky",
+      top: 0,
+      zIndex: 10,
+      backdropFilter: "blur(10px)"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      letterSpacing: 3,
+      color: "#4A90D9",
+      fontWeight: 900
+    }
+  }, "PREFLIGHT WX"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 3,
+      marginTop: 2
+    }
+  }, "KSKF \xB7 NWS BEXAR COUNTY")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: fetchWeather,
+    style: {
+      background: "none",
+      border: "none",
+      color: "#4A90D9",
+      fontSize: 16,
+      cursor: "pointer"
+    }
+  }, "\u21BB"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.1)",
+      borderRadius: 8,
+      padding: "6px 14px",
+      color: "#94A3B8",
+      fontSize: 11,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, "\u2715 Close"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px 14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 12,
+      maxWidth: 520,
+      margin: "0 auto",
+      paddingBottom: 40
+    }
+  }, status === "loading" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      padding: "60px 0",
+      color: "#334155",
+      fontSize: 11,
+      letterSpacing: 2
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 24,
+      marginBottom: 12
+    }
+  }, "\uD83C\uDF24"), "FETCHING LIVE WEATHER..."), status === "error" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,59,48,0.08)",
+      border: "1px solid rgba(255,59,48,0.2)",
+      borderRadius: 14,
+      padding: "24px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      color: "#FF3B30",
+      letterSpacing: 2,
+      marginBottom: 8
+    }
+  }, "WEATHER UNAVAILABLE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#475569",
+      marginBottom: 16
+    }
+  }, "Could not reach aviation weather servers."), /*#__PURE__*/React.createElement("button", {
+    onClick: fetchWeather,
+    style: {
+      background: "rgba(74,144,217,0.15)",
+      border: "1px solid rgba(74,144,217,0.3)",
+      borderRadius: 8,
+      padding: "8px 16px",
+      color: "#4A90D9",
+      fontSize: 10,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      letterSpacing: 1
+    }
+  }, "Try Again")), status === "loaded" && wx && (() => {
+    const overall = getOverallStatus(wx);
+    const catStyle = getCatStyle(wx.category);
+    const wind = ktToMph(wx.wind.speed);
+    const gust = wx.wind.gust ? ktToMph(wx.wind.gust) : null;
+    const windShear = Math.abs(wx.windAloft3k.speed - wx.wind.speed);
+    const hasAlerts = alerts.length > 0;
+    const hasExtremeAlert = alerts.some(a => a.severity === "Extreme" || a.severity === "Severe");
+    return /*#__PURE__*/React.createElement(React.Fragment, null, hasAlerts && /*#__PURE__*/React.createElement("div", {
+      style: {
+        borderRadius: 14,
+        overflow: "hidden",
+        border: `1px solid ${hasExtremeAlert ? "rgba(255,45,85,0.4)" : "rgba(255,193,7,0.35)"}`,
+        boxShadow: `0 0 20px ${hasExtremeAlert ? "rgba(255,45,85,0.15)" : "rgba(255,193,7,0.1)"}`
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      onClick: () => setAlertsExpanded(!alertsExpanded),
+      style: {
+        background: hasExtremeAlert ? "rgba(255,45,85,0.12)" : "rgba(255,193,7,0.08)",
+        padding: "12px 16px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 16
+      }
+    }, hasExtremeAlert ? "🚨" : "⚠️"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        fontWeight: 700,
+        color: hasExtremeAlert ? "#FF2D55" : "#FFC107",
+        letterSpacing: 2
+      }
+    }, alerts.length, " NWS ALERT", alerts.length > 1 ? "S" : "", " ACTIVE \xB7 BEXAR COUNTY"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: "#475569",
+        marginTop: 2
+      }
+    }, alerts.map(a => a.event).join(" · "))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#475569"
+      }
+    }, alertsExpanded ? "▲" : "▼")), alertsExpanded && alerts.map((alert, i) => {
+      const as = getAlertStyle(alert.severity);
+      return /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          background: "rgba(0,0,0,0.3)",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          padding: "12px 16px"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: as.dot,
+          marginTop: 3,
+          flexShrink: 0,
+          boxShadow: `0 0 6px ${as.dot}`
+        }
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 4,
+          flexWrap: "wrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          fontWeight: 700,
+          color: as.color
+        }
+      }, alert.event), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 8,
+          background: as.bg,
+          border: `1px solid ${as.border}`,
+          borderRadius: 4,
+          padding: "1px 6px",
+          color: as.color,
+          letterSpacing: 1
+        }
+      }, alert.severity.toUpperCase())), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 10,
+          color: "#94A3B8",
+          lineHeight: 1.6,
+          marginBottom: 4
+        }
+      }, alert.description), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 8,
+          color: "#334155"
+        }
+      }, "Expires: ", alert.ends))));
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: overall.bg,
+        border: `1px solid ${overall.border}`,
+        borderRadius: 14,
+        padding: "16px 18px",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        boxShadow: `0 0 24px ${overall.border}`
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 26
+      }
+    }, overall.icon), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 17,
+        fontWeight: 900,
+        color: overall.color,
+        letterSpacing: 2,
+        lineHeight: 1
+      }
+    }, overall.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: "#475569",
+        letterSpacing: 2,
+        marginTop: 4
+      }
+    }, wx.station, " \xB7 ", wx.time, " \xB7 ", new Date().toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: catStyle.bg,
+        border: `1px solid ${catStyle.border}`,
+        borderRadius: 8,
+        padding: "8px 12px",
+        textAlign: "center"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 900,
+        color: catStyle.color,
+        letterSpacing: 1
+      }
+    }, wx.category), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 7,
+        color: catStyle.color,
+        opacity: 0.7,
+        marginTop: 1,
+        letterSpacing: 1
+      }
+    }, "CATEGORY"))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 14,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "rgba(255,255,255,0.03)",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        padding: "10px 16px",
+        fontSize: 8,
+        color: "#334155",
+        letterSpacing: 3
+      }
+    }, "AIRCRAFT READINESS"), AIRCRAFT.map(ac => {
+      const s = getAircraftStatus(ac, wx);
+      return /*#__PURE__*/React.createElement("div", {
+        key: ac.id,
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "13px 16px",
+          borderBottom: "1px solid rgba(255,255,255,0.04)"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: s.bg,
+          border: `1px solid ${s.border}`,
+          borderRadius: 8,
+          padding: "6px 10px",
+          minWidth: 62,
+          textAlign: "center",
+          flexShrink: 0
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          fontWeight: 700,
+          color: s.color,
+          letterSpacing: 1
+        }
+      }, ac.label)), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1
+        }
+      }, s.reasons.length > 0 ? s.reasons.map((r, i) => /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          fontSize: 9,
+          color: s.status === "GROUND" ? "#FF3B30" : "#FFC107",
+          marginBottom: 2
+        }
+      }, "\xB7 ", r)) : /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 9,
+          color: "#34C759"
+        }
+      }, "All parameters within limits"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 8,
+          color: "#334155",
+          marginTop: 2
+        }
+      }, ac.ip, " \xB7 Max wind ", ac.maxWind, "mph", !ac.precip ? " · No precip ops" : "")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: s.bg,
+          border: `1px solid ${s.border}`,
+          borderRadius: 6,
+          padding: "4px 10px",
+          fontSize: 9,
+          fontWeight: 700,
+          color: s.color,
+          letterSpacing: 1,
+          flexShrink: 0
+        }
+      }, s.status));
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 14,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "rgba(255,255,255,0.03)",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        padding: "10px 16px",
+        fontSize: 8,
+        color: "#334155",
+        letterSpacing: 3
+      }
+    }, "PLAIN ENGLISH SUMMARY"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "14px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10
+      }
+    }, [{
+      icon: "💨",
+      label: "Wind",
+      value: `Out of the ${compassDir(wx.wind.dir)} at ${wind.toFixed(0)}mph${gust ? `, gusting to ${gust.toFixed(0)}mph` : ""}`
+    }, {
+      icon: "👁",
+      label: "Visibility",
+      value: wx.visibility >= 10 ? "Excellent — greater than 10 miles" : wx.visibility >= 5 ? `Good — ${wx.visibility} miles` : wx.visibility >= 3 ? `Reduced — ${wx.visibility} miles, Part 107 minimum` : `Poor — ${wx.visibility} miles, below Part 107 minimum`
+    }, {
+      icon: "☁️",
+      label: "Sky",
+      value: wx.ceiling >= 9999 ? "Clear skies, no ceiling" : wx.ceiling >= 3000 ? `Partly cloudy, ceiling ${wx.ceiling.toLocaleString()}ft — well above 400ft limit` : wx.ceiling >= 500 ? `Low ceiling at ${wx.ceiling.toLocaleString()}ft — monitor closely` : `Dangerously low ceiling at ${wx.ceiling}ft — below minimums`
+    }, {
+      icon: "🌡",
+      label: "Temperature",
+      value: `${tempF(wx.temp).toFixed(0)}°F, dewpoint ${tempF(wx.dewpoint).toFixed(0)}°F${wx.temp - wx.dewpoint <= 3 ? " · Low spread, fog possible" : ""}`
+    }, {
+      icon: "🔋",
+      label: "Battery Impact",
+      value: tempF(wx.temp) > 100 ? "High heat — expect reduced flight times, monitor battery temps" : tempF(wx.temp) > 85 ? "Warm — slight reduction in battery performance possible" : tempF(wx.temp) < 32 ? "Below freezing — pre-heat batteries, M4T restricted" : "Temperature within normal battery operating range"
+    }, {
+      icon: "🌬",
+      label: "Upper Wind",
+      value: `At 3,000ft: ${compassDir(wx.windAloft3k.dir)} @ ${ktToMph(wx.windAloft3k.speed).toFixed(0)}mph · ${ktToMph(windShear).toFixed(0)}mph shear${ktToMph(windShear) > 15 ? " — turbulence likely climbing" : ktToMph(windShear) > 8 ? " — moderate shear" : " — light shear"}`
+    }].map((item, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        gap: 10,
+        alignItems: "flex-start"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        flexShrink: 0
+      }
+    }, item.icon), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#475569",
+        letterSpacing: 1
+      }
+    }, item.label, ": "), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#CBD5E1"
+      }
+    }, item.value)))))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 14,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "rgba(255,255,255,0.03)",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        padding: "10px 16px",
+        fontSize: 8,
+        color: "#334155",
+        letterSpacing: 3
+      }
+    }, "SURFACE CONDITIONS \xB7 KSKF"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr"
+      }
+    }, [{
+      label: "WIND",
+      value: `${wx.wind.dir}° @ ${wind.toFixed(0)}mph`,
+      sub: gust ? `Gusting ${gust.toFixed(0)}mph` : "No gusts",
+      alert: wind > 20 || gust && gust > 25
+    }, {
+      label: "VISIBILITY",
+      value: `${wx.visibility}SM`,
+      sub: wx.visibility >= 5 ? "Unrestricted" : wx.visibility >= 3 ? "Marginal" : "Below minimums",
+      alert: wx.visibility < 3
+    }, {
+      label: "CEILING",
+      value: wx.ceiling >= 9999 ? "Unlimited" : `${wx.ceiling.toLocaleString()}ft AGL`,
+      sub: wx.ceiling >= 3000 ? "Clear" : wx.ceiling >= 1000 ? "Low" : "Critical",
+      alert: wx.ceiling < 1000
+    }, {
+      label: "TEMP / DEW",
+      value: `${tempF(wx.temp).toFixed(0)}°F / ${tempF(wx.dewpoint).toFixed(0)}°F`,
+      sub: `${wx.altimeter}"Hg · Spread ${(wx.temp - wx.dewpoint).toFixed(0)}°C`,
+      alert: tempF(wx.temp) > 100
+    }, {
+      label: "WINDS 3,000FT",
+      value: `${wx.windAloft3k.dir}° @ ${ktToMph(wx.windAloft3k.speed).toFixed(0)}mph`,
+      sub: `Shear: ${ktToMph(windShear).toFixed(0)}mph`,
+      alert: ktToMph(windShear) > 15
+    }, {
+      label: "PRECIPITATION",
+      value: wx.thunderstorm ? "⛈ THUNDER" : wx.precip ? "🌧 PRECIP" : "None",
+      sub: wx.thunderstorm ? "Hard stop all aircraft" : wx.precip ? "M4T grounded" : "Clear",
+      alert: wx.precip || wx.thunderstorm
+    }].map((item, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        padding: "12px 16px",
+        borderBottom: "1px solid rgba(255,255,255,0.03)",
+        borderRight: i % 2 === 0 ? "1px solid rgba(255,255,255,0.03)" : "none"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: "#334155",
+        letterSpacing: 2,
+        marginBottom: 5
+      }
+    }, item.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: item.alert ? "#FFC107" : "#E2E8F0",
+        fontWeight: 600,
+        lineHeight: 1
+      }
+    }, item.value), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: item.alert ? "#FFC107" : "#475569",
+        marginTop: 4
+      }
+    }, item.sub))))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "rgba(255,255,255,0.01)",
+        border: "1px solid rgba(255,255,255,0.04)",
+        borderRadius: 10,
+        padding: "10px 14px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: "#334155",
+        letterSpacing: 2,
+        marginBottom: 6
+      }
+    }, "RAW METAR (for pilots)"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#334155",
+        fontFamily: "monospace",
+        lineHeight: 1.6
+      }
+    }, wx.raw)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "rgba(255,255,255,0.01)",
+        border: "1px solid rgba(255,255,255,0.04)",
+        borderRadius: 10,
+        padding: "10px 14px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: "#1E293B",
+        lineHeight: 1.7
+      }
+    }, "Weather parameters are advisory. UAS Program Manager retains final authority on all flight operations. Emergency ops may proceed at PM discretion with documented justification.")));
+  })()));
+}
 function FirehawkOps() {
   const [tab, setTab] = useState("dashboard");
   const [crew, setCrew] = useState(CREW_DEFAULT);
   const [bulletins, setBulletins] = useState([]);
   const [syncStatus, setSyncStatus] = useState("connecting");
+  const [showWeather, setShowWeather] = useState(false);
   const [now, setNow] = useState(new Date());
   const [isManager, setIsManager] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -4148,7 +4977,56 @@ function FirehawkOps() {
       letterSpacing: 1.5,
       marginTop: 3
     }
-  }, s.label)))), expiring.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, s.label)))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowWeather(true),
+    style: {
+      width: "100%",
+      background: "linear-gradient(135deg,rgba(74,144,217,0.15),rgba(74,144,217,0.08))",
+      border: "1px solid rgba(74,144,217,0.35)",
+      borderRadius: 10,
+      padding: "13px 16px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      cursor: "pointer",
+      fontFamily: "inherit",
+      color: "#4A90D9"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 18
+    }
+  }, "\uD83C\uDF24"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      letterSpacing: 2,
+      color: "#4A90D9"
+    }
+  }, "PREFLIGHT WX"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#334155",
+      letterSpacing: 1,
+      marginTop: 2
+    }
+  }, "KSKF \xB7 NWS Bexar County \xB7 Live"))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#4A90D9",
+      opacity: 0.6
+    }
+  }, "\u2192")), expiring.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,193,7,0.08)",
       border: "1px solid rgba(255,193,7,0.3)",
@@ -4668,7 +5546,9 @@ function FirehawkOps() {
     isManager: isManager,
     crew: crew,
     setCrew: setCrew
-  })), tab === "links" && /*#__PURE__*/React.createElement("div", {
+  })), showWeather && /*#__PURE__*/React.createElement(WeatherModal, {
+    onClose: () => setShowWeather(false)
+  }), tab === "links" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
