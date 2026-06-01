@@ -107,7 +107,7 @@ const SC = {
   C:{color:"#34C759",bg:"rgba(52,199,89,0.12)",border:"rgba(52,199,89,0.35)",glow:"rgba(52,199,89,0.15)"},
 };
 
-function getShift(d) { return SHIFTS[((Math.round((d-ANCHOR)/86400000)%6)+6)%6]; }
+function getShift(d) { return SHIFTS[((Math.floor((d-ANCHOR)/86400000)%6)+6)%6]; }
 
 function fromVal(v) {
   if(!v) return null;

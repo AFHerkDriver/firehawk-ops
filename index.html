@@ -1009,7 +1009,7 @@ function getHoliday(year, month, day) {
 }
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function getShift(year, month, day) {
-  const diff = Math.round((new Date(year, month, day) - ANCHOR_DATE) / 86400000);
+  const diff = Math.floor((new Date(year, month, day) - ANCHOR_DATE) / 86400000);
   return SHIFT_PATTERN[(diff % 6 + 6) % 6];
 }
 function getDaysInMonth(y, m) {
@@ -6481,7 +6481,7 @@ function FirehawkOps() {
   const tabs = isManager ? TABS_MANAGER : TABS_STAFF;
   const SHIFT_PATTERN = ["A", "A", "B", "B", "C", "C"];
   const ANCHOR = new Date(2026, 0, 1);
-  const diff = Math.round((now - ANCHOR) / 86400000);
+  const diff = Math.floor((now - ANCHOR) / 86400000);
   const todayShift = SHIFT_PATTERN[(diff % 6 + 6) % 6];
   const SHIFT_COLORS = {
     A: "#FF3B30",
