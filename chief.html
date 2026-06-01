@@ -68,6 +68,17 @@
   </div>
 </div>
 
+<div id="burnBanBar" style="display:none;background:linear-gradient(135deg,rgba(255,107,53,0.18),rgba(204,32,32,0.12));border-bottom:1px solid rgba(255,107,53,0.4);padding:8px 18px;display:none;align-items:center;justify-content:space-between;gap:12px;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:16px">🔥</span>
+    <div>
+      <span style="font-size:11px;font-weight:700;color:#FF6B35;letter-spacing:2px">BURN BAN IN EFFECT</span>
+      <span style="font-size:9px;color:#94A3B8;margin-left:10px;letter-spacing:1px">UNINCORPORATED BEXAR COUNTY</span>
+    </div>
+  </div>
+  <div id="burnBanTime" style="font-size:8px;color:#64748B;letter-spacing:1px;flex-shrink:0"></div>
+</div>
+
 <div class="content" id="content">
   <div style="text-align:center;padding:60px;color:#334155;font-size:11px;letter-spacing:2px">LOADING...</div>
 </div>
@@ -76,6 +87,26 @@
 const FS_PROJECT = "firehawk-scheduler";
 const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
 const FS_BASE = "https://firestore.googleapis.com/v1/projects/" + FS_PROJECT + "/databases/(default)/documents";
+
+// Fetch burn ban status
+async function fetchBurnBan() {
+  try {
+    const r = await fetch("https://firehawk-wx.usafsentinel-45e.workers.dev/burnban");
+    if (r.ok) {
+      const data = await r.json();
+      const bar = document.getElementById("burnBanBar");
+      if (data.underBan) {
+        bar.style.display = "flex";
+        const t = data.updated ? new Date(data.updated).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : "";
+        document.getElementById("burnBanTime").textContent = "TFS · " + t;
+      } else {
+        bar.style.display = "none";
+      }
+    }
+  } catch(e) {}
+}
+fetchBurnBan();
+setInterval(fetchBurnBan, 3600000);
 
 const CREW = [
   {id:1,name:"Sanchez",  role:"RPIC",color:"#4A90D9",initials:"AS"},
