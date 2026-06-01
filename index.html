@@ -5457,6 +5457,7 @@ function WeatherModal({
   onClose
 }) {
   const [wx, setWx] = useState(null);
+  const [alerts, setAlerts] = useState([]);
   const [status, setStatus] = useState("loading");
   const [errMsg, setErrMsg] = useState("");
   const [alertsExpanded, setAlertsExpanded] = useState(true);
