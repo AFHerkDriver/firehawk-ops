@@ -6664,7 +6664,7 @@ function WeatherModal({
       }
       setAlerts(activeAlerts);
 
-      // FAA raw METAR — purely for the "for pilots" line. Hidden if unavailable.
+      // FAA raw METAR — KSKF for pilots line
       let rawText = "";
       try {
         const METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false";
@@ -6682,6 +6682,27 @@ function WeatherModal({
           }
         }
       } catch (e) {}
+
+      // Regional METARs — KCVB (west) and KSSF (south)
+      let regionalMETARs = {};
+      try {
+        const REGIONAL_URL = "https://aviationweather.gov/api/data/metar?ids=KCVB,KSSF&format=json&taf=false";
+        for (const purl of makeProxies(REGIONAL_URL)) {
+          try {
+            const r = await fetch(purl);
+            if (!r.ok) continue;
+            const parsed = JSON.parse(await r.text());
+            if (Array.isArray(parsed)) {
+              parsed.forEach(m => {
+                if (m.icaoId && m.rawOb) regionalMETARs[m.icaoId] = m;
+              });
+              if (Object.keys(regionalMETARs).length > 0) break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+      } catch (e) {}
       setWx({
         station: "KSKF",
         name: "Kelly Field",
@@ -6690,6 +6711,7 @@ function WeatherModal({
           minute: '2-digit'
         }) + " local",
         raw: rawText,
+        regional: regionalMETARs,
         wind: {
           dir: windDir,
           speed: windMph,
@@ -6883,7 +6905,7 @@ function WeatherModal({
       letterSpacing: 3,
       marginTop: 2
     }
-  }, "KSKF \xB7 NWS BEXAR COUNTY")), /*#__PURE__*/React.createElement("div", {
+  }, "WEST BEXAR (KCVB) \xB7 SOUTH SA (KSSF) \xB7 NWS GRID")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -7380,7 +7402,113 @@ function WeatherModal({
         color: item.alert ? "#FFC107" : "#64748B",
         marginTop: 4
       }
-    }, item.sub))))), /*#__PURE__*/React.createElement("div", {
+    }, item.sub))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: "#64748B",
+        letterSpacing: 3,
+        marginBottom: 8
+      }
+    }, "REGIONAL STATIONS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 8
+      }
+    }, [{
+      id: "KCVB",
+      name: "Castroville",
+      dir: "WEST",
+      dirColor: "#64B5F6"
+    }, {
+      id: "KSSF",
+      name: "Stinson Muni",
+      dir: "SOUTH",
+      dirColor: "#34C759"
+    }].map(st => {
+      const m = wx.regional && wx.regional[st.id];
+      return /*#__PURE__*/React.createElement("div", {
+        key: st.id,
+        style: {
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.09)",
+          borderRadius: 10,
+          padding: "10px 12px"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 6
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          fontWeight: 700,
+          color: "#E2E8F0",
+          letterSpacing: 1
+        }
+      }, st.id), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 7,
+          color: st.dirColor,
+          letterSpacing: 2,
+          background: `${st.dirColor}18`,
+          border: `1px solid ${st.dirColor}40`,
+          borderRadius: 3,
+          padding: "1px 5px"
+        }
+      }, st.dir)), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 8,
+          color: "#64748B",
+          marginBottom: 6
+        }
+      }, st.name), m ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 9,
+          color: "#94A3B8",
+          marginBottom: 3
+        }
+      }, "Wind: ", /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: "#E2E8F0"
+        }
+      }, m.wdir && m.wdir !== 0 ? m.wdir + "°" : "VRB", " @ ", m.wspd ? Math.round(m.wspd * 1.15078) : "—", "mph", m.wgst ? ` G${Math.round(m.wgst * 1.15078)}mph` : "")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 9,
+          color: "#94A3B8",
+          marginBottom: 3
+        }
+      }, "Vis: ", /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: "#E2E8F0"
+        }
+      }, m.visib ? m.visib + "SM" : "—"), /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 8
+        }
+      }, "Temp: ", /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: "#E2E8F0"
+        }
+      }, m.temp ? Math.round(m.temp * 9 / 5 + 32) + "°F" : "—"))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 8,
+          color: "#475569",
+          fontFamily: "monospace",
+          marginTop: 4,
+          lineHeight: 1.4,
+          wordBreak: "break-all"
+        }
+      }, m.rawOb)) : /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 9,
+          color: "#475569"
+        }
+      }, "Unavailable"));
+    }))), /*#__PURE__*/React.createElement("div", {
       style: {
         background: "rgba(255,255,255,0.01)",
         border: "1px solid rgba(255,255,255,0.04)",
@@ -7394,14 +7522,55 @@ function WeatherModal({
         letterSpacing: 2,
         marginBottom: 6
       }
-    }, "RAW METAR (for pilots)"), /*#__PURE__*/React.createElement("div", {
+    }, "RAW METAR \u2014 KSKF (for pilots)"), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 10,
         color: "#64748B",
         fontFamily: "monospace",
-        lineHeight: 1.6
+        lineHeight: 1.6,
+        marginBottom: 10
       }
-    }, wx.raw)), /*#__PURE__*/React.createElement("div", {
+    }, wx.raw), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: "#64748B",
+        letterSpacing: 2,
+        marginBottom: 6
+      }
+    }, "QUICK LINKS \u2014 AVIATIONWEATHER.GOV"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        flexWrap: "wrap"
+      }
+    }, [{
+      id: "KSKF",
+      label: "KSKF Kelly Field"
+    }, {
+      id: "KSAT",
+      label: "KSAT San Antonio Intl"
+    }, {
+      id: "KSSF",
+      label: "KSSF Stinson"
+    }, {
+      id: "KCVB",
+      label: "KCVB Castroville"
+    }].map(s => /*#__PURE__*/React.createElement("a", {
+      key: s.id,
+      href: `https://aviationweather.gov/metar/data?ids=${s.id}&format=decoded&hours=0&taf=off&layout=on`,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      style: {
+        fontSize: 8,
+        color: "#4A90D9",
+        background: "rgba(74,144,217,0.08)",
+        border: "1px solid rgba(74,144,217,0.2)",
+        borderRadius: 5,
+        padding: "3px 8px",
+        textDecoration: "none",
+        letterSpacing: 1
+      }
+    }, s.label, " \u2197")))), /*#__PURE__*/React.createElement("div", {
       style: {
         background: "rgba(255,255,255,0.01)",
         border: "1px solid rgba(255,255,255,0.04)",
@@ -7976,7 +8145,7 @@ function FirehawkOps() {
       letterSpacing: 1,
       marginTop: 2
     }
-  }, "KSKF \xB7 NWS Bexar County \xB7 Live"))), /*#__PURE__*/React.createElement("span", {
+  }, "KCVB West \xB7 KSSF South \xB7 NWS Bexar County"))), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
       color: "#4A90D9",
