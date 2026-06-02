@@ -3725,7 +3725,7 @@ function SARModal({
     tagColor: C.green,
     when: "Before any structured search — every single time",
     description: "Ascend to altitude, then slowly rotate the drone 360° on its yaw axis while panning the gimbal up and down. Covers the entire search area visually before committing time to a grid pattern.",
-    how: ["Climb to 330ft (100m) AGL", "Rotate full 360° slowly on yaw", "Pan gimbal up and down during rotation", "If subject is in open area — you may find them in under 2 minutes", "If nothing found, proceed to grid pattern"],
+    how: ["Climb to 330ft AGL", "Rotate full 360° slowly on yaw", "Pan gimbal up and down during rotation", "If subject is in open area — you may find them in under 2 minutes", "If nothing found, proceed to grid pattern"],
     time: "1–2 min",
     terrain: "All",
     passes: 1,
@@ -3812,17 +3812,21 @@ function SARModal({
   const PatternDiagram = ({
     id
   }) => {
-    const s = {
-      stroke: "#64B5F6",
-      fill: "none",
-      strokeWidth: 1.5
-    };
-    const arrow = (x1, y1, x2, y2) => `M${x1},${y1} L${x2},${y2}`;
     if (id === "prelim") return /*#__PURE__*/React.createElement("svg", {
       viewBox: "0 0 100 100",
       width: 80,
       height: 80
-    }, /*#__PURE__*/React.createElement("circle", {
+    }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "arr-prelim",
+      markerWidth: "6",
+      markerHeight: "6",
+      refX: "3",
+      refY: "3",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L6,3 L0,6 Z",
+      fill: "#64B5F6"
+    }))), /*#__PURE__*/React.createElement("circle", {
       cx: 50,
       cy: 50,
       r: 30,
@@ -3841,18 +3845,8 @@ function SARModal({
       stroke: "#64B5F6",
       strokeWidth: 1.5,
       fill: "none",
-      markerEnd: "url(#arr)"
-    }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
-      id: "arr",
-      markerWidth: "6",
-      markerHeight: "6",
-      refX: "3",
-      refY: "3",
-      orient: "auto"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M0,0 L6,3 L0,6 Z",
-      fill: "#64B5F6"
-    }))), /*#__PURE__*/React.createElement("text", {
+      markerEnd: "url(#arr-prelim)"
+    }), /*#__PURE__*/React.createElement("text", {
       x: 50,
       y: 95,
       textAnchor: "middle",
@@ -3863,31 +3857,8 @@ function SARModal({
       viewBox: "0 0 120 80",
       width: 100,
       height: 70
-    }, /*#__PURE__*/React.createElement("line", {
-      x1: 60,
-      y1: 5,
-      x2: 60,
-      y2: 75,
-      stroke: "#FFC107",
-      strokeWidth: 1,
-      strokeDasharray: "3,2"
-    }), /*#__PURE__*/React.createElement("text", {
-      x: 62,
-      y: 40,
-      fill: "#FFC107",
-      fontSize: 7
-    }, "TRAIL"), /*#__PURE__*/React.createElement("path", {
-      d: "M10,20 L110,20",
-      stroke: "#64B5F6",
-      strokeWidth: 1.5,
-      markerEnd: "url(#a1)"
-    }), /*#__PURE__*/React.createElement("path", {
-      d: "M110,55 L10,55",
-      stroke: "#64B5F6",
-      strokeWidth: 1.5,
-      markerEnd: "url(#a2)"
-    }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
-      id: "a1",
+    }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "gls1-r",
       markerWidth: "5",
       markerHeight: "5",
       refX: "4",
@@ -3897,7 +3868,7 @@ function SARModal({
       d: "M0,0 L5,2.5 L0,5 Z",
       fill: "#64B5F6"
     })), /*#__PURE__*/React.createElement("marker", {
-      id: "a2",
+      id: "gls1-l",
       markerWidth: "5",
       markerHeight: "5",
       refX: "1",
@@ -3906,7 +3877,30 @@ function SARModal({
     }, /*#__PURE__*/React.createElement("path", {
       d: "M5,0 L0,2.5 L5,5 Z",
       fill: "#64B5F6"
-    }))), /*#__PURE__*/React.createElement("text", {
+    }))), /*#__PURE__*/React.createElement("line", {
+      x1: 60,
+      y1: 5,
+      x2: 60,
+      y2: 68,
+      stroke: "#FFC107",
+      strokeWidth: 1.5,
+      strokeDasharray: "3,2"
+    }), /*#__PURE__*/React.createElement("text", {
+      x: 63,
+      y: 38,
+      fill: "#FFC107",
+      fontSize: 7
+    }, "TRAIL"), /*#__PURE__*/React.createElement("path", {
+      d: "M10,22 L110,22",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#gls1-r)"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M110,50 L10,50",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#gls1-l)"
+    }), /*#__PURE__*/React.createElement("text", {
       x: 60,
       y: 75,
       textAnchor: "middle",
@@ -3917,142 +3911,154 @@ function SARModal({
       viewBox: "0 0 120 90",
       width: 100,
       height: 75
-    }, /*#__PURE__*/React.createElement("line", {
+    }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "gls2-r",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "gls2-l",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "1",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M5,0 L0,2.5 L5,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "gls2-r2",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#FF6B35"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "gls2-l2",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "1",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M5,0 L0,2.5 L5,5 Z",
+      fill: "#FF6B35"
+    }))), /*#__PURE__*/React.createElement("line", {
       x1: 60,
       y1: 5,
       x2: 60,
-      y2: 80,
+      y2: 78,
       stroke: "#FFC107",
-      strokeWidth: 1,
+      strokeWidth: 1.5,
       strokeDasharray: "3,2"
     }), /*#__PURE__*/React.createElement("path", {
       d: "M10,18 L110,18",
       stroke: "#64B5F6",
       strokeWidth: 1.5,
-      markerEnd: "url(#b1)"
+      markerEnd: "url(#gls2-r)"
     }), /*#__PURE__*/React.createElement("path", {
-      d: "M110,32 L10,32",
+      d: "M110,30 L10,30",
       stroke: "#64B5F6",
       strokeWidth: 1.5,
-      strokeDasharray: "4,2",
-      markerEnd: "url(#b2)"
+      markerEnd: "url(#gls2-l)"
     }), /*#__PURE__*/React.createElement("path", {
-      d: "M10,50 L110,50",
-      stroke: "#64B5F6",
+      d: "M110,48 L10,48",
+      stroke: "#FF6B35",
       strokeWidth: 1.5,
-      markerEnd: "url(#b3)"
+      strokeDasharray: "5,2",
+      markerEnd: "url(#gls2-l2)"
     }), /*#__PURE__*/React.createElement("path", {
-      d: "M110,64 L10,64",
-      stroke: "#64B5F6",
+      d: "M10,60 L110,60",
+      stroke: "#FF6B35",
       strokeWidth: 1.5,
-      strokeDasharray: "4,2",
-      markerEnd: "url(#b4)"
-    }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
-      id: "b1",
-      markerWidth: "5",
-      markerHeight: "5",
-      refX: "4",
-      refY: "2.5",
-      orient: "auto"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M0,0 L5,2.5 L0,5 Z",
-      fill: "#64B5F6"
-    })), /*#__PURE__*/React.createElement("marker", {
-      id: "b2",
-      markerWidth: "5",
-      markerHeight: "5",
-      refX: "1",
-      refY: "2.5",
-      orient: "auto"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M5,0 L0,2.5 L5,5 Z",
-      fill: "#64B5F6"
-    })), /*#__PURE__*/React.createElement("marker", {
-      id: "b3",
-      markerWidth: "5",
-      markerHeight: "5",
-      refX: "4",
-      refY: "2.5",
-      orient: "auto"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M0,0 L5,2.5 L0,5 Z",
-      fill: "#64B5F6"
-    })), /*#__PURE__*/React.createElement("marker", {
-      id: "b4",
-      markerWidth: "5",
-      markerHeight: "5",
-      refX: "1",
-      refY: "2.5",
-      orient: "auto"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M5,0 L0,2.5 L5,5 Z",
-      fill: "#64B5F6"
-    }))), /*#__PURE__*/React.createElement("text", {
+      strokeDasharray: "5,2",
+      markerEnd: "url(#gls2-r2)"
+    }), /*#__PURE__*/React.createElement("text", {
       x: 60,
-      y: 85,
+      y: 75,
       textAnchor: "middle",
       fill: "#475569",
       fontSize: 7
-    }, "PASS 1 + RETURN"));
+    }, "PASS 1 (BLUE) + PASS 2 (ORANGE)"));
     if (id === "ss3") return /*#__PURE__*/React.createElement("svg", {
-      viewBox: "0 0 100 100",
-      width: 80,
-      height: 80
-    }, /*#__PURE__*/React.createElement("circle", {
-      cx: 50,
-      cy: 50,
-      r: 28,
+      viewBox: "0 0 110 110",
+      width: 88,
+      height: 88
+    }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "ss3-arr",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#64B5F6"
+    }))), /*#__PURE__*/React.createElement("circle", {
+      cx: 55,
+      cy: 58,
+      r: 34,
       stroke: "#475569",
-      strokeWidth: 1,
+      strokeWidth: 0.8,
       fill: "none",
       strokeDasharray: "2,3"
-    }), /*#__PURE__*/React.createElement("circle", {
-      cx: 50,
-      cy: 22,
-      r: 3,
-      fill: "#FFC107",
-      opacity: 0.5
-    }), /*#__PURE__*/React.createElement("circle", {
-      cx: 74,
-      cy: 66,
-      r: 3,
-      fill: "#FFC107",
-      opacity: 0.5
-    }), /*#__PURE__*/React.createElement("circle", {
-      cx: 26,
-      cy: 66,
-      r: 3,
-      fill: "#FFC107",
-      opacity: 0.5
     }), /*#__PURE__*/React.createElement("path", {
-      d: "M50,50 L50,22 L74,66 L26,66 L50,22 M50,50 L74,66 M50,50 L26,66",
+      d: "M55,58 L55,24 L84,82 L55,58",
       stroke: "#64B5F6",
       strokeWidth: 1.5,
-      fill: "none"
+      fill: "rgba(100,181,246,0.08)"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M55,58 L26,82 L84,82 L55,58",
+      stroke: "#64B5F6",
+      strokeWidth: 1.2,
+      fill: "rgba(100,181,246,0.05)",
+      opacity: 0.8
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M55,58 L84,82 L26,82 L55,24 L55,58",
+      stroke: "#64B5F6",
+      strokeWidth: 1,
+      fill: "none",
+      opacity: 0.5,
+      strokeDasharray: "4,2"
     }), /*#__PURE__*/React.createElement("circle", {
-      cx: 50,
-      cy: 50,
-      r: 4,
+      cx: 55,
+      cy: 58,
+      r: 5,
       fill: "#FF6B35"
     }), /*#__PURE__*/React.createElement("text", {
-      x: 50,
-      y: 97,
+      x: 55,
+      y: 56,
+      textAnchor: "middle",
+      fill: "white",
+      fontSize: 6,
+      fontWeight: "bold"
+    }, "IPP"), /*#__PURE__*/React.createElement("path", {
+      d: "M55,58 L55,28",
+      stroke: "#FFC107",
+      strokeWidth: 1,
+      markerEnd: "url(#ss3-arr)",
+      opacity: 0.8
+    }), /*#__PURE__*/React.createElement("text", {
+      x: 55,
+      y: 106,
       textAnchor: "middle",
       fill: "#475569",
       fontSize: 7
-    }, "INVERTED STAR"));
+    }, "3 TRIANGLES \xB7 120\xB0 APART"));
     if (id === "ps1") return /*#__PURE__*/React.createElement("svg", {
-      viewBox: "0 0 100 80",
-      width: 85,
-      height: 68
-    }, [10, 22, 34, 46, 58, 70].map((y, i) => /*#__PURE__*/React.createElement("path", {
-      key: i,
-      d: i % 2 === 0 ? "M10," + y + " L90," + y : "M90," + y + " L10," + y,
-      stroke: "#64B5F6",
-      strokeWidth: 1.5,
-      markerEnd: i % 2 === 0 ? "url(#p1r)" : "url(#p1l)"
-    })), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
-      id: "p1r",
+      viewBox: "0 0 110 85",
+      width: 90,
+      height: 70
+    }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "ps1-r",
       markerWidth: "5",
       markerHeight: "5",
       refX: "4",
@@ -4062,7 +4068,7 @@ function SARModal({
       d: "M0,0 L5,2.5 L0,5 Z",
       fill: "#64B5F6"
     })), /*#__PURE__*/React.createElement("marker", {
-      id: "p1l",
+      id: "ps1-l",
       markerWidth: "5",
       markerHeight: "5",
       refX: "1",
@@ -4071,67 +4077,257 @@ function SARModal({
     }, /*#__PURE__*/React.createElement("path", {
       d: "M5,0 L0,2.5 L5,5 Z",
       fill: "#64B5F6"
-    }))), /*#__PURE__*/React.createElement("text", {
-      x: 50,
-      y: 78,
-      textAnchor: "middle",
-      fill: "#475569",
-      fontSize: 7
-    }, "SINGLE GRID"));
-    if (id === "ps2") return /*#__PURE__*/React.createElement("svg", {
-      viewBox: "0 0 100 80",
-      width: 85,
-      height: 68
-    }, [10, 22, 34, 46, 58, 70].map((y, i) => /*#__PURE__*/React.createElement("path", {
-      key: i,
-      d: i % 2 === 0 ? "M10," + y + " L90," + y : "M90," + y + " L10," + y,
+    }))), /*#__PURE__*/React.createElement("path", {
+      d: "M10,12 L95,12",
       stroke: "#64B5F6",
       strokeWidth: 1.5,
-      opacity: 0.5
-    })), [10, 22, 34, 46, 58, 70].map((x, i) => /*#__PURE__*/React.createElement("path", {
-      key: "v" + i,
-      d: i % 2 === 0 ? "M" + x + ",10 L" + x + ",70" : "M" + x + ",70 L" + x + ",10",
-      stroke: "#FF6B35",
-      strokeWidth: 1,
-      opacity: 0.6,
-      strokeDasharray: "3,2"
-    })), /*#__PURE__*/React.createElement("text", {
-      x: 50,
-      y: 78,
-      textAnchor: "middle",
-      fill: "#475569",
-      fontSize: 7
-    }, "DOUBLE GRID"));
-    if (id === "ps4") return /*#__PURE__*/React.createElement("svg", {
-      viewBox: "0 0 100 80",
-      width: 85,
-      height: 68
-    }, [10, 22, 34, 46, 58, 70].map((y, i) => /*#__PURE__*/React.createElement("path", {
-      key: i,
-      d: i % 2 === 0 ? "M10," + y + " L90," + y : "M90," + y + " L10," + y,
+      markerEnd: "url(#ps1-r)"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: 95,
+      y1: 12,
+      x2: 95,
+      y2: 24,
       stroke: "#64B5F6",
       strokeWidth: 1,
-      opacity: 0.4
-    })), [10, 22, 34, 46, 58, 70].map((x, i) => /*#__PURE__*/React.createElement("path", {
-      key: "v" + i,
-      d: i % 2 === 0 ? "M" + x + ",10 L" + x + ",70" : "M" + x + ",70 L" + x + ",10",
-      stroke: "#FF3B30",
+      strokeDasharray: "2,2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M95,24 L10,24",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#ps1-l)"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: 10,
+      y1: 24,
+      x2: 10,
+      y2: 36,
+      stroke: "#64B5F6",
       strokeWidth: 1,
-      opacity: 0.4
-    })), [16, 28, 40, 52, 64].map((y, i) => /*#__PURE__*/React.createElement("path", {
-      key: "d" + i,
-      d: "M10," + (y - 6) + " L90," + (y + 6),
-      stroke: "#34C759",
-      strokeWidth: 0.8,
-      opacity: 0.35,
-      strokeDasharray: "2,3"
-    })), /*#__PURE__*/React.createElement("text", {
-      x: 50,
+      strokeDasharray: "2,2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10,36 L95,36",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#ps1-r)"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: 95,
+      y1: 36,
+      x2: 95,
+      y2: 48,
+      stroke: "#64B5F6",
+      strokeWidth: 1,
+      strokeDasharray: "2,2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M95,48 L10,48",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#ps1-l)"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: 10,
+      y1: 48,
+      x2: 10,
+      y2: 60,
+      stroke: "#64B5F6",
+      strokeWidth: 1,
+      strokeDasharray: "2,2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10,60 L95,60",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#ps1-r)"
+    }), /*#__PURE__*/React.createElement("text", {
+      x: 52,
       y: 78,
       textAnchor: "middle",
       fill: "#475569",
       fontSize: 7
-    }, "QUAD GRID \u2014 MAX POD"));
+    }, "SINGLE GRID \xB7 ONE DIRECTION"));
+    if (id === "ps2") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 110 95",
+      width: 90,
+      height: 78
+    }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "ps2-r",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "ps2-l",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "1",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M5,0 L0,2.5 L5,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "ps2-r2",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#FF6B35"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "ps2-l2",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "1",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M5,0 L0,2.5 L5,5 Z",
+      fill: "#FF6B35"
+    }))), /*#__PURE__*/React.createElement("path", {
+      d: "M10,12 L95,12",
+      stroke: "#64B5F6",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-r)",
+      opacity: 0.9
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M95,24 L10,24",
+      stroke: "#64B5F6",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-l)",
+      opacity: 0.9
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10,36 L95,36",
+      stroke: "#64B5F6",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-r)",
+      opacity: 0.9
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M95,48 L10,48",
+      stroke: "#64B5F6",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-l)",
+      opacity: 0.9
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10,60 L95,60",
+      stroke: "#64B5F6",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-r)",
+      opacity: 0.9
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M95,18 L10,18",
+      stroke: "#FF6B35",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-l2)",
+      strokeDasharray: "5,2",
+      opacity: 0.8
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10,30 L95,30",
+      stroke: "#FF6B35",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-r2)",
+      strokeDasharray: "5,2",
+      opacity: 0.8
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M95,42 L10,42",
+      stroke: "#FF6B35",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-l2)",
+      strokeDasharray: "5,2",
+      opacity: 0.8
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10,54 L95,54",
+      stroke: "#FF6B35",
+      strokeWidth: 1.2,
+      markerEnd: "url(#ps2-r2)",
+      strokeDasharray: "5,2",
+      opacity: 0.8
+    }), /*#__PURE__*/React.createElement("text", {
+      x: 52,
+      y: 75,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 7
+    }, "PASS 1 (BLUE) + PASS 2 OPPOSITE (ORANGE)"), /*#__PURE__*/React.createElement("text", {
+      x: 52,
+      y: 84,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 6
+    }, "EACH STRIP COVERED FROM 2 DIRECTIONS"));
+    if (id === "ps4") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 110 105",
+      width: 90,
+      height: 86
+    }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "ps4-r",
+      markerWidth: "4",
+      markerHeight: "4",
+      refX: "3",
+      refY: "2",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L4,2 L0,4 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "ps4-l",
+      markerWidth: "4",
+      markerHeight: "4",
+      refX: "1",
+      refY: "2",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M4,0 L0,2 L4,4 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "ps4-d",
+      markerWidth: "4",
+      markerHeight: "4",
+      refX: "2",
+      refY: "3",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L2,4 L4,0 Z",
+      fill: "#FF6B35"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "ps4-u",
+      markerWidth: "4",
+      markerHeight: "4",
+      refX: "2",
+      refY: "1",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,4 L2,0 L4,4 Z",
+      fill: "#FF6B35"
+    }))), [12, 24, 36, 48, 60].map((y, i) => /*#__PURE__*/React.createElement("path", {
+      key: "h" + i,
+      d: i % 2 === 0 ? "M10," + y + " L95," + y : "M95," + y + " L10," + y,
+      stroke: "#64B5F6",
+      strokeWidth: 1,
+      markerEnd: i % 2 === 0 ? "url(#ps4-r)" : "url(#ps4-l)",
+      opacity: 0.7
+    })), [18, 32, 46, 60, 74, 88].map((x, i) => /*#__PURE__*/React.createElement("path", {
+      key: "v" + i,
+      d: i % 2 === 0 ? "M" + x + ",8 L" + x + ",65" : "M" + x + ",65 L" + x + ",8",
+      stroke: "#FF6B35",
+      strokeWidth: 1,
+      markerEnd: i % 2 === 0 ? "url(#ps4-d)" : "url(#ps4-u)",
+      strokeDasharray: "4,2",
+      opacity: 0.7
+    })), /*#__PURE__*/React.createElement("text", {
+      x: 52,
+      y: 80,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 7
+    }, "HORIZONTAL (BLUE) + VERTICAL (ORANGE)"), /*#__PURE__*/React.createElement("text", {
+      x: 52,
+      y: 89,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 6
+    }, "4 PASSES \u2014 HIGHEST POD"));
     return null;
   };
   const SENSOR = [{
@@ -4228,13 +4424,13 @@ function SARModal({
     }
   }, [{
     label: "ALTITUDE",
-    value: "330ft / 100m AGL"
+    value: "330ft AGL"
   }, {
     label: "GIMBAL",
     value: "75° from horizontal"
   }, {
     label: "SPEED",
-    value: "4–11 mph (2–5 m/s)"
+    value: "4–11 mph"
   }, {
     label: "OBSERVER",
     value: "Secondary required"
@@ -4499,7 +4695,7 @@ function SARModal({
     body: "Set the camera gimbal to 75°. The lower portion of the image points nearly straight down (90°) while the upper portion captures a ~60° forward oblique view. As the drone flies, every ground point is observed at all angles between 60° and 90° — maximizing line of sight through vegetation, around rocks, and under canopy from multiple directions."
   }, {
     icon: "✈️",
-    title: "330ft / 100m AGL Altitude",
+    title: "330ft AGL Altitude",
     color: C.blue,
     body: "Research-validated starting point balancing detection probability with area coverage. At this altitude with a 75° gimbal and 33° hFOV sensor, the visual footprint is approximately 200ft wide. A person's shoulder width spans 5–6 pixels on a 640-pixel thermal sensor — sufficient for detection. Lower altitude increases resolution but reduces coverage speed."
   }, {
@@ -5420,7 +5616,7 @@ const MISSIONS = [{
     },
     isothermsReason: "Off — solar-heated terrain creates too much false isotherm activation during the day",
     zoom: "1x search, zoom to confirm",
-    altitude: "330ft (100m) AGL",
+    altitude: "330ft AGL",
     tips: ["⬆ See SAR OPERATIONS on the dashboard for full search pattern guidance, flight parameters, and sensor selection", "Preliminary scan first: ascend to altitude, rotate 360° on yaw — fastest way to locate open-area subjects", "Gimbal: 75° · Speed: 4–11 mph · Secondary observer required", "Black Hot day, White Hot night — avoid Iron Bow, causes visual fatigue and screen ignoring"]
   },
   configNight: {
@@ -5436,7 +5632,7 @@ const MISSIONS = [{
     },
     isothermsReason: "Off — subjects stand out naturally at night, full gradient gives better situational awareness",
     zoom: "1x search, zoom to confirm",
-    altitude: "330ft (100m) AGL",
+    altitude: "330ft AGL",
     tips: ["⬆ See SAR OPERATIONS on the dashboard for full search pattern guidance, flight parameters, and sensor selection", "Preliminary scan first: ascend to altitude, rotate 360° on yaw — fastest way to locate open-area subjects", "Gimbal: 75° · Speed: 4–11 mph · Secondary observer required", "Wet or hypothermic subjects have weakened signatures — scan slowly, check ground for residual warmth"]
   }
 }, {
@@ -5466,14 +5662,14 @@ const MISSIONS = [{
   id: "hazmat",
   icon: "☣️",
   label: "Hazmat",
-  sub: "Heat source ID, chemical plume, container monitoring",
+  sub: "Heat source ID, chemical plume, container monitoring, confined space",
   color: "#FFC107",
   dayNight: false,
   config: {
     gain: "HIGH",
     gainReason: "High gain detects subtle temperature differentials in containers, piping, and spill areas",
     palette: "Rainbow",
-    paletteReason: "Rainbow maps temperature gradients across a wide range — ideal for container heat differentials",
+    paletteReason: "Rainbow maps temperature gradients across a wide range — ideal for container heat differentials and convection flow visualization",
     isotherm: {
       enabled: true,
       low: 120,
@@ -5483,7 +5679,7 @@ const MISSIONS = [{
     isothermsReason: "Isolates dangerously hot containers or exothermic reactions from ambient environment",
     zoom: "3–5x",
     altitude: "200–300ft AGL",
-    tips: ["Stay upwind — thermal plumes indicate chemical release direction and extent", "Hot containers appear bright — compare to adjacent containers for anomalies", "Document with thermal + visible split-screen for incident records", "Coordinate with HazMat IC — provide real-time thermal feed to ground team"]
+    tips: ["Container load detection: empty containers appear DARK on thermal, containers carrying gas or liquid appear BRIGHTER — key indicator without ground contact (Reed)", "Thermal convection flows show chemical release direction and extent — stay upwind and read the plume", "BLEVE awareness: water applied to a superheated container can accelerate BLEVE risk — thermal shows tank temp and water effectiveness. Report to IC immediately", "Confined space hazmat: Avata 2 is ideal for rapid primary search while entry teams gear up — ID victim location, chemical source, and battery/thermal runaway indicators before entry", "Decon reality: not as complex as it sounds. If the drone contacts truly bad material — land it in a heavy trash bag and write it off to insurance (Reed)", "Document with thermal + visible split-screen — convection currents, hot containers, and plume direction all for incident record", "Coordinate with HazMat IC — provide real-time thermal feed; they will direct priorities"]
   }
 }, {
   id: "damage_assessment",
@@ -5653,7 +5849,7 @@ const MISSIONS = [{
     isothermsReason: "Off — wide area search benefits from full gradient; animal signatures are large enough to spot without isotherm",
     zoom: "1x search, 2x confirm",
     altitude: "150–250ft AGL",
-    tips: ["Large animals (cattle, horses) read significantly warmer than terrain — easy to spot even in daylight", "Animals in distress may separate from herd — scan perimeter areas and dense brush", "Check water sources and shade structures first — animals seek these in Texas heat", "Coordinate with property owner — fencing and pen locations help focus search area"]
+    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — but prioritize bodies of water, trails, and last known area from the owner (Reed)", "Check water sources FIRST — animals seek water in Texas heat, especially distressed animals", "Solar-loaded rocks can look similar to animal signatures at night — zoom to confirm shape and check for movement", "Animals in distress separate from herd — scan perimeter areas and dense brush after clearing open fields", "Coordinate with property owner before search — fencing, pen locations, and known watering holes focus the search area significantly"]
   },
   configNight: {
     gain: "LOW",
@@ -5669,7 +5865,7 @@ const MISSIONS = [{
     isothermsReason: "Off — large animals are very visible at night without isotherm, full scene view helps avoid missing subjects",
     zoom: "1x wide search, zoom to ID species",
     altitude: "100–200ft AGL",
-    tips: ["Large animals are extremely visible at night — cattle and horses appear as large bright signatures", "Groups cluster together — a single isolated signature may indicate an injured or trapped animal", "Use rangefinder to give ground teams precise location in rural terrain", "Wildlife may flee from aircraft — approach slowly and from altitude to avoid scattering herd"]
+    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — prioritize bodies of water, trails, and last known area from owner (Reed)", "Large animals are extremely visible at night — cattle and horses appear as large bright signatures. Reed found a horse in 10–15 min from takeoff at night", "KEY: solar-loaded rocks from daytime heat can look like animals — zoom and check for breathing movement or limb shape to confirm", "Single isolated signature away from herd may indicate injured or trapped animal — prioritize", "Wildlife may flee from aircraft — approach slowly from altitude to avoid scattering before location is confirmed"]
   }
 }, {
   id: "pursuit",
