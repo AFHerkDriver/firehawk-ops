@@ -5369,10 +5369,10 @@ const MISSIONS = [{
     isotherm: {
       enabled: true,
       low: 300,
-      high: 600,
+      high: 1000,
       unit: "°F"
     },
-    isothermsReason: "Set 300–600°F to highlight active fire and hot spots through smoke obscuration",
+    isothermsReason: "300–1000°F captures active fire and hot spots through smoke. Ash caps sit around 600°F, solar-loaded materials run 150–200°F — narrow range misses critical data. Expand to 1000°F to capture full fire signature (Reed)",
     zoom: "1–3x",
     altitude: "150–250ft AGL",
     tips: ["Use isotherm to cut through smoke — hot spots appear as highlighted zones", "Attic space is critical — thermal shows fire spread and rafter/truss type (truss fails faster). Don't just watch exterior walls", "Open windows show convection currents and flow paths — can identify victim room isolation in multi-victim structures (apartments, mid-rise)", "Thermal won't penetrate load-bearing walls — focus on roof, attic vents, and open penetrations", "Roof surface temp asymmetry indicates hottest fire compartment — helps guide interior crew positioning", "Coordinate aerial view with IC — call out open windows with thermal signatures, active vent flow, and roof deformation"]
@@ -5398,7 +5398,7 @@ const MISSIONS = [{
     isothermsReason: "300–1000°F range captures active fire while filtering solar-loaded dirt and ash caps. Ash caps sit around 600°F, solar-loaded dark granite can run 150–200°F — narrow range misses critical data (Reed)",
     zoom: "1x wide",
     altitude: "300–400ft AGL",
-    tips: ["Fly the perimeter first at 300ft to map active fire edge before going overhead", "Use isotherm to distinguish active fire from smoldering ash — they read differently", "Spot fires appear as isolated bright signatures — report bearing and distance from main", "Wind direction affects thermal plume — stay upwind for clearest imaging"]
+    tips: ["Stay at the perimeter — zoom gives you everything you need without putting equipment in atmospheric instability. Only cross into brush if area exceeds 20–30 acres (Reed)", "Monitor outward from perimeter for spot fires 75% of the time — this is where the next threat comes from", "Fly the perimeter first at 300ft to map active fire edge before going overhead", "Use isotherm to distinguish active fire from smoldering ash — they read differently", "Spot fires appear as isolated bright signatures — report bearing and distance from main fire", "Wind direction affects thermal plume — stay upwind for clearest imaging"]
   }
 }, {
   id: "sar",
