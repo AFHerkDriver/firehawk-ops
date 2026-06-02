@@ -3701,6 +3701,863 @@ function SchedulerPanel({
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── SAR Operations Modal ─────────────────────────────────────────────────────
+function SARModal({
+  onClose,
+  onOpenThermal
+}) {
+  const [tab, setTab] = useState("patterns");
+  const C = {
+    blue: "#64B5F6",
+    green: "#34C759",
+    yellow: "#FFC107",
+    orange: "#FF6B35",
+    red: "#FF3B30",
+    muted: "#64748B",
+    text: "#CBD5E1",
+    dim: "#475569"
+  };
+  const PATTERNS = [{
+    id: "prelim",
+    icon: "🔄",
+    label: "Preliminary Area Scan",
+    tag: "ALWAYS FIRST",
+    tagColor: C.green,
+    when: "Before any structured search — every single time",
+    description: "Ascend to altitude, then slowly rotate the drone 360° on its yaw axis while panning the gimbal up and down. Covers the entire search area visually before committing time to a grid pattern.",
+    how: ["Climb to 330ft (100m) AGL", "Rotate full 360° slowly on yaw", "Pan gimbal up and down during rotation", "If subject is in open area — you may find them in under 2 minutes", "If nothing found, proceed to grid pattern"],
+    time: "1–2 min",
+    terrain: "All",
+    passes: 1,
+    diagram: "prelim"
+  }, {
+    id: "gls1",
+    icon: "➡️",
+    label: "Guiding Line Search 1",
+    tag: "GLS1",
+    tagColor: C.blue,
+    when: "Trails, roads, creeks, fences — open terrain with minimal vegetation",
+    description: "Fly parallel to the guiding line (trail, road, creek) with the line visible in the lower corner of the screen. Cover one side, then return on the opposite side. Single pass covers ~200ft on each flank.",
+    how: ["Position so guiding line is in lower screen corner", "Fly parallel — cover the line and one flank (~200ft)", "Return on opposite side covering the other flank", "Best in open terrain where single-direction coverage is sufficient"],
+    time: "Variable (trail length)",
+    terrain: "Open",
+    passes: 1,
+    diagram: "gls1"
+  }, {
+    id: "gls2",
+    icon: "↔️",
+    label: "Guiding Line Search 2",
+    tag: "GLS2",
+    tagColor: C.blue,
+    when: "Trails, roads, creeks — terrain with trees, brush, or obstructions on flanks",
+    description: "Same as GLS1 but repeated in the opposite direction. Covers flanks from two opposite angles — catches subjects hidden on the far side of trees or brush that GLS1 would miss.",
+    how: ["Complete a full GLS1 pass", "Turn around and repeat entire GLS1 in opposite direction", "Each flank now covered from two opposite directions", "Use when vegetation is present along the route"],
+    time: "2× GLS1 time",
+    terrain: "Moderate vegetation",
+    passes: 2,
+    diagram: "gls2"
+  }, {
+    id: "ss3",
+    icon: "⭐",
+    label: "Sector Search 3",
+    tag: "SS3",
+    tagColor: C.yellow,
+    when: "Point of interest — last known position, campsite, vehicle, reflector",
+    description: "An inverted star pattern that covers a 200ft radius from a center point from 3 directions. High probability of detection in a small area quickly. Takes 3–4 minutes. Requires practice or automation.",
+    how: ["Place map marker at the center (IPP or POI)", "Fly 200ft NORTH from marker → turn 120° RIGHT", "Fly 200ft → turn 120° RIGHT", "Fly 200ft back to marker (triangle complete)", "Repeat triangle starting from 240°, then from 120°", "All turns are 120° RIGHT · All legs are 200ft — use as mnemonic"],
+    time: "3–4 min",
+    terrain: "All",
+    passes: 3,
+    diagram: "ss3"
+  }, {
+    id: "ps1",
+    icon: "▦",
+    label: "Parallel Search 1",
+    tag: "PS1",
+    tagColor: C.orange,
+    when: "Open fields, meadows, flat terrain with minimal obstructions",
+    description: "Standard grid search — parallel back-and-forth passes with 50ft spacing overlap. Single direction coverage is sufficient for open terrain where line of sight is unobstructed.",
+    how: ["Set grid aligned with search area boundaries", "Fly parallel passes — 50ft overlap between each path", "Single direction covers area efficiently in open terrain", "Available as automated flight path in DroneSense/DJI"],
+    time: "Area dependent",
+    terrain: "Open",
+    passes: 1,
+    diagram: "ps1"
+  }, {
+    id: "ps2",
+    icon: "▦▦",
+    label: "Parallel Search 2",
+    tag: "PS2",
+    tagColor: C.orange,
+    when: "Medium vegetation — brush, scattered trees, residential areas",
+    description: "Double grid — runs the PS1 pattern then repeats it in the opposite direction. 50% overlap per leg ensures both flanks of every obstruction are covered. Significantly higher detection probability than PS1.",
+    how: ["Complete a full PS1 grid pattern", "Rotate 180° and repeat the entire grid in opposite direction", "Each strip now covered from two opposite directions", "Use when terrain has trees, brush, or structures that block single-direction view"],
+    time: "2× PS1 time",
+    terrain: "Medium vegetation",
+    passes: 2,
+    diagram: "ps2"
+  }, {
+    id: "ps4",
+    icon: "▦▦▦▦",
+    label: "Parallel Search 4",
+    tag: "PS4",
+    tagColor: C.red,
+    when: "Dense vegetation, heavy canopy, or when maximum POD is required",
+    description: "Two perpendicular PS2 grids combined — covers every point in the area from 4 directions. Highest probability of detection available. Time-intensive but appropriate for dense brush or critical searches.",
+    how: ["Complete a full PS2 pattern (2 passes)", "Rotate 90° and complete another full PS2 pattern", "Four total passes — each point covered from N/S/E/W directions", "Use for dense vegetation or high-stakes searches where missing a subject is not acceptable"],
+    time: "4× PS1 time",
+    terrain: "Dense vegetation",
+    passes: 4,
+    diagram: "ps4"
+  }];
+  const PatternDiagram = ({
+    id
+  }) => {
+    const s = {
+      stroke: "#64B5F6",
+      fill: "none",
+      strokeWidth: 1.5
+    };
+    const arrow = (x1, y1, x2, y2) => `M${x1},${y1} L${x2},${y2}`;
+    if (id === "prelim") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 100 100",
+      width: 80,
+      height: 80
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: 50,
+      cy: 50,
+      r: 30,
+      stroke: "#64B5F6",
+      strokeWidth: 1,
+      fill: "none",
+      strokeDasharray: "3,2",
+      opacity: 0.4
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: 50,
+      cy: 50,
+      r: 3,
+      fill: "#64B5F6"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M50,20 A30,30 0 1,1 49,20",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      fill: "none",
+      markerEnd: "url(#arr)"
+    }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "arr",
+      markerWidth: "6",
+      markerHeight: "6",
+      refX: "3",
+      refY: "3",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L6,3 L0,6 Z",
+      fill: "#64B5F6"
+    }))), /*#__PURE__*/React.createElement("text", {
+      x: 50,
+      y: 95,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 8
+    }, "360\xB0 YAW"));
+    if (id === "gls1") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 120 80",
+      width: 100,
+      height: 70
+    }, /*#__PURE__*/React.createElement("line", {
+      x1: 60,
+      y1: 5,
+      x2: 60,
+      y2: 75,
+      stroke: "#FFC107",
+      strokeWidth: 1,
+      strokeDasharray: "3,2"
+    }), /*#__PURE__*/React.createElement("text", {
+      x: 62,
+      y: 40,
+      fill: "#FFC107",
+      fontSize: 7
+    }, "TRAIL"), /*#__PURE__*/React.createElement("path", {
+      d: "M10,20 L110,20",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#a1)"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M110,55 L10,55",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#a2)"
+    }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "a1",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "a2",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "1",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M5,0 L0,2.5 L5,5 Z",
+      fill: "#64B5F6"
+    }))), /*#__PURE__*/React.createElement("text", {
+      x: 60,
+      y: 75,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 7
+    }, "1 PASS EACH SIDE"));
+    if (id === "gls2") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 120 90",
+      width: 100,
+      height: 75
+    }, /*#__PURE__*/React.createElement("line", {
+      x1: 60,
+      y1: 5,
+      x2: 60,
+      y2: 80,
+      stroke: "#FFC107",
+      strokeWidth: 1,
+      strokeDasharray: "3,2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10,18 L110,18",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#b1)"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M110,32 L10,32",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      strokeDasharray: "4,2",
+      markerEnd: "url(#b2)"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10,50 L110,50",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: "url(#b3)"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M110,64 L10,64",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      strokeDasharray: "4,2",
+      markerEnd: "url(#b4)"
+    }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "b1",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "b2",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "1",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M5,0 L0,2.5 L5,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "b3",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "b4",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "1",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M5,0 L0,2.5 L5,5 Z",
+      fill: "#64B5F6"
+    }))), /*#__PURE__*/React.createElement("text", {
+      x: 60,
+      y: 85,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 7
+    }, "PASS 1 + RETURN"));
+    if (id === "ss3") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 100 100",
+      width: 80,
+      height: 80
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: 50,
+      cy: 50,
+      r: 28,
+      stroke: "#475569",
+      strokeWidth: 1,
+      fill: "none",
+      strokeDasharray: "2,3"
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: 50,
+      cy: 22,
+      r: 3,
+      fill: "#FFC107",
+      opacity: 0.5
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: 74,
+      cy: 66,
+      r: 3,
+      fill: "#FFC107",
+      opacity: 0.5
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: 26,
+      cy: 66,
+      r: 3,
+      fill: "#FFC107",
+      opacity: 0.5
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M50,50 L50,22 L74,66 L26,66 L50,22 M50,50 L74,66 M50,50 L26,66",
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      fill: "none"
+    }), /*#__PURE__*/React.createElement("circle", {
+      cx: 50,
+      cy: 50,
+      r: 4,
+      fill: "#FF6B35"
+    }), /*#__PURE__*/React.createElement("text", {
+      x: 50,
+      y: 97,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 7
+    }, "INVERTED STAR"));
+    if (id === "ps1") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 100 80",
+      width: 85,
+      height: 68
+    }, [10, 22, 34, 46, 58, 70].map((y, i) => /*#__PURE__*/React.createElement("path", {
+      key: i,
+      d: i % 2 === 0 ? "M10," + y + " L90," + y : "M90," + y + " L10," + y,
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      markerEnd: i % 2 === 0 ? "url(#p1r)" : "url(#p1l)"
+    })), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("marker", {
+      id: "p1r",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "4",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0,0 L5,2.5 L0,5 Z",
+      fill: "#64B5F6"
+    })), /*#__PURE__*/React.createElement("marker", {
+      id: "p1l",
+      markerWidth: "5",
+      markerHeight: "5",
+      refX: "1",
+      refY: "2.5",
+      orient: "auto"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M5,0 L0,2.5 L5,5 Z",
+      fill: "#64B5F6"
+    }))), /*#__PURE__*/React.createElement("text", {
+      x: 50,
+      y: 78,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 7
+    }, "SINGLE GRID"));
+    if (id === "ps2") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 100 80",
+      width: 85,
+      height: 68
+    }, [10, 22, 34, 46, 58, 70].map((y, i) => /*#__PURE__*/React.createElement("path", {
+      key: i,
+      d: i % 2 === 0 ? "M10," + y + " L90," + y : "M90," + y + " L10," + y,
+      stroke: "#64B5F6",
+      strokeWidth: 1.5,
+      opacity: 0.5
+    })), [10, 22, 34, 46, 58, 70].map((x, i) => /*#__PURE__*/React.createElement("path", {
+      key: "v" + i,
+      d: i % 2 === 0 ? "M" + x + ",10 L" + x + ",70" : "M" + x + ",70 L" + x + ",10",
+      stroke: "#FF6B35",
+      strokeWidth: 1,
+      opacity: 0.6,
+      strokeDasharray: "3,2"
+    })), /*#__PURE__*/React.createElement("text", {
+      x: 50,
+      y: 78,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 7
+    }, "DOUBLE GRID"));
+    if (id === "ps4") return /*#__PURE__*/React.createElement("svg", {
+      viewBox: "0 0 100 80",
+      width: 85,
+      height: 68
+    }, [10, 22, 34, 46, 58, 70].map((y, i) => /*#__PURE__*/React.createElement("path", {
+      key: i,
+      d: i % 2 === 0 ? "M10," + y + " L90," + y : "M90," + y + " L10," + y,
+      stroke: "#64B5F6",
+      strokeWidth: 1,
+      opacity: 0.4
+    })), [10, 22, 34, 46, 58, 70].map((x, i) => /*#__PURE__*/React.createElement("path", {
+      key: "v" + i,
+      d: i % 2 === 0 ? "M" + x + ",10 L" + x + ",70" : "M" + x + ",70 L" + x + ",10",
+      stroke: "#FF3B30",
+      strokeWidth: 1,
+      opacity: 0.4
+    })), [16, 28, 40, 52, 64].map((y, i) => /*#__PURE__*/React.createElement("path", {
+      key: "d" + i,
+      d: "M10," + (y - 6) + " L90," + (y + 6),
+      stroke: "#34C759",
+      strokeWidth: 0.8,
+      opacity: 0.35,
+      strokeDasharray: "2,3"
+    })), /*#__PURE__*/React.createElement("text", {
+      x: 50,
+      y: 78,
+      textAnchor: "middle",
+      fill: "#475569",
+      fontSize: 7
+    }, "QUAD GRID \u2014 MAX POD"));
+    return null;
+  };
+  const SENSOR = [{
+    condition: "Day — solar loaded terrain",
+    thermal: "Black Hot",
+    optical: "RGB auto contrast",
+    note: "Solar makes environment black, people appear white"
+  }, {
+    condition: "Night — cool ground",
+    thermal: "White Hot",
+    optical: "Low-light + spotlight",
+    note: "Body heat stands out strongly against cool dark ground"
+  }, {
+    condition: "Water — surface victim",
+    thermal: "White Hot / Iron Bow",
+    optical: "RGB perpendicular",
+    note: "Thermal for surface, optical for submerged. High altitude + zoom preferred over low + wide angle"
+  }, {
+    condition: "Dense canopy — under cover",
+    thermal: "White Hot",
+    optical: "RGB",
+    note: "75° gimbal + multi-pass PS2/PS4 covers canopy gaps from multiple angles"
+  }, {
+    condition: "Warm night / rocky terrain",
+    thermal: "White Hot low gain",
+    optical: "RGB",
+    note: "Rocks release heat after sunset — creates clutter first 2 hours of darkness"
+  }];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.85)",
+      display: "flex",
+      flexDirection: "column",
+      zIndex: 200,
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 700,
+      width: "100%",
+      margin: "0 auto",
+      padding: "0 0 40px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "sticky",
+      top: 0,
+      background: "#0D1117",
+      borderBottom: "1px solid rgba(100,181,246,0.2)",
+      padding: "14px 20px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      zIndex: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Bebas Neue'",
+      fontSize: 22,
+      letterSpacing: 4,
+      color: "#FFC107"
+    }
+  }, "SAR OPERATIONS"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: C.muted,
+      letterSpacing: 2
+    }
+  }, "SEARCH PATTERNS \xB7 SENSOR SELECTION \xB7 FLIGHT PARAMETERS")), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      background: "rgba(255,255,255,0.08)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      borderRadius: 8,
+      padding: "6px 14px",
+      color: C.text,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontSize: 11,
+      letterSpacing: 1
+    }
+  }, "\u2715 Close")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      margin: "16px 16px 0",
+      background: "rgba(100,181,246,0.08)",
+      border: "1px solid rgba(100,181,246,0.2)",
+      borderRadius: 10,
+      padding: "12px 16px",
+      display: "flex",
+      gap: 24,
+      flexWrap: "wrap"
+    }
+  }, [{
+    label: "ALTITUDE",
+    value: "330ft / 100m AGL"
+  }, {
+    label: "GIMBAL",
+    value: "75° from horizontal"
+  }, {
+    label: "SPEED",
+    value: "4–11 mph (2–5 m/s)"
+  }, {
+    label: "OBSERVER",
+    value: "Secondary required"
+  }].map(p => /*#__PURE__*/React.createElement("div", {
+    key: p.label
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 7,
+      color: C.muted,
+      letterSpacing: 2
+    }
+  }, p.label), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.blue,
+      fontWeight: 700,
+      marginTop: 2
+    }
+  }, p.value)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      padding: "14px 16px 0"
+    }
+  }, [["patterns", "Search Patterns"], ["sensor", "Sensor Guide"], ["params", "Flight Tips"]].map(([id, label]) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    onClick: () => setTab(id),
+    style: {
+      background: tab === id ? "rgba(100,181,246,0.2)" : "rgba(255,255,255,0.05)",
+      border: `1px solid ${tab === id ? "rgba(100,181,246,0.5)" : "rgba(255,255,255,0.1)"}`,
+      borderRadius: 8,
+      padding: "7px 14px",
+      color: tab === id ? C.blue : C.muted,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontSize: 10,
+      letterSpacing: 1
+    }
+  }, label)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      onClose();
+      onOpenThermal();
+    },
+    style: {
+      marginLeft: "auto",
+      background: "rgba(255,107,53,0.1)",
+      border: "1px solid rgba(255,107,53,0.25)",
+      borderRadius: 8,
+      padding: "7px 14px",
+      color: "#FF6B35",
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontSize: 9,
+      letterSpacing: 1
+    }
+  }, "\uD83C\uDF21 Thermal Config \u2192")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px 16px"
+    }
+  }, tab === "patterns" && PATTERNS.map(p => /*#__PURE__*/React.createElement("div", {
+    key: p.id,
+    style: {
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.09)",
+      borderRadius: 10,
+      padding: "14px",
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16
+    }
+  }, p.icon), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: C.text,
+      letterSpacing: 1
+    }
+  }, p.label), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: p.tagColor,
+      background: `${p.tagColor}18`,
+      border: `1px solid ${p.tagColor}44`,
+      borderRadius: 4,
+      padding: "1px 6px",
+      letterSpacing: 1
+    }
+  }, p.tag)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: C.muted,
+      marginBottom: 6,
+      letterSpacing: 1
+    }
+  }, "WHEN: ", p.when), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#94A3B8",
+      lineHeight: 1.5,
+      marginBottom: 8
+    }
+  }, p.description), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: C.muted
+    }
+  }, "\u23F1 ", p.time), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: C.muted
+    }
+  }, "\uD83C\uDF3F ", p.terrain), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: C.muted
+    }
+  }, "\uD83D\uDD01 ", p.passes, "\xD7 pass", p.passes > 1 ? "es" : "")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: "1px solid rgba(255,255,255,0.07)",
+      paddingTop: 8
+    }
+  }, p.how.map((step, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: p.tagColor,
+      minWidth: 14,
+      fontWeight: 700
+    }
+  }, i + 1, "."), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 9,
+      color: "#94A3B8"
+    }
+  }, step))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flexShrink: 0,
+      opacity: 0.7
+    }
+  }, /*#__PURE__*/React.createElement(PatternDiagram, {
+    id: p.id
+  }))))), tab === "sensor" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: C.muted,
+      letterSpacing: 2,
+      marginBottom: 12
+    }
+  }, "THERMAL PALETTE SELECTION BY CONDITION"), SENSOR.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.09)",
+      borderRadius: 10,
+      padding: "12px 14px",
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: C.blue,
+      fontWeight: 700,
+      letterSpacing: 1,
+      marginBottom: 6
+    }
+  }, s.condition), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 20,
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 7,
+      color: C.muted,
+      letterSpacing: 1
+    }
+  }, "THERMAL"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: C.text,
+      marginTop: 2
+    }
+  }, s.thermal)), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 7,
+      color: C.muted,
+      letterSpacing: 1
+    }
+  }, "OPTICAL"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: C.text,
+      marginTop: 2
+    }
+  }, s.optical))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#94A3B8",
+      borderTop: "1px solid rgba(255,255,255,0.06)",
+      paddingTop: 6
+    }
+  }, s.note))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(255,59,48,0.08)",
+      border: "1px solid rgba(255,59,48,0.2)",
+      borderRadius: 10,
+      padding: "12px 14px",
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: C.red,
+      fontWeight: 700,
+      letterSpacing: 1,
+      marginBottom: 6
+    }
+  }, "\u26A0 AVOID IRON BOW FOR SAR"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#94A3B8",
+      lineHeight: 1.5
+    }
+  }, "Iron Bow generates too much visual stimulus. Pilots and observers begin ignoring the screen over time \u2014 missing critical detections. Reserve Iron Bow for wildland fire perimeter work and water ripple detection only."))), tab === "params" && /*#__PURE__*/React.createElement("div", null, [{
+    icon: "📐",
+    title: "75° Gimbal Angle",
+    color: C.blue,
+    body: "Set the camera gimbal to 75°. The lower portion of the image points nearly straight down (90°) while the upper portion captures a ~60° forward oblique view. As the drone flies, every ground point is observed at all angles between 60° and 90° — maximizing line of sight through vegetation, around rocks, and under canopy from multiple directions."
+  }, {
+    icon: "✈️",
+    title: "330ft / 100m AGL Altitude",
+    color: C.blue,
+    body: "Research-validated starting point balancing detection probability with area coverage. At this altitude with a 75° gimbal and 33° hFOV sensor, the visual footprint is approximately 200ft wide. A person's shoulder width spans 5–6 pixels on a 640-pixel thermal sensor — sufficient for detection. Lower altitude increases resolution but reduces coverage speed."
+  }, {
+    icon: "🏎",
+    title: "4–11 mph Flight Speed",
+    color: C.blue,
+    body: "Slower speeds required in dense vegetation or poor thermal contrast — the image changes faster than observers can analyze at higher speeds. The goal is to allow thorough observation of the entire screen including edges. Adjust based on conditions — if you're having to rewind mentally to process what just flew past, you're going too fast."
+  }, {
+    icon: "👁",
+    title: "Secondary Observer — Required",
+    color: C.yellow,
+    body: "Studies show pilots consistently focus on the upper center of the GCS screen. The sides, bottom corners, and edges of the frame receive significantly less attention — even when the subject is there. The secondary observer's only job is to watch the periphery. Do not assign them other tasks during active search phases. This single change has measurable impact on detection rates."
+  }, {
+    icon: "🌡",
+    title: "Thermal vs Optical Decision",
+    color: C.orange,
+    body: "Thermal is preferred when there is a meaningful temperature difference between the subject and environment. When temperatures are similar (hot summer day, subject in water, heavy insulation), switch to optical RGB with zoom. Water searches: thermal detects surface victims only — fully submerged subjects require optical. High altitude + zoom gives better perpendicular water penetration than low altitude + wide angle."
+  }, {
+    icon: "🌙",
+    title: "Post-Sunset Thermal Clutter",
+    color: C.muted,
+    body: "Rocks, concrete, and dense vegetation retain heat from the day and release it slowly after sunset. This creates bright false signatures on thermal for the first 1–2 hours of darkness. During this window, lower your altitude slightly, slow your speed, and confirm every hit with optical zoom before reporting."
+  }].map((item, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.09)",
+      borderRadius: 10,
+      padding: "13px 14px",
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16
+    }
+  }, item.icon), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: item.color,
+      letterSpacing: 1
+    }
+  }, item.title)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#94A3B8",
+      lineHeight: 1.6
+    }
+  }, item.body)))))));
+}
+
 // ── Airspace Modal ──────────────────────────────────────────────────────────
 function AirspaceModal({
   onClose
@@ -4518,7 +5375,7 @@ const MISSIONS = [{
     isothermsReason: "Set 300–600°F to highlight active fire and hot spots through smoke obscuration",
     zoom: "1–3x",
     altitude: "150–250ft AGL",
-    tips: ["Scan eaves, roof penetrations, and party walls for thermal extension signatures", "Use isotherm to cut through smoke — hot spots appear as highlighted zones", "Circle the structure at 200ft for full perimeter view before moving to roof ops", "Watch for delayed ignition — rescan suppressed areas every 5–10 minutes"]
+    tips: ["Use isotherm to cut through smoke — hot spots appear as highlighted zones", "Attic space is critical — thermal shows fire spread and rafter/truss type (truss fails faster). Don't just watch exterior walls", "Open windows show convection currents and flow paths — can identify victim room isolation in multi-victim structures (apartments, mid-rise)", "Thermal won't penetrate load-bearing walls — focus on roof, attic vents, and open penetrations", "Roof surface temp asymmetry indicates hottest fire compartment — helps guide interior crew positioning", "Coordinate aerial view with IC — call out open windows with thermal signatures, active vent flow, and roof deformation"]
   }
 }, {
   id: "wildland_fire",
@@ -4534,11 +5391,11 @@ const MISSIONS = [{
     paletteReason: "Iron Bow is the standard for wildland fire — excellent perimeter contrast across terrain",
     isotherm: {
       enabled: true,
-      low: 200,
-      high: 500,
+      low: 300,
+      high: 1000,
       unit: "°F"
     },
-    isothermsReason: "Isolates active fire from cooling ash — identifies unburned islands and spot fire risk",
+    isothermsReason: "300–1000°F range captures active fire while filtering solar-loaded dirt and ash caps. Ash caps sit around 600°F, solar-loaded dark granite can run 150–200°F — narrow range misses critical data (Reed)",
     zoom: "1x wide",
     altitude: "300–400ft AGL",
     tips: ["Fly the perimeter first at 300ft to map active fire edge before going overhead", "Use isotherm to distinguish active fire from smoldering ash — they read differently", "Spot fires appear as isolated bright signatures — report bearing and distance from main", "Wind direction affects thermal plume — stay upwind for clearest imaging"]
@@ -4552,9 +5409,9 @@ const MISSIONS = [{
   dayNight: true,
   configDay: {
     gain: "HIGH",
-    gainReason: "Day SAR requires high gain — solar loading on ground creates thermal clutter, high gain helps separate subject from background",
-    palette: "Iron Bow",
-    paletteReason: "Iron Bow separates human warmth from solar-heated surfaces better than White Hot during daylight hours",
+    gainReason: "Day SAR requires high gain — solar loading on ground creates thermal clutter",
+    palette: "Black Hot",
+    paletteReason: "Black Hot is preferred for daytime SAR — solar-loaded environment goes black, people and animals appear white and are more distinguishable (Reed, field-validated)",
     isotherm: {
       enabled: false,
       low: null,
@@ -4563,12 +5420,12 @@ const MISSIONS = [{
     },
     isothermsReason: "Off — solar-heated terrain creates too much false isotherm activation during the day",
     zoom: "1x search, zoom to confirm",
-    altitude: "150–200ft AGL",
-    tips: ["Daytime solar loading makes humans harder to distinguish — fly in shadow areas when possible", "Shaded ground reads cooler, making warm subjects stand out — prioritize shaded search areas", "Clothing type matters — dark clothing absorbs more solar heat and reads warmer", "Early morning and late afternoon (golden hour) offer best thermal contrast of the day"]
+    altitude: "330ft (100m) AGL",
+    tips: ["⬆ See SAR OPERATIONS on the dashboard for full search pattern guidance, flight parameters, and sensor selection", "Preliminary scan first: ascend to altitude, rotate 360° on yaw — fastest way to locate open-area subjects", "Gimbal: 75° · Speed: 4–11 mph · Secondary observer required", "Black Hot day, White Hot night — avoid Iron Bow, causes visual fatigue and screen ignoring"]
   },
   configNight: {
     gain: "LOW",
-    gainReason: "Night SAR — low gain keeps body temp (98.6°F) centered in the scale for maximum contrast against cool dark ground",
+    gainReason: "Night SAR — low gain keeps body temp centered in scale for maximum contrast against cool dark ground",
     palette: "White Hot",
     paletteReason: "White Hot makes warm subjects appear bright against cool dark ground — easiest to spot at a glance",
     isotherm: {
@@ -4579,8 +5436,8 @@ const MISSIONS = [{
     },
     isothermsReason: "Off — subjects stand out naturally at night, full gradient gives better situational awareness",
     zoom: "1x search, zoom to confirm",
-    altitude: "100–150ft AGL",
-    tips: ["Body temp is ~98.6°F — look for bright white blobs against cool dark ground", "Check dense vegetation edges — subjects often shelter against trees or structures", "If subject is wet or hypothermic, signature weakens — scan for residual ground warmth", "Fly slow grid at 120ft — human signatures are strongest within 200ft"]
+    altitude: "330ft (100m) AGL",
+    tips: ["⬆ See SAR OPERATIONS on the dashboard for full search pattern guidance, flight parameters, and sensor selection", "Preliminary scan first: ascend to altitude, rotate 360° on yaw — fastest way to locate open-area subjects", "Gimbal: 75° · Speed: 4–11 mph · Secondary observer required", "Wet or hypothermic subjects have weakened signatures — scan slowly, check ground for residual warmth"]
   }
 }, {
   id: "water_rescue",
@@ -4591,19 +5448,19 @@ const MISSIONS = [{
   dayNight: false,
   config: {
     gain: "LOW",
-    gainReason: "Water temperature is relatively uniform — human body temp stands out strongly at low gain",
-    palette: "White Hot",
-    paletteReason: "White Hot gives maximum contrast between warm victim and cold water — especially effective at night",
+    gainReason: "Water temperature is relatively uniform — human body temp stands out strongly at low gain for surface victims",
+    palette: "Rainbow / Iron Bow",
+    paletteReason: "Submerged victims are invisible to thermal. Use Rainbow or Iron Bow to detect surface ripples from a flailing subject — these palettes show water disturbance more clearly than White Hot (Reed, DroneSense)",
     isotherm: {
       enabled: false,
       low: null,
       high: null,
       unit: "°F"
     },
-    isothermsReason: "Off — human signature is strong against water, full gradient gives better area coverage",
-    zoom: "1x search, 3x to confirm and direct",
-    altitude: "100–200ft AGL",
-    tips: ["Hypothermia sets in fast — thermal signature weakens over time. Speed is critical.", "Even a partially submerged victim is detectable — look for bright white against dark water", "Debris, foam, and turbulence can create false positives — confirm with zoom", "Use rangefinder to give rescue teams precise distance and bearing to victim"]
+    isothermsReason: "Off — for surface victims thermal contrast is strong enough without isotherm; focus is on movement and ripple detection for submerged subjects",
+    zoom: "High zoom from altitude preferred",
+    altitude: "200–300ft AGL with zoom",
+    tips: ["Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to optical (RGB) for submerged search", "For submerged victims: use high altitude + high zoom (not low altitude + wide angle) — gives more perpendicular viewing angles across the image and better optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust based on sun glare angle", "Rainbow or Iron Bow shows ripple patterns from a flailing subject more clearly — may not show the subject but shows water disturbance", "Partially exposed victims are detectable on thermal — look for any bright signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection — surface victims visible from much farther", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Debris, foam, and turbulence create false positives on optical — confirm with zoom before directing assets"]
   }
 }, {
   id: "hazmat",
@@ -6373,6 +7230,7 @@ function FirehawkOps() {
   const [showThermal, setShowThermal] = useState(false);
   const [showAirspace, setShowAirspace] = useState(false);
   const [burnBan, setBurnBan] = useState(null);
+  const [showSAR, setShowSAR] = useState(false);
   const [now, setNow] = useState(new Date());
   const [isManager, setIsManager] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -6978,6 +7836,54 @@ function FirehawkOps() {
       opacity: 0.6
     }
   }, "\u2192")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowSAR(true),
+    style: {
+      width: "100%",
+      background: "linear-gradient(135deg,rgba(255,193,7,0.15),rgba(255,193,7,0.08))",
+      border: "1px solid rgba(255,193,7,0.35)",
+      borderRadius: 10,
+      padding: "13px 16px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 18
+    }
+  }, "\uD83D\uDD26"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      letterSpacing: 2,
+      color: "#FFC107"
+    }
+  }, "SAR OPERATIONS"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#64748B",
+      letterSpacing: 1,
+      marginTop: 2
+    }
+  }, "Search patterns \xB7 Sensor selection \xB7 Flight params"))), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#FFC107",
+      opacity: 0.6
+    }
+  }, "\u2192")), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowAirspace(true),
     style: {
       width: "100%",
@@ -7545,6 +8451,12 @@ function FirehawkOps() {
     onClose: () => setShowThermal(false)
   }), showAirspace && /*#__PURE__*/React.createElement(AirspaceModal, {
     onClose: () => setShowAirspace(false)
+  }), showSAR && /*#__PURE__*/React.createElement(SARModal, {
+    onClose: () => setShowSAR(false),
+    onOpenThermal: () => {
+      setShowSAR(false);
+      setShowThermal(true);
+    }
   }), tab === "links" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
