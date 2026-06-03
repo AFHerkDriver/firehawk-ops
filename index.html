@@ -963,7 +963,7 @@ const SHIFT_COLORS = {
   }
 };
 const SHIFT_PATTERN = ["A", "A", "B", "B", "C", "C"];
-const ANCHOR_DATE = new Date(2026, 0, 1);
+const ANCHOR_DATE = Date.UTC(2026, 0, 1);
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 // US Federal Holidays — computed per year
@@ -1009,7 +1009,8 @@ function getHoliday(year, month, day) {
 }
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function getShift(year, month, day) {
-  const diff = Math.floor((new Date(year, month, day) - ANCHOR_DATE) / 86400000);
+  const utcDay = Date.UTC(year, month, day);
+  const diff = Math.floor((utcDay - ANCHOR_DATE) / 86400000);
   return SHIFT_PATTERN[(diff % 6 + 6) % 6];
 }
 function getDaysInMonth(y, m) {
@@ -7720,8 +7721,12 @@ function FirehawkOps() {
   const TABS_STAFF = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
   const tabs = isManager ? TABS_MANAGER : TABS_STAFF;
   const SHIFT_PATTERN = ["A", "A", "B", "B", "C", "C"];
-  const ANCHOR = new Date(2026, 0, 1);
-  const diff = Math.floor((now - ANCHOR) / 86400000);
+  // Shift changes at 0700 CST (UTC-6 standard, UTC-5 daylight)
+  // Subtract 7 hours so that before 0700 we still show yesterday's shift
+  const shiftNow = new Date(now.getTime() - 7 * 3600000);
+  const ANCHOR = Date.UTC(2026, 0, 1);
+  const utcDay = Date.UTC(shiftNow.getFullYear(), shiftNow.getMonth(), shiftNow.getDate());
+  const diff = Math.floor((utcDay - ANCHOR) / 86400000);
   const todayShift = SHIFT_PATTERN[(diff % 6 + 6) % 6];
   const SHIFT_COLORS = {
     A: "#FF3B30",

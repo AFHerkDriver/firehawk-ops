@@ -131,14 +131,17 @@ const HISTORY = {
 };
 
 const SHIFTS = ["A","A","B","B","C","C"];
-const ANCHOR = new Date(2026,0,1);
+const ANCHOR = Date.UTC(2026,0,1);
 const SC = {
   A:{color:"#FF3B30",bg:"rgba(255,59,48,0.12)",border:"rgba(255,59,48,0.35)",glow:"rgba(255,59,48,0.15)"},
   B:{color:"#4A90D9",bg:"rgba(74,144,217,0.12)",border:"rgba(74,144,217,0.35)",glow:"rgba(74,144,217,0.15)"},
   C:{color:"#34C759",bg:"rgba(52,199,89,0.12)",border:"rgba(52,199,89,0.35)",glow:"rgba(52,199,89,0.15)"},
 };
 
-function getShift(d) { return SHIFTS[((Math.floor((d-ANCHOR)/86400000)%6)+6)%6]; }
+function getShift(d) {
+  const utcDay = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return SHIFTS[((Math.floor((utcDay-ANCHOR)/86400000)%6)+6)%6];
+}
 
 function fromVal(v) {
   if(!v) return null;
@@ -195,7 +198,10 @@ let selectedOffset=0;
 
 async function loadData() {
   setSync('connecting');
-  const base=new Date();
+  // Shift changes at 0700 CST — before 0700 still show previous day's shift
+  const now = new Date();
+  const shiftNow = new Date(now.getTime() - 7 * 3600000);
+  const base = new Date(shiftNow.getFullYear(), shiftNow.getMonth(), shiftNow.getDate());
   base.setHours(0,0,0,0);
 
   // Load crew once
