@@ -5141,8 +5141,8 @@ const MISSIONS = [{
   color: "#34C759",
   dayNight: true,
   configDay: {
-    gain: "HIGH",
-    gainReason: "Day SAR requires high gain — solar loading on ground creates thermal clutter",
+    gain: "LOW",
+    gainReason: "Day SAR requires low gain — solar loading heats the ground above body temp (120–150°F+). High gain saturates on the hot ground and loses the subject. Low gain spreads the range wide enough to distinguish a 98°F person against a 130°F solar-loaded background",
     palette: "Black Hot",
     paletteReason: "Black Hot is preferred for daytime SAR — solar-loaded environment goes black, people and animals appear white and are more distinguishable (Reed, field-validated)",
     isotherm: {
@@ -5157,8 +5157,8 @@ const MISSIONS = [{
     tips: ["⬆ See SAR OPERATIONS on the dashboard for full search pattern guidance, flight parameters, and sensor selection", "Preliminary scan first: ascend to altitude, rotate 360° on yaw — fastest way to locate open-area subjects", "Gimbal: 75° · Speed: 4–11 mph · Secondary observer required", "Black Hot day, White Hot night — avoid Iron Bow, causes visual fatigue and screen ignoring"]
   },
   configNight: {
-    gain: "LOW",
-    gainReason: "Night SAR — low gain keeps body temp centered in scale for maximum contrast against cool dark ground",
+    gain: "HIGH",
+    gainReason: "Night SAR requires high gain — cool ground (50–70°F) vs body temp (98°F) is a narrow but clear difference. High gain centers the sensor on exactly that range, making the subject appear brilliantly bright. Low gain spreads the scale too wide and reduces contrast",
     palette: "White Hot",
     paletteReason: "White Hot makes warm subjects appear bright against cool dark ground — easiest to spot at a glance",
     isotherm: {
@@ -5288,8 +5288,8 @@ const MISSIONS = [{
     tips: ["Use body-temp isotherm to rapidly identify warm victims in debris — speeds triage significantly", "Unresponsive victims on hot pavement may be hard to distinguish — look for limb position and isotherm color", "Coordinate with triage teams — mark victim locations with GPS waypoints for ground crews", "Thermal can identify hyperthermia victims (reading hotter than normal) before they become critical"]
   },
   configNight: {
-    gain: "LOW",
-    gainReason: "Night MCI — low gain centers body temp perfectly, cool background makes every victim clearly visible",
+    gain: "HIGH",
+    gainReason: "Night MCI requires high gain — cool ground vs 98°F body temp is best resolved with high gain's narrow range. Multiple victims at similar temperatures stand out sharply against cool pavement and surroundings",
     palette: "White Hot",
     paletteReason: "White Hot is fastest for triage scanning at night — warm victims appear as distinct bright shapes instantly",
     isotherm: {
@@ -5350,8 +5350,8 @@ const MISSIONS = [{
     tips: ["Daytime urban environments are thermally noisy — look for movement, not just heat signatures", "Hot pavement and vehicles create false signatures — zoom before reporting a person", "Position upwind of exhaust sources — diesel and engine heat degrades image quality", "Maintain 250ft+ for wide area coverage in daytime crowd situations"]
   },
   configNight: {
-    gain: "LOW",
-    gainReason: "Night overwatch — low gain keeps subjects clear and distinct in cool nighttime thermal environment",
+    gain: "HIGH",
+    gainReason: "Night overwatch requires high gain — subjects and vehicles are warmer than the cool nighttime environment. High gain's narrow range maximizes contrast between warm targets and cool background",
     palette: "White Hot",
     paletteReason: "White Hot is standard for personnel tracking at night — warm bodies appear bright and distinct",
     isotherm: {
@@ -5389,8 +5389,8 @@ const MISSIONS = [{
     tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — but prioritize bodies of water, trails, and last known area from the owner (Reed)", "Check water sources FIRST — animals seek water in Texas heat, especially distressed animals", "Solar-loaded rocks can look similar to animal signatures at night — zoom to confirm shape and check for movement", "Animals in distress separate from herd — scan perimeter areas and dense brush after clearing open fields", "Coordinate with property owner before search — fencing, pen locations, and known watering holes focus the search area significantly"]
   },
   configNight: {
-    gain: "LOW",
-    gainReason: "Night animal ops — large body mass reads very warm against cool ground, low gain prevents saturation",
+    gain: "HIGH",
+    gainReason: "Night animal ops require high gain — large animal body temps (100–104°F) against cool nighttime ground are well within high gain's narrow range. High gain makes animals appear brilliantly bright and easy to track",
     palette: "White Hot",
     paletteReason: "White Hot makes large warm animal signatures highly visible against cool dark terrain at night",
     isotherm: {
