@@ -1059,15 +1059,20 @@ function extractDayNumbers(text, daysInMonth) {
   // ranges like "3rd through 8th", "10-15", "3 to 8", "3 thru 8"
   const rangeRe = /(\d{1,2})(?:st|nd|rd|th)?\s*(?:through|thru|to|-|–)\s*(\d{1,2})(?:st|nd|rd|th)?/g;
   let m;
+  const rangeMatches = [];
   while ((m = rangeRe.exec(text)) !== null) {
     const start = parseInt(m[1]),
       end = parseInt(m[2]);
     for (let d = Math.min(start, end); d <= Math.max(start, end) && d <= daysInMonth; d++) days.add(d);
+    rangeMatches.push(m[0]);
   }
 
-  // individual numbers with optional ordinal: "the 3rd", "on the 15", "5th", "22"
-  const stripped = text.replace(rangeRe, " ");
-  const numRe = /(\d{1,2})(?:st|nd|rd|th)?/g;
+  // strip matched ranges before extracting individual numbers (avoid reusing stateful regex)
+  let stripped = text;
+  for (const rm of rangeMatches) stripped = stripped.split(rm).join(" ");
+
+  // individual numbers with optional ordinal suffix
+  const numRe = /(\d{1,2})(?:st|nd|rd|th)?/g;
   while ((m = numRe.exec(stripped)) !== null) {
     const d = parseInt(m[1]);
     if (d >= 1 && d <= daysInMonth) days.add(d);
