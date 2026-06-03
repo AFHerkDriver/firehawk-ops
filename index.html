@@ -7133,6 +7133,7 @@ function FirehawkOps() {
   const [showAirspace, setShowAirspace] = useState(false);
   const [burnBan, setBurnBan] = useState(null);
   const [redFlag, setRedFlag] = useState(null);
+  const [expandedBulletins, setExpandedBulletins] = useState({});
   const [showSAR, setShowSAR] = useState(false);
   const [now, setNow] = useState(new Date());
   const [isManager, setIsManager] = useState(false);
@@ -8351,62 +8352,79 @@ function FirehawkOps() {
       fontSize: 11,
       letterSpacing: 2
     }
-  }, "NO BULLETINS POSTED"), bulletins.map(b => /*#__PURE__*/React.createElement("div", {
-    key: b.id,
-    style: {
-      background: "rgba(255,255,255,0.055)",
-      border: "1px solid rgba(255,255,255,0.07)",
-      borderRadius: 12,
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "10px 16px",
-      background: "rgba(255,255,255,0.12)",
-      borderBottom: "1px solid rgba(255,255,255,0.06)",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      color: "#E2E8F0",
-      fontWeight: 600
-    }
-  }, b.title), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9,
-      color: "#64748B"
-    }
-  }, b.date), isManager && /*#__PURE__*/React.createElement("button", {
-    onClick: () => deleteBulletin(b.id),
-    style: {
-      background: "none",
-      border: "none",
-      color: "#FF3B30",
-      cursor: "pointer",
-      fontSize: 14,
-      padding: "0 2px"
-    }
-  }, "\xD7"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "14px 16px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: "#94A3B8",
-      lineHeight: 1.7,
-      whiteSpace: "pre-wrap"
-    }
-  }, b.body))))), /*#__PURE__*/React.createElement("div", {
+  }, "NO BULLETINS POSTED"), bulletins.map(b => {
+    const expanded = expandedBulletins[b.id] !== false; // default expanded
+    return /*#__PURE__*/React.createElement("div", {
+      key: b.id,
+      style: {
+        background: "rgba(255,255,255,0.055)",
+        border: "1px solid rgba(255,255,255,0.07)",
+        borderRadius: 12,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      onClick: () => setExpandedBulletins(prev => ({
+        ...prev,
+        [b.id]: !expanded
+      })),
+      style: {
+        padding: "10px 16px",
+        background: "rgba(255,255,255,0.12)",
+        borderBottom: expanded ? "1px solid rgba(255,255,255,0.06)" : "none",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: "#E2E8F0",
+        fontWeight: 600
+      }
+    }, b.title), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#64748B"
+      }
+    }, b.date), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#64748B",
+        userSelect: "none"
+      }
+    }, expanded ? "▲" : "▼"), isManager && /*#__PURE__*/React.createElement("button", {
+      onClick: e => {
+        e.stopPropagation();
+        deleteBulletin(b.id);
+      },
+      style: {
+        background: "none",
+        border: "none",
+        color: "#FF3B30",
+        cursor: "pointer",
+        fontSize: 14,
+        padding: "0 2px"
+      }
+    }, "\xD7"))), expanded && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "14px 16px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#94A3B8",
+        lineHeight: 1.7,
+        whiteSpace: "pre-wrap"
+      }
+    }, b.body)));
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: tab === "schedule" ? "block" : "none"
     }
