@@ -2627,6 +2627,49 @@ function SchedulerPanel({
       }
     }, "\u26A0 VO requires an RPIC")), /*#__PURE__*/React.createElement("div", {
       style: {
+        marginBottom: 10
+      }
+    }, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 9,
+        color: "#34C759",
+        letterSpacing: 2,
+        display: "block",
+        marginBottom: 5
+      }
+    }, "VO2 \u2014 PAIRS TO SECONDARY RPIC"), /*#__PURE__*/React.createElement("select", {
+      value: a.vo2 || "",
+      onChange: e => proposeAssignment(selectedDay, "vo2", e.target.value),
+      style: {
+        width: "100%",
+        background: "#334155",
+        border: "1px solid rgba(52,199,89,0.25)",
+        borderRadius: 6,
+        padding: "8px 10px",
+        color: "#E2E8F0",
+        fontSize: 13,
+        fontFamily: "inherit",
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: "",
+      style: {
+        background: "#334155",
+        color: "#94A3B8"
+      }
+    }, "\u2014 None \u2014"), voCrew.map(c => {
+      const ok = c.id !== (a.vo ? parseInt(a.vo) : null);
+      return /*#__PURE__*/React.createElement("option", {
+        key: c.id,
+        value: c.id,
+        disabled: !ok,
+        style: {
+          background: "#334155",
+          color: ok ? "#E2E8F0" : "#64748B"
+        }
+      }, c.name, !ok ? " (already assigned)" : "");
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
         marginBottom: 14
       }
     }, /*#__PURE__*/React.createElement("label", {

@@ -239,6 +239,7 @@ function render(weekDays,schedCache,crewData) {
   if(a&&!a.confirmed&&HISTORY[y+"_"+m+"_"+d]) a.confirmed=true;
   const rpic=a?.rpic?crew.find(c=>c.id===a.rpic||c.id===parseInt(a.rpic)):null;
   const vo=a?.vo?crew.find(c=>c.id===a.vo||c.id===parseInt(a.vo)):null;
+  const vo2=a?.vo2?crew.find(c=>c.id===a.vo2||c.id===parseInt(a.vo2)):null;
   const extra=(a?.extra||[]).map(eid=>crew.find(c=>c.id===eid||c.id===parseInt(eid))).filter(Boolean);
   const dayLabel=selectedOffset===0?"TODAY":selDay.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
 
@@ -281,8 +282,58 @@ function render(weekDays,schedCache,crewData) {
     <div class="legend-item"><div class="legend-dot" style="background:#FF3B30;opacity:0.6"></div>No Coverage</div>
   </div></div>`;
 
-  // Crew card
+  // Crew card — grouped by unit
   if(a&&rpic) {
+    // Sanchez (id:1) = UAV121, everyone else = UAV124
+    const SANCHEZ_ID = 1;
+    const rpicIsManager = rpic.id === SANCHEZ_ID;
+
+    // Build unit groups
+    // extra array may contain additional RPICs or crew
+    // VO pairs to primary RPIC (rpic field)
+    // extra members: if Sanchez is primary, extras go to UAV124; otherwise extras are upstaff on UAV124
+
+    const uav121 = [];
+    const uav124 = [];
+
+    if(rpicIsManager) {
+      // Sanchez is primary RPIC — UAV121
+      uav121.push({ person: rpic, role: 'RPIC', roleColor: '#4A90D9', badge: 'RPIC' });
+      if(vo) uav121.push({ person: vo, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
+      // extras go to UAV124
+      extra.forEach(em => {
+        uav124.push({ person: em, role: em.role === 'RPIC' ? 'REMOTE PILOT IN COMMAND' : 'UPSTAFF', roleColor: em.role === 'RPIC' ? '#4A90D9' : '#D4AF37', badge: em.role });
+      });
+      // vo2 pairs to UAV124 (extra RPIC)
+      if(vo2) uav124.push({ person: vo2, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
+    } else {
+      // Someone else is primary RPIC — UAV124
+      uav124.push({ person: rpic, role: 'RPIC', roleColor: '#4A90D9', badge: 'RPIC' });
+      if(vo) uav124.push({ person: vo, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
+      // check if Sanchez is in extras — he goes to UAV121
+      extra.forEach(em => {
+        if(em.id === SANCHEZ_ID) {
+          uav121.push({ person: em, role: 'RPIC', roleColor: '#4A90D9', badge: 'RPIC' });
+        } else {
+          uav124.push({ person: em, role: em.role === 'RPIC' ? 'REMOTE PILOT IN COMMAND' : 'UPSTAFF', roleColor: em.role === 'RPIC' ? '#4A90D9' : '#D4AF37', badge: em.role });
+        }
+      });
+      // vo2 pairs to Sanchez on UAV121
+      if(vo2) uav121.push({ person: vo2, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
+    }
+
+    const renderUnit = (unit, members) => {
+      if(members.length === 0) return '';
+      return `<div style="margin-bottom:12px">
+        <div style="font-size:8px;color:#64748B;letter-spacing:3px;padding:8px 16px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06)">${unit}</div>
+        ${members.map(m => `<div class="crew-row">
+          <div class="avatar" style="background:linear-gradient(135deg,${m.person.color},${m.person.color}88);box-shadow:0 0 14px ${m.person.color}40;border:2px solid ${m.person.color}55">${m.person.initials}</div>
+          <div style="flex:1"><div class="crew-name">${m.person.name}</div><div class="crew-role" style="color:${m.roleColor}">${m.role}</div></div>
+          <div class="role-badge" style="background:${m.roleColor}18;border:1px solid ${m.roleColor}44;color:${m.roleColor}">${m.badge}</div>
+        </div>`).join('')}
+      </div>`;
+    };
+
     html+=`<div class="crew-card">
       <div class="crew-header">
         <span class="crew-header-label">${dayLabel}'S CREW</span>
@@ -290,28 +341,11 @@ function render(weekDays,schedCache,crewData) {
           ${a.confirmed?'✓ CONFIRMED':'PENDING'}
         </span>
       </div>
-      <div class="crew-row">
-        <div class="avatar" style="background:linear-gradient(135deg,${rpic.color},${rpic.color}88);box-shadow:0 0 14px ${rpic.color}40;border:2px solid ${rpic.color}55">${rpic.initials}</div>
-        <div style="flex:1"><div class="crew-name">${rpic.name}</div><div class="crew-role" style="color:#4A90D9">REMOTE PILOT IN COMMAND</div></div>
-        <div class="role-badge" style="background:rgba(74,144,217,0.12);border:1px solid rgba(74,144,217,0.3);color:#4A90D9">RPIC</div>
-      </div>`;
-    if(vo) {
-      html+=`<div class="crew-row">
-        <div class="avatar" style="background:linear-gradient(135deg,${vo.color},${vo.color}88);box-shadow:0 0 14px ${vo.color}40;border:2px solid ${vo.color}55">${vo.initials}</div>
-        <div style="flex:1"><div class="crew-name">${vo.name}</div><div class="crew-role" style="color:#34C759">VISUAL OBSERVER</div></div>
-        <div class="role-badge" style="background:rgba(52,199,89,0.12);border:1px solid rgba(52,199,89,0.3);color:#34C759">VO</div>
-      </div>`;
-    }
-    extra.forEach(em=>{
-      html+=`<div class="crew-row">
-        <div class="avatar" style="background:linear-gradient(135deg,${em.color},${em.color}88);box-shadow:0 0 14px ${em.color}40;border:2px solid ${em.color}55">${em.initials}</div>
-        <div style="flex:1"><div class="crew-name">${em.name}</div><div class="crew-role" style="color:#D4AF37">UPSTAFF</div></div>
-        <div class="role-badge" style="background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.3);color:#D4AF37">${em.role}</div>
-      </div>`;
-    });
-    html+=`<a href="tel:+12108616643" class="contact-btn" style="background:rgba(74,144,217,0.07);border:1px solid rgba(74,144,217,0.18);color:#4A90D9">
-      📞 Contact UAS Program Manager
-    </a></div>`;
+      ${renderUnit('UAV121', uav121)}
+      ${renderUnit('UAV124', uav124)}
+      <a href="tel:+12108616643" class="contact-btn" style="background:rgba(74,144,217,0.07);border:1px solid rgba(74,144,217,0.18);color:#4A90D9">
+        📞 Contact UAS Program Manager
+      </a></div>`;
   } else {
     html+=`<div class="oos">
       <div class="oos-title">NO UAS COVERAGE</div>
