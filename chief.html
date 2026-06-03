@@ -68,7 +68,18 @@
   </div>
 </div>
 
-<div id="burnBanBar" style="display:none;background:linear-gradient(135deg,rgba(255,107,53,0.18),rgba(204,32,32,0.12));border-bottom:1px solid rgba(255,107,53,0.4);padding:8px 18px;display:none;align-items:center;justify-content:space-between;gap:12px;">
+<div id="redFlagBar" style="display:none;background:linear-gradient(135deg,rgba(255,59,48,0.25),rgba(180,0,0,0.15));border-bottom:1px solid rgba(255,59,48,0.6);padding:8px 18px;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:64px;z-index:10;backdrop-filter:blur(10px)">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:16px">🚩</span>
+    <div>
+      <span style="font-size:11px;font-weight:700;color:#FF3B30;letter-spacing:2px">RED FLAG WARNING</span>
+      <span style="font-size:9px;color:#94A3B8;margin-left:10px;letter-spacing:1px">EXTREME FIRE WEATHER CONDITIONS · NWS BEXAR COUNTY</span>
+    </div>
+  </div>
+  <div id="redFlagTime" style="font-size:8px;color:#64748B;letter-spacing:1px;flex-shrink:0"></div>
+</div>
+
+<div id="burnBanBar" style="display:none;background:linear-gradient(135deg,rgba(255,107,53,0.18),rgba(204,32,32,0.12));border-bottom:1px solid rgba(255,107,53,0.4);padding:8px 18px;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:64px;z-index:9;backdrop-filter:blur(10px)">
   <div style="display:flex;align-items:center;gap:10px;">
     <span style="font-size:16px">🔥</span>
     <div>
@@ -105,8 +116,32 @@ async function fetchBurnBan() {
     }
   } catch(e) {}
 }
+
+// Fetch Red Flag Warning status
+async function fetchRedFlag() {
+  try {
+    const r = await fetch("https://firehawk-wx.usafsentinel-45e.workers.dev/redflag");
+    if (r.ok) {
+      const data = await r.json();
+      const bar = document.getElementById("redFlagBar");
+      if (data.active) {
+        bar.style.display = "flex";
+        const t = data.updated ? new Date(data.updated).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : "";
+        document.getElementById("redFlagTime").textContent = "NWS · " + t;
+        // If red flag is active push burn ban bar down
+        document.getElementById("burnBanBar").style.top = "100px";
+      } else {
+        bar.style.display = "none";
+        document.getElementById("burnBanBar").style.top = "64px";
+      }
+    }
+  } catch(e) {}
+}
+
 fetchBurnBan();
+fetchRedFlag();
 setInterval(fetchBurnBan, 3600000);
+setInterval(fetchRedFlag, 1800000);
 
 const CREW = [
   {id:1,name:"Sanchez",  role:"RPIC",color:"#4A90D9",initials:"AS"},
