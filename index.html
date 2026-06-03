@@ -5095,8 +5095,8 @@ const MISSIONS = [{
   color: "#FF6B35",
   dayNight: false,
   config: {
-    gain: "HIGH",
-    gainReason: "High gain captures subtle temperature differences in building materials — identifies extension before it's visible",
+    gain: "LOW",
+    gainReason: "Low gain required for fire ops — high heat environments (300–1000°F) saturate the sensor on high gain. Low gain unlocks the wide temperature range needed to see active fire without washing out the image",
     palette: "White Hot",
     paletteReason: "White Hot provides highest contrast for smoke penetration and hot spot identification",
     isotherm: {
@@ -5118,8 +5118,8 @@ const MISSIONS = [{
   color: "#FF3B30",
   dayNight: false,
   config: {
-    gain: "HIGH",
-    gainReason: "High gain defines fire perimeter and detects spot fires against varied terrain temperatures",
+    gain: "LOW",
+    gainReason: "Low gain required for wildland fire — the wide temperature range (300–1000°F) cannot be resolved on high gain. Low gain keeps active fire, ash caps, and spot fires all visible without saturation",
     palette: "Iron Bow",
     paletteReason: "Iron Bow is the standard for wildland fire — excellent perimeter contrast across terrain",
     isotherm: {
@@ -5203,8 +5203,8 @@ const MISSIONS = [{
   color: "#FFC107",
   dayNight: false,
   config: {
-    gain: "HIGH",
-    gainReason: "High gain detects subtle temperature differentials in containers, piping, and spill areas",
+    gain: "ULTRA-HIGH",
+    gainReason: "Ultra-high gain maximizes sensitivity for detecting very slight temperature differentials in pipes, valves, and containers — temperature differences may be less than 1°F. Standard high gain may miss these signatures entirely",
     palette: "Rainbow",
     paletteReason: "Rainbow maps temperature gradients across a wide range — ideal for container heat differentials and convection flow visualization",
     isotherm: {
@@ -5226,8 +5226,8 @@ const MISSIONS = [{
   color: "#7D3C98",
   dayNight: false,
   config: {
-    gain: "HIGH",
-    gainReason: "High gain reveals residual heat in structural materials — identifies hidden hot spots before overhaul",
+    gain: "ULTRA-HIGH",
+    gainReason: "Ultra-high gain is ideal for overhaul — hidden embers in walls may only be 5–10°F above ambient. Maximum sensitivity required to find them before crews open up. Switch to high gain if false positives become overwhelming",
     palette: "Iron Bow",
     paletteReason: "Iron Bow differentiates residual heat, ambient temperature, and water-cooled areas clearly",
     isotherm: {
@@ -5311,8 +5311,8 @@ const MISSIONS = [{
   color: "#FFB300",
   dayNight: false,
   config: {
-    gain: "HIGH",
-    gainReason: "High gain essential for detecting subtle overheating in electrical components before failure",
+    gain: "ULTRA-HIGH",
+    gainReason: "Ultra-high gain gives maximum sensitivity for electrical inspection — overheating components may only be 10–20°F above ambient. The narrow temperature range makes these signatures clearly visible where high gain would miss them",
     palette: "Rainbow",
     paletteReason: "Rainbow palette maps exact temperature gradients across electrical components — standard for electrical inspection",
     isotherm: {
@@ -5719,7 +5719,7 @@ function ThermalModal({
   }, [{
     label: "GAIN",
     value: config.gain,
-    color: config.gain === "HIGH" ? "#FF6B35" : "#4A90D9"
+    color: config.gain === "HIGH" ? "#FF6B35" : config.gain === "ULTRA-HIGH" ? "#FFC107" : "#4A90D9"
   }, {
     label: "PALETTE",
     value: config.palette.replace(" ", "\n"),
@@ -5816,7 +5816,7 @@ function ThermalModal({
   }, [{
     label: "GAIN",
     value: config.gain,
-    color: config.gain === "HIGH" ? "#FF6B35" : "#4A90D9"
+    color: config.gain === "HIGH" ? "#FF6B35" : config.gain === "ULTRA-HIGH" ? "#FFC107" : "#4A90D9"
   }, {
     label: "PALETTE",
     value: config.palette,
