@@ -7134,6 +7134,7 @@ function FirehawkOps() {
   const [burnBan, setBurnBan] = useState(null);
   const [redFlag, setRedFlag] = useState(null);
   const [expandedBulletins, setExpandedBulletins] = useState({});
+  const [editingBulletin, setEditingBulletin] = useState(null); // { id, title, body }
   const [showSAR, setShowSAR] = useState(false);
   const [now, setNow] = useState(new Date());
   const [isManager, setIsManager] = useState(false);
@@ -7264,6 +7265,24 @@ function FirehawkOps() {
     await fsSet("firehawk", "bulletins", {
       posts: updated
     });
+  };
+  const saveBulletinEdit = async () => {
+    if (!editingBulletin) return;
+    const updated = bulletins.map(b => b.id === editingBulletin.id ? {
+      ...b,
+      title: editingBulletin.title,
+      body: editingBulletin.body,
+      edited: new Date().toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })
+    } : b);
+    setBulletins(updated);
+    await fsSet("firehawk", "bulletins", {
+      posts: updated
+    });
+    setEditingBulletin(null);
   };
   const activeCrew = crew.filter(c => !c.reserve);
   const expiring = activeCrew.filter(c => {
@@ -8172,11 +8191,63 @@ function FirehawkOps() {
       }
     }, "RESERVE")), /*#__PURE__*/React.createElement("div", {
       style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        marginTop: 4
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
         fontSize: 9,
-        color: c.role === "RPIC" ? "#4A90D9" : "#34C759",
+        color: c.role === "RPIC" ? "#4A90D9" : "#64748B",
         letterSpacing: 1
       }
-    }, c.role)), /*#__PURE__*/React.createElement("div", {
+    }, "RPIC"), /*#__PURE__*/React.createElement("div", {
+      onClick: () => {
+        const newRole = c.role === "RPIC" ? "VO" : "RPIC";
+        const updated = crew.map(x => x.id === c.id ? {
+          ...x,
+          role: newRole
+        } : x);
+        setCrew(updated);
+        fsSetPath("firehawk/crew", {
+          members: updated.map(m => ({
+            id: m.id,
+            availability: m.availability || [],
+            availRaw: m.availRaw || "",
+            role: m.role,
+            part107: m.part107 || null
+          }))
+        });
+      },
+      style: {
+        width: 36,
+        height: 20,
+        borderRadius: 10,
+        background: c.role === "RPIC" ? "#4A90D9" : "#34C759",
+        cursor: "pointer",
+        position: "relative",
+        transition: "background 0.2s",
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        top: 3,
+        left: c.role === "RPIC" ? 3 : 17,
+        width: 14,
+        height: 14,
+        borderRadius: "50%",
+        background: "white",
+        transition: "left 0.2s"
+      }
+    })), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: c.role === "VO" ? "#34C759" : "#64748B",
+        letterSpacing: 1
+      }
+    }, "VO"))), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         flexDirection: "column",
@@ -8353,30 +8424,50 @@ function FirehawkOps() {
       letterSpacing: 2
     }
   }, "NO BULLETINS POSTED"), bulletins.map(b => {
-    const expanded = expandedBulletins[b.id] !== false; // default expanded
+    const expanded = expandedBulletins[b.id] !== false;
+    const isEditing = editingBulletin?.id === b.id;
     return /*#__PURE__*/React.createElement("div", {
       key: b.id,
       style: {
         background: "rgba(255,255,255,0.055)",
-        border: "1px solid rgba(255,255,255,0.07)",
+        border: `1px solid ${isEditing ? "rgba(74,144,217,0.4)" : "rgba(255,255,255,0.07)"}`,
         borderRadius: 12,
         overflow: "hidden"
       }
     }, /*#__PURE__*/React.createElement("div", {
-      onClick: () => setExpandedBulletins(prev => ({
+      onClick: () => !isEditing && setExpandedBulletins(prev => ({
         ...prev,
         [b.id]: !expanded
       })),
       style: {
         padding: "10px 16px",
         background: "rgba(255,255,255,0.12)",
-        borderBottom: expanded ? "1px solid rgba(255,255,255,0.06)" : "none",
+        borderBottom: expanded || isEditing ? "1px solid rgba(255,255,255,0.06)" : "none",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        cursor: "pointer"
+        cursor: isEditing ? "default" : "pointer"
       }
-    }, /*#__PURE__*/React.createElement("span", {
+    }, isEditing ? /*#__PURE__*/React.createElement("input", {
+      value: editingBulletin.title,
+      onChange: e => setEditingBulletin(prev => ({
+        ...prev,
+        title: e.target.value
+      })),
+      style: {
+        fontSize: 12,
+        color: "#E2E8F0",
+        fontWeight: 600,
+        background: "rgba(255,255,255,0.08)",
+        border: "1px solid rgba(74,144,217,0.4)",
+        borderRadius: 6,
+        padding: "4px 8px",
+        fontFamily: "inherit",
+        flex: 1,
+        marginRight: 10
+      },
+      onClick: e => e.stopPropagation()
+    }) : /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12,
         color: "#E2E8F0",
@@ -8386,20 +8477,43 @@ function FirehawkOps() {
       style: {
         display: "flex",
         alignItems: "center",
-        gap: 10
+        gap: 8,
+        flexShrink: 0
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 9,
         color: "#64748B"
       }
-    }, b.date), /*#__PURE__*/React.createElement("span", {
+    }, b.edited ? `edited ${b.edited}` : b.date), !isEditing && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 10,
         color: "#64748B",
         userSelect: "none"
       }
-    }, expanded ? "▲" : "▼"), isManager && /*#__PURE__*/React.createElement("button", {
+    }, expanded ? "▲" : "▼"), isManager && !isEditing && /*#__PURE__*/React.createElement("button", {
+      onClick: e => {
+        e.stopPropagation();
+        setEditingBulletin({
+          id: b.id,
+          title: b.title,
+          body: b.body
+        });
+        setExpandedBulletins(prev => ({
+          ...prev,
+          [b.id]: true
+        }));
+      },
+      style: {
+        background: "none",
+        border: "none",
+        color: "#4A90D9",
+        cursor: "pointer",
+        fontSize: 11,
+        padding: "0 2px",
+        fontFamily: "inherit"
+      }
+    }, "\u270F\uFE0F"), isManager && !isEditing && /*#__PURE__*/React.createElement("button", {
       onClick: e => {
         e.stopPropagation();
         deleteBulletin(b.id);
@@ -8412,11 +8526,60 @@ function FirehawkOps() {
         fontSize: 14,
         padding: "0 2px"
       }
-    }, "\xD7"))), expanded && /*#__PURE__*/React.createElement("div", {
+    }, "\xD7"), isEditing && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+      onClick: e => {
+        e.stopPropagation();
+        saveBulletinEdit();
+      },
+      style: {
+        background: "rgba(74,144,217,0.2)",
+        border: "1px solid rgba(74,144,217,0.4)",
+        borderRadius: 6,
+        padding: "3px 10px",
+        color: "#4A90D9",
+        cursor: "pointer",
+        fontSize: 10,
+        fontFamily: "inherit"
+      }
+    }, "Save"), /*#__PURE__*/React.createElement("button", {
+      onClick: e => {
+        e.stopPropagation();
+        setEditingBulletin(null);
+      },
+      style: {
+        background: "none",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 6,
+        padding: "3px 10px",
+        color: "#64748B",
+        cursor: "pointer",
+        fontSize: 10,
+        fontFamily: "inherit"
+      }
+    }, "Cancel")))), (expanded || isEditing) && /*#__PURE__*/React.createElement("div", {
       style: {
         padding: "14px 16px"
       }
-    }, /*#__PURE__*/React.createElement("div", {
+    }, isEditing ? /*#__PURE__*/React.createElement("textarea", {
+      value: editingBulletin.body,
+      onChange: e => setEditingBulletin(prev => ({
+        ...prev,
+        body: e.target.value
+      })),
+      style: {
+        width: "100%",
+        minHeight: 120,
+        background: "rgba(255,255,255,0.05)",
+        border: "1px solid rgba(74,144,217,0.3)",
+        borderRadius: 8,
+        padding: "10px 12px",
+        color: "#E2E8F0",
+        fontSize: 12,
+        fontFamily: "inherit",
+        lineHeight: 1.7,
+        resize: "vertical"
+      }
+    }) : /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: "#94A3B8",
