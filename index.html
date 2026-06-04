@@ -1027,71 +1027,47 @@ function getFirstDay(y, m) {
 
 // callClaude removed
 
-function parseAvailability(rawText, daysInMonth, year, month) {
-  const text = (rawText || "").toLowerCase().trim();
-  const allDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const hasYM = typeof year === "number" && typeof month === "number";
+function parseAvailability(rawText, daysInMonth) {
+  const text = rawText.toLowerCase();
+  const allDays = Array.from({
+    length: daysInMonth
+  }, (_, i) => i + 1);
 
-  if (!text) return { days: [], matched: false, mode: "empty" };
-
-  // Explicit "none" / fully unavailable (no day numbers present)
-  if (/^(none|no days?|n\/a|nothing|nada|unavailable|not available|none this month|off all month)\.?$/.test(text)) {
-    return { days: [], matched: true, mode: "none" };
-  }
-
-  // Scrub cross-month references so "26-July 4th" / "in May" don't leak stray numbers
-  const MONTH_NAMES = "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
-  let scrubbed = text
-    .replace(new RegExp("(" + MONTH_NAMES + ")\\s*\\d{1,2}(?:st|nd|rd|th)?", "g"), " ")
-    .replace(new RegExp("\\d{1,2}(?:st|nd|rd|th)?\\s*(?:of\\s*)?(" + MONTH_NAMES + ")", "g"), " ");
-
-  // All month / every day (+ optional exceptions)
-  if (/\b(all month|every ?day|whole month|entire month|all days|anytime|any day|always|fully available|available all|free all|open all)\b/.test(scrubbed)) {
-    const exceptMatch = scrubbed.match(/(?:except|but|besides|aside from|other than|excluding|minus)\b(.+)/);
+  // "all month" or "every day"
+  if (/all month|every day|all days/.test(text)) {
+    // check for exceptions: "all month except the 5th and 10th"
+    const exceptMatch = text.match(/except (.+)/);
     if (exceptMatch) {
-      const ex = extractDayNumbers(exceptMatch[1], daysInMonth);
-      if (ex.length) return { days: allDays.filter(d => !ex.includes(d)), matched: true, mode: "all-except" };
+      const excluded = extractDayNumbers(exceptMatch[1], daysInMonth);
+      return allDays.filter(d => !excluded.includes(d));
     }
-    return { days: allDays, matched: true, mode: "all" };
+    return allDays;
   }
 
-  // Weekends / weekdays (needs calendar)
-  if (hasYM && /\bweekends?( only)?\b/.test(scrubbed) && !/weekday/.test(scrubbed)) {
-    return { days: allDays.filter(d => { const w = new Date(year, month, d).getDay(); return w === 0 || w === 6; }), matched: true, mode: "weekends" };
-  }
-  if (hasYM && /\bweekdays?( only)?\b/.test(scrubbed)) {
-    return { days: allDays.filter(d => { const w = new Date(year, month, d).getDay(); return w >= 1 && w <= 5; }), matched: true, mode: "weekdays" };
+  // "not available" / "unavailable" / "unable" / "except" — invert
+  if (/not available|unavailable|unable|can't|cannot|off on|won't be|will not be|not free|busy/.test(text)) {
+    const excluded = extractDayNumbers(text, daysInMonth);
+    return excluded.length ? allDays.filter(d => !excluded.includes(d)) : allDays;
   }
 
-  // Negation → invert
-  const NEG = /\b(not available|unavailable|unable|can'?t|cannot|cant|off on|off the|won'?t|will not|not free|busy|out|except|excluding|other than|besides|aside from|minus|but not)\b/;
-  if (NEG.test(scrubbed)) {
-    const ex = extractDayNumbers(scrubbed, daysInMonth);
-    if (ex.length) return { days: allDays.filter(d => !ex.includes(d)), matched: true, mode: "negation" };
-    return { days: [], matched: true, mode: "none-implied" };
-  }
-
-  // Default: positive list of available days
-  const pos = extractDayNumbers(scrubbed, daysInMonth);
-  if (pos.length) return { days: pos, matched: true, mode: "list" };
-
-  return { days: [], matched: false, mode: "unparsed" };
+  // default: extract available days
+  return extractDayNumbers(text, daysInMonth);
 }
 function extractDayNumbers(text, daysInMonth) {
   const days = new Set();
-  const rangeRe = /(\d{1,2})(?:st|nd|rd|th)?\s*(?:through|thru|to|till|until|[-\u2013\u2014])\s*(\d{1,2})(?:st|nd|rd|th)?/g;
+
+  // ranges like "3rd through 8th", "10-15", "3 to 8", "3 thru 8"
+  const rangeRe = /(\d{1,2})(?:st|nd|rd|th)?\s*(?:through|thru|to|-|–)\s*(\d{1,2})(?:st|nd|rd|th)?/g;
   let m;
-  const rangeMatches = [];
   while ((m = rangeRe.exec(text)) !== null) {
-    const start = parseInt(m[1]), end = parseInt(m[2]);
-    if (start >= 1 && start <= 31 && end >= 1 && end <= 31) {
-      for (let d = Math.min(start, end); d <= Math.max(start, end) && d <= daysInMonth; d++) days.add(d);
-      rangeMatches.push(m[0]);
-    }
+    const start = parseInt(m[1]),
+      end = parseInt(m[2]);
+    for (let d = Math.min(start, end); d <= Math.max(start, end) && d <= daysInMonth; d++) days.add(d);
   }
-  let stripped = text;
-  for (const rm of rangeMatches) stripped = stripped.split(rm).join(" ");
-  const numRe = /\b(\d{1,2})(?:st|nd|rd|th)?\b/g;
+
+  // individual numbers with optional ordinal: "the 3rd", "on the 15", "5th", "22"
+  const stripped = text.replace(rangeRe, " ");
+  const numRe = /(\d{1,2})(?:st|nd|rd|th)?/g;
   while ((m = numRe.exec(stripped)) !== null) {
     const d = parseInt(m[1]);
     if (d >= 1 && d <= daysInMonth) days.add(d);
@@ -1806,9 +1782,8 @@ function SchedulerPanel({
   };
   const handleParseAvailability = crewId => {
     if (!availInput.trim()) return;
-    const result = parseAvailability(availInput, daysInMonth, year, month);
-    if (result.matched) {
-      const days = result.days;
+    const days = parseAvailability(availInput, daysInMonth);
+    if (days && days.length > 0) {
       const updatedCrew = crew.map(c => c.id === crewId ? {
         ...c,
         availability: days,
@@ -1828,7 +1803,7 @@ function SchedulerPanel({
         }))
       });
     } else {
-      alert("Couldn't read that. Try day numbers ('8 15 16 21'), ranges ('3rd through 8th'), 'all month except the 10th', 'weekends only', or 'none'.");
+      alert("Couldn't find any day numbers — try: '8 15 16 21 25 26 30' or '3rd through 8th, also the 15th' or 'all month except the 10th'");
     }
   };
   const prevMonth = () => {
@@ -2127,7 +2102,7 @@ function SchedulerPanel({
       defaultValue: myRaw,
       value: staffAvailText,
       onChange: e => setStaffAvailText(e.target.value),
-      placeholder: `Type it however's easiest:\n"8 15 16 21 25 26 30"  ·  "1st through 10th, also the 20th"\n"all month except the 15th-17th"  ·  "weekends only"\n"not available 12-14 and 26-30"  ·  "none"`,
+      placeholder: `e.g. "I'm free the 1st through the 10th, also the 20th and 25th"\n"All month except the 15th-17th"\n"I am unable 12-14 and 26-30"\n"Not available the 5th, 6th, or 7th"`,
       rows: 2,
       style: {
         flex: 1,
@@ -2145,9 +2120,8 @@ function SchedulerPanel({
       onClick: () => {
         const raw = staffAvailText;
         if (!raw.trim()) return;
-        const result = parseAvailability(raw, daysInMonth, year, month);
-        if (result.matched) {
-          const days = result.days;
+        const days = parseAvailability(raw, daysInMonth);
+        if (days && days.length > 0) {
           const updatedCrew = crew.map(c => c.id === staffMember.id ? {
             ...c,
             availability: days,
@@ -2170,7 +2144,7 @@ function SchedulerPanel({
             }))
           });
         } else {
-          alert("Couldn't read that. Try day numbers ('8 15 16 21'), ranges ('1st through 10th'), 'all month except the 15th', 'weekends only', or 'none'.");
+          alert("Couldn't find any days — try: '8 15 16 21 25 26 30' or '1st through 10th' or 'all month except the 15th'");
         }
       },
       style: {
@@ -2331,7 +2305,7 @@ function SchedulerPanel({
     const showAssignment = isUASManager || status === "confirmed";
     return /*#__PURE__*/React.createElement("div", {
       key: day,
-      onClick: () => isUASManager && setSelectedDay(selectedDay === day ? null : day),
+      onClick: () => setSelectedDay(selectedDay === day ? null : day),
       style: {
         background: selectedDay === day ? "rgba(255,255,255,0.12)" : st.bg,
         border: `1px solid ${isToday ? "#FF6B35" : holiday ? "rgba(212,175,55,0.5)" : selectedDay === day ? "rgba(255,255,255,0.25)" : st.border}`,
@@ -2489,7 +2463,209 @@ function SchedulerPanel({
         marginTop: 2
       }
     }, "\u26A0 VO only"));
-  })), isUASManager && selectedDay && /*#__PURE__*/React.createElement("div", {
+  })), !isUASManager && selectedDay && (() => {
+    const shift = getShift(year, month, selectedDay);
+    const sc = SHIFT_COLORS[shift];
+    const a = schedule[selectedDay] || {};
+    const SANCHEZ_ID = 1;
+    const rpic = a.rpic ? crew.find(c => c.id === a.rpic) : null;
+    const vo = a.vo ? crew.find(c => c.id === a.vo) : null;
+    const vo2 = a.vo2 ? crew.find(c => c.id === a.vo2) : null;
+    const extra = (a.extra || []).map(eid => crew.find(c => c.id === eid)).filter(Boolean);
+
+    // Build unit groups
+    const uav121 = [];
+    const uav124 = [];
+    if (rpic) {
+      if (rpic.id === SANCHEZ_ID) {
+        uav121.push({
+          person: rpic,
+          badge: "RPIC",
+          color: "#4A90D9"
+        });
+        if (vo) uav121.push({
+          person: vo,
+          badge: "VO",
+          color: "#34C759"
+        });
+        extra.forEach(em => uav124.push({
+          person: em,
+          badge: em.role,
+          color: em.role === "RPIC" ? "#4A90D9" : "#C8A84B"
+        }));
+        if (vo2) uav124.push({
+          person: vo2,
+          badge: "VO",
+          color: "#34C759"
+        });
+      } else {
+        uav124.push({
+          person: rpic,
+          badge: "RPIC",
+          color: "#4A90D9"
+        });
+        if (vo) uav124.push({
+          person: vo,
+          badge: "VO",
+          color: "#34C759"
+        });
+        extra.forEach(em => {
+          if (em.id === SANCHEZ_ID) uav121.push({
+            person: em,
+            badge: "RPIC",
+            color: "#4A90D9"
+          });else uav124.push({
+            person: em,
+            badge: em.role,
+            color: em.role === "RPIC" ? "#4A90D9" : "#C8A84B"
+          });
+        });
+        if (vo2) uav121.push({
+          person: vo2,
+          badge: "VO",
+          color: "#34C759"
+        });
+      }
+    }
+    const renderUnit = (unit, members) => members.length === 0 ? null : /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 8
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: "#64748B",
+        letterSpacing: 3,
+        padding: "5px 0",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        marginBottom: 6
+      }
+    }, unit), members.map((m, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 0",
+        borderBottom: i < members.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 36,
+        height: 36,
+        borderRadius: "50%",
+        background: m.person.color,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 11,
+        fontWeight: 700,
+        color: "white",
+        flexShrink: 0
+      }
+    }, m.person.initials), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: "#E2E8F0"
+      }
+    }, m.person.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: m.color,
+        letterSpacing: 1
+      }
+    }, m.badge)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: m.color,
+        background: `${m.color}18`,
+        border: `1px solid ${m.color}44`,
+        borderRadius: 4,
+        padding: "2px 8px",
+        letterSpacing: 1
+      }
+    }, m.badge))));
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 14,
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.09)",
+        borderRadius: 12,
+        padding: 16,
+        animation: "fadeIn 0.2s ease"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: "'Bebas Neue'",
+        fontSize: 18,
+        letterSpacing: 2,
+        color: "#E2E8F0"
+      }
+    }, MONTHS[month], " ", selectedDay), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        fontWeight: 700,
+        color: sc.color,
+        background: sc.bg,
+        border: `1px solid ${sc.border}`,
+        borderRadius: 4,
+        padding: "2px 7px",
+        letterSpacing: 1
+      }
+    }, shift, " SHIFT"), a.confirmed && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#34C759",
+        background: "rgba(52,199,89,0.1)",
+        border: "1px solid rgba(52,199,89,0.3)",
+        borderRadius: 4,
+        padding: "2px 7px"
+      }
+    }, "\u2713 CONFIRMED"), !a.confirmed && rpic && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#FFC107",
+        background: "rgba(255,193,7,0.1)",
+        border: "1px solid rgba(255,193,7,0.3)",
+        borderRadius: 4,
+        padding: "2px 7px"
+      }
+    }, "PENDING")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setSelectedDay(null),
+      style: {
+        background: "none",
+        border: "none",
+        color: "#64748B",
+        cursor: "pointer",
+        fontSize: 20,
+        lineHeight: 1
+      }
+    }, "\xD7")), !rpic ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#475569",
+        textAlign: "center",
+        padding: "12px 0"
+      }
+    }, "No coverage scheduled") : /*#__PURE__*/React.createElement(React.Fragment, null, renderUnit("UAV121", uav121), renderUnit("UAV124", uav124)));
+  })(), isUASManager && selectedDay && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 14,
       background: "rgba(255,255,255,0.12)",
@@ -7370,7 +7546,7 @@ function FirehawkOps() {
     return s === "warning" || s === "expired";
   });
   const allCurrent = activeCrew.every(c => certStatus(c.part107) === "current");
-  const TABS_MANAGER = [["schedule", "Schedule"], ["currency", "Crew Mgmt"], ["bulletin", "Bulletin Board"]];
+  const TABS_MANAGER = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["currency", "Crew Mgmt"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
   const TABS_STAFF = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
   const tabs = isManager ? TABS_MANAGER : TABS_STAFF;
   const SHIFT_PATTERN = ["A", "A", "B", "B", "C", "C"];
@@ -7501,7 +7677,7 @@ function FirehawkOps() {
       letterSpacing: 1
     }
   }, todayShift, " SHIFT"))), isManager ? /*#__PURE__*/React.createElement("button", {
-    onClick: () => { setIsManager(false); setTab("dashboard"); },
+    onClick: () => setIsManager(false),
     style: {
       background: "rgba(255,107,53,0.2)",
       border: "1px solid rgba(255,107,53,0.5)",
@@ -7659,7 +7835,6 @@ function FirehawkOps() {
         if (pinInput === PIN) {
           setIsManager(true);
           setShowPin(false);
-          setTab("schedule");
         } else {
           setPinError(true);
           setPinInput("");
@@ -7708,7 +7883,6 @@ function FirehawkOps() {
       if (pinInput === PIN) {
         setIsManager(true);
         setShowPin(false);
-        setTab("schedule");
       } else {
         setPinError(true);
         setPinInput("");
