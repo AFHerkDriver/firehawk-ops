@@ -1027,52 +1027,71 @@ function getFirstDay(y, m) {
 
 // callClaude removed
 
-function parseAvailability(rawText, daysInMonth) {
-  const text = rawText.toLowerCase();
-  const allDays = Array.from({
-    length: daysInMonth
-  }, (_, i) => i + 1);
+function parseAvailability(rawText, daysInMonth, year, month) {
+  const text = (rawText || "").toLowerCase().trim();
+  const allDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const hasYM = typeof year === "number" && typeof month === "number";
 
-  // "all month" or "every day"
-  if (/all month|every day|all days/.test(text)) {
-    // check for exceptions: "all month except the 5th and 10th"
-    const exceptMatch = text.match(/except (.+)/);
+  if (!text) return { days: [], matched: false, mode: "empty" };
+
+  // Explicit "none" / fully unavailable (no day numbers present)
+  if (/^(none|no days?|n\/a|nothing|nada|unavailable|not available|none this month|off all month)\.?$/.test(text)) {
+    return { days: [], matched: true, mode: "none" };
+  }
+
+  // Scrub cross-month references so "26-July 4th" / "in May" don't leak stray numbers
+  const MONTH_NAMES = "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
+  let scrubbed = text
+    .replace(new RegExp("(" + MONTH_NAMES + ")\\s*\\d{1,2}(?:st|nd|rd|th)?", "g"), " ")
+    .replace(new RegExp("\\d{1,2}(?:st|nd|rd|th)?\\s*(?:of\\s*)?(" + MONTH_NAMES + ")", "g"), " ");
+
+  // All month / every day (+ optional exceptions)
+  if (/\b(all month|every ?day|whole month|entire month|all days|anytime|any day|always|fully available|available all|free all|open all)\b/.test(scrubbed)) {
+    const exceptMatch = scrubbed.match(/(?:except|but|besides|aside from|other than|excluding|minus)\b(.+)/);
     if (exceptMatch) {
-      const excluded = extractDayNumbers(exceptMatch[1], daysInMonth);
-      return allDays.filter(d => !excluded.includes(d));
+      const ex = extractDayNumbers(exceptMatch[1], daysInMonth);
+      if (ex.length) return { days: allDays.filter(d => !ex.includes(d)), matched: true, mode: "all-except" };
     }
-    return allDays;
+    return { days: allDays, matched: true, mode: "all" };
   }
 
-  // "not available" / "unavailable" / "unable" / "except" — invert
-  if (/not available|unavailable|unable|can't|cannot|off on|won't be|will not be|not free|busy/.test(text)) {
-    const excluded = extractDayNumbers(text, daysInMonth);
-    return excluded.length ? allDays.filter(d => !excluded.includes(d)) : allDays;
+  // Weekends / weekdays (needs calendar)
+  if (hasYM && /\bweekends?( only)?\b/.test(scrubbed) && !/weekday/.test(scrubbed)) {
+    return { days: allDays.filter(d => { const w = new Date(year, month, d).getDay(); return w === 0 || w === 6; }), matched: true, mode: "weekends" };
+  }
+  if (hasYM && /\bweekdays?( only)?\b/.test(scrubbed)) {
+    return { days: allDays.filter(d => { const w = new Date(year, month, d).getDay(); return w >= 1 && w <= 5; }), matched: true, mode: "weekdays" };
   }
 
-  // default: extract available days
-  return extractDayNumbers(text, daysInMonth);
+  // Negation → invert
+  const NEG = /\b(not available|unavailable|unable|can'?t|cannot|cant|off on|off the|won'?t|will not|not free|busy|out|except|excluding|other than|besides|aside from|minus|but not)\b/;
+  if (NEG.test(scrubbed)) {
+    const ex = extractDayNumbers(scrubbed, daysInMonth);
+    if (ex.length) return { days: allDays.filter(d => !ex.includes(d)), matched: true, mode: "negation" };
+    return { days: [], matched: true, mode: "none-implied" };
+  }
+
+  // Default: positive list of available days
+  const pos = extractDayNumbers(scrubbed, daysInMonth);
+  if (pos.length) return { days: pos, matched: true, mode: "list" };
+
+  return { days: [], matched: false, mode: "unparsed" };
 }
 function extractDayNumbers(text, daysInMonth) {
   const days = new Set();
-
-  // ranges like "3rd through 8th", "10-15", "3 to 8", "3 thru 8"
-  const rangeRe = /(\d{1,2})(?:st|nd|rd|th)?\s*(?:through|thru|to|-|–)\s*(\d{1,2})(?:st|nd|rd|th)?/g;
+  const rangeRe = /(\d{1,2})(?:st|nd|rd|th)?\s*(?:through|thru|to|till|until|[-\u2013\u2014])\s*(\d{1,2})(?:st|nd|rd|th)?/g;
   let m;
   const rangeMatches = [];
   while ((m = rangeRe.exec(text)) !== null) {
-    const start = parseInt(m[1]),
-      end = parseInt(m[2]);
-    for (let d = Math.min(start, end); d <= Math.max(start, end) && d <= daysInMonth; d++) days.add(d);
-    rangeMatches.push(m[0]);
+    const start = parseInt(m[1]), end = parseInt(m[2]);
+    if (start >= 1 && start <= 31 && end >= 1 && end <= 31) {
+      for (let d = Math.min(start, end); d <= Math.max(start, end) && d <= daysInMonth; d++) days.add(d);
+      rangeMatches.push(m[0]);
+    }
   }
-
-  // strip matched ranges before extracting individual numbers (avoid reusing stateful regex)
   let stripped = text;
   for (const rm of rangeMatches) stripped = stripped.split(rm).join(" ");
-
-  // individual numbers with optional ordinal suffix
-  const numRe = /(\d{1,2})(?:st|nd|rd|th)?/g;
+  const numRe = /\b(\d{1,2})(?:st|nd|rd|th)?\b/g;
   while ((m = numRe.exec(stripped)) !== null) {
     const d = parseInt(m[1]);
     if (d >= 1 && d <= daysInMonth) days.add(d);
@@ -1787,8 +1806,9 @@ function SchedulerPanel({
   };
   const handleParseAvailability = crewId => {
     if (!availInput.trim()) return;
-    const days = parseAvailability(availInput, daysInMonth);
-    if (days && days.length > 0) {
+    const result = parseAvailability(availInput, daysInMonth, year, month);
+    if (result.matched) {
+      const days = result.days;
       const updatedCrew = crew.map(c => c.id === crewId ? {
         ...c,
         availability: days,
@@ -1808,7 +1828,7 @@ function SchedulerPanel({
         }))
       });
     } else {
-      alert("Couldn't find any day numbers — try: '8 15 16 21 25 26 30' or '3rd through 8th, also the 15th' or 'all month except the 10th'");
+      alert("Couldn't read that. Try day numbers ('8 15 16 21'), ranges ('3rd through 8th'), 'all month except the 10th', 'weekends only', or 'none'.");
     }
   };
   const prevMonth = () => {
@@ -2107,7 +2127,7 @@ function SchedulerPanel({
       defaultValue: myRaw,
       value: staffAvailText,
       onChange: e => setStaffAvailText(e.target.value),
-      placeholder: `e.g. "I'm free the 1st through the 10th, also the 20th and 25th"\n"All month except the 15th-17th"\n"I am unable 12-14 and 26-30"\n"Not available the 5th, 6th, or 7th"`,
+      placeholder: `Type it however's easiest:\n"8 15 16 21 25 26 30"  ·  "1st through 10th, also the 20th"\n"all month except the 15th-17th"  ·  "weekends only"\n"not available 12-14 and 26-30"  ·  "none"`,
       rows: 2,
       style: {
         flex: 1,
@@ -2125,8 +2145,9 @@ function SchedulerPanel({
       onClick: () => {
         const raw = staffAvailText;
         if (!raw.trim()) return;
-        const days = parseAvailability(raw, daysInMonth);
-        if (days && days.length > 0) {
+        const result = parseAvailability(raw, daysInMonth, year, month);
+        if (result.matched) {
+          const days = result.days;
           const updatedCrew = crew.map(c => c.id === staffMember.id ? {
             ...c,
             availability: days,
@@ -2149,7 +2170,7 @@ function SchedulerPanel({
             }))
           });
         } else {
-          alert("Couldn't find any days — try: '8 15 16 21 25 26 30' or '1st through 10th' or 'all month except the 15th'");
+          alert("Couldn't read that. Try day numbers ('8 15 16 21'), ranges ('1st through 10th'), 'all month except the 15th', 'weekends only', or 'none'.");
         }
       },
       style: {
