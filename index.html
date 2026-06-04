@@ -1135,6 +1135,24 @@ function migrateLegacyAvail(member, year, month) {
   return Object.assign({}, member, { availByMonth });
 }
 
+// ── Unit (callsign) helpers ───────────────────────────────────────────────────
+// Per SOP: UAV121 is the program-lead callsign (Aaron Sanchez, crew id 1);
+// everyone else operates as UAV124. The VO inherits the RPIC's unit.
+const LEAD_PILOT_ID = 1; // Aaron Sanchez
+const UNIT_LEAD = "UAV121";
+const UNIT_PRIMARY = "UAV124";
+// Default unit for a given crew id (no explicit override).
+function defaultUnitForCrew(crewId) {
+  return crewId === LEAD_PILOT_ID ? UNIT_LEAD : UNIT_PRIMARY;
+}
+// Effective unit for a day's assignment: explicit override wins, else default
+// based on who the RPIC is. Returns null if there's no RPIC assigned.
+function effectiveUnit(a) {
+  if (!a || !a.rpic) return null;
+  if (a.rpicUnit === UNIT_LEAD || a.rpicUnit === UNIT_PRIMARY) return a.rpicUnit;
+  return defaultUnitForCrew(a.rpic);
+}
+
 // ── Subcomponents ────────────────────────────────────────────────────────────
 function CrewAvatar({
   member,
@@ -1785,11 +1803,26 @@ function SchedulerPanel({
 
   // UAS Manager assigns (pending until confirmed)
   const proposeAssignment = (day, type, crewId) => {
+    setSchedule(prev => {
+      const dayData = { ...(prev[day] || {}) };
+      dayData[type] = crewId === "" ? null : parseInt(crewId);
+      dayData.confirmed = false;
+      // When the RPIC changes, reset the unit override to that person's default
+      // callsign (Aaron => UAV121, everyone else => UAV124). Manager can override
+      // afterward via the unit dropdown.
+      if (type === "rpic") {
+        dayData.rpicUnit = crewId === "" ? null : defaultUnitForCrew(parseInt(crewId));
+      }
+      return { ...prev, [day]: dayData };
+    });
+  };
+  // Explicit unit override for the day's RPIC/VO pairing.
+  const setDayUnit = (day, unit) => {
     setSchedule(prev => ({
       ...prev,
       [day]: {
         ...(prev[day] || {}),
-        [type]: crewId === "" ? null : parseInt(crewId),
+        rpicUnit: unit,
         confirmed: false
       }
     }));
@@ -2540,11 +2573,14 @@ function SchedulerPanel({
     const voM = a.vo ? crew.find(c => c.id === a.vo) : null;
     const vo2M = a.vo2 ? crew.find(c => c.id === a.vo2) : null;
     const extraM = (a.extra || []).map(eid => crew.find(c => c.id === eid)).filter(Boolean);
-    const row = (label, member, color) => /*#__PURE__*/React.createElement("div", {
+    const unit = effectiveUnit(a);
+    const row = (label, member, color, showUnit) => /*#__PURE__*/React.createElement("div", {
       style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }
     }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, color: color, letterSpacing: 1.5 } }, label), member ? /*#__PURE__*/React.createElement("div", {
       style: { display: "flex", alignItems: "center", gap: 7 }
-    }, /*#__PURE__*/React.createElement(CrewAvatar, { member: member, size: 22 }), /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#E2E8F0" } }, member.name)) : /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontStyle: "italic" } }, "\u2014"));
+    }, showUnit && unit && /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 9, fontWeight: 700, color: "#FF6B35", background: "rgba(255,107,53,0.12)", border: "1px solid rgba(255,107,53,0.4)", borderRadius: 4, padding: "2px 6px", letterSpacing: 0.5 }
+    }, unit), /*#__PURE__*/React.createElement(CrewAvatar, { member: member, size: 22 }), /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#E2E8F0" } }, member.name)) : /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontStyle: "italic" } }, "\u2014"));
     return /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 14,
@@ -2573,7 +2609,7 @@ function SchedulerPanel({
       style: { fontSize: 12, color: "#64748B", fontStyle: "italic", padding: "8px 0" }
     }, "Schedule for this day isn't finalized yet.") : (!a.rpic && !a.vo && extraM.length === 0) ? /*#__PURE__*/React.createElement("div", {
       style: { fontSize: 12, color: "#64748B", fontStyle: "italic", padding: "8px 0" }
-    }, "Not yet scheduled for this day.") : /*#__PURE__*/React.createElement("div", null, row("RPIC (PRIMARY)", rpicM, "#4A90D9"), row("VISUAL OBSERVER", voM, "#34C759"), vo2M && row("VISUAL OBSERVER 2", vo2M, "#34C759"), extraM.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, "Not yet scheduled for this day.") : /*#__PURE__*/React.createElement("div", null, row("RPIC (PRIMARY)", rpicM, "#4A90D9", true), row("VISUAL OBSERVER", voM, "#34C759", true), vo2M && row("VISUAL OBSERVER 2", vo2M, "#34C759", true), extraM.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: { paddingTop: 8 }
     }, /*#__PURE__*/React.createElement("div", {
       style: { fontSize: 9, color: "#FFC107", letterSpacing: 1.5, marginBottom: 6 }
@@ -2698,7 +2734,33 @@ function SchedulerPanel({
           color: ok ? "#E2E8F0" : "#64748B"
         }
       }, c.name, !ok ? " (unavail)" : "");
-    }))), /*#__PURE__*/React.createElement("div", {
+    })), a.rpic && /*#__PURE__*/React.createElement("div", {
+      style: { marginTop: 8 }
+    }, /*#__PURE__*/React.createElement("label", {
+      style: { fontSize: 9, color: "#FF6B35", letterSpacing: 2, display: "block", marginBottom: 5 }
+    }, "UNIT / CALLSIGN ", /*#__PURE__*/React.createElement("span", {
+      style: { color: "#64748B", letterSpacing: 0 }
+    }, "(VO inherits this)")), /*#__PURE__*/React.createElement("select", {
+      value: effectiveUnit(a) || UNIT_PRIMARY,
+      onChange: e => setDayUnit(selectedDay, e.target.value),
+      style: {
+        width: "100%",
+        background: "#334155",
+        border: "1px solid rgba(255,107,53,0.4)",
+        borderRadius: 6,
+        padding: "8px 10px",
+        color: "#E2E8F0",
+        fontSize: 13,
+        fontFamily: "inherit",
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: UNIT_PRIMARY,
+      style: { background: "#334155", color: "#E2E8F0" }
+    }, UNIT_PRIMARY, " \u2014 Primary Response"), /*#__PURE__*/React.createElement("option", {
+      value: UNIT_LEAD,
+      style: { background: "#334155", color: "#E2E8F0" }
+    }, UNIT_LEAD, " \u2014 Program Lead")))), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 10
       }
