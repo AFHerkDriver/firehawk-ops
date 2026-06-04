@@ -2373,14 +2373,14 @@ function SchedulerPanel({
     const showAssignment = isUASManager || status === "confirmed";
     return /*#__PURE__*/React.createElement("div", {
       key: day,
-      onClick: () => isUASManager && setSelectedDay(selectedDay === day ? null : day),
+      onClick: () => setSelectedDay(selectedDay === day ? null : day),
       style: {
         background: selectedDay === day ? "rgba(255,255,255,0.12)" : st.bg,
         border: `1px solid ${isToday ? "#FF6B35" : holiday ? "rgba(212,175,55,0.5)" : selectedDay === day ? "rgba(255,255,255,0.25)" : st.border}`,
         borderRadius: 7,
         padding: "5px 5px 6px",
         minHeight: 72,
-        cursor: isUASManager ? "pointer" : "default",
+        cursor: "pointer",
         transition: "all 0.12s",
         boxShadow: isToday ? "0 0 10px rgba(255,107,53,0.3)" : "none"
       }
@@ -2531,7 +2531,57 @@ function SchedulerPanel({
         marginTop: 2
       }
     }, "\u26A0 VO only"));
-  })), isUASManager && selectedDay && /*#__PURE__*/React.createElement("div", {
+  })), !isUASManager && selectedDay && (() => {
+    const shift = getShift(year, month, selectedDay);
+    const sc = SHIFT_COLORS[shift];
+    const a = schedule[selectedDay] || {};
+    const isConf = a.confirmed;
+    const rpicM = a.rpic ? crew.find(c => c.id === a.rpic) : null;
+    const voM = a.vo ? crew.find(c => c.id === a.vo) : null;
+    const vo2M = a.vo2 ? crew.find(c => c.id === a.vo2) : null;
+    const extraM = (a.extra || []).map(eid => crew.find(c => c.id === eid)).filter(Boolean);
+    const row = (label, member, color) => /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }
+    }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, color: color, letterSpacing: 1.5 } }, label), member ? /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", alignItems: "center", gap: 7 }
+    }, /*#__PURE__*/React.createElement(CrewAvatar, { member: member, size: 22 }), /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#E2E8F0" } }, member.name)) : /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontStyle: "italic" } }, "\u2014"));
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 14,
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        borderRadius: 12,
+        padding: 18,
+        animation: "fadeIn 0.2s ease"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", alignItems: "center", gap: 10 }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: { fontFamily: "'Bebas Neue'", fontSize: 18, letterSpacing: 2, color: "#FF6B35" }
+    }, MONTHS[month], " ", selectedDay), /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 10, fontWeight: 700, color: sc.color, background: sc.bg, border: `1px solid ${sc.border}`, borderRadius: 4, padding: "2px 7px", letterSpacing: 1 }
+    }, shift, " SHIFT"), isConf ? /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 10, color: "#34C759", background: "rgba(52,199,89,0.1)", border: "1px solid rgba(52,199,89,0.4)", borderRadius: 4, padding: "2px 7px" }
+    }, "\u2713 CONFIRMED") : /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 10, color: "#94A3B8", background: "rgba(148,163,184,0.1)", border: "1px solid rgba(148,163,184,0.3)", borderRadius: 4, padding: "2px 7px" }
+    }, "NOT CONFIRMED")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setSelectedDay(null),
+      style: { background: "none", border: "none", color: "#64748B", cursor: "pointer", fontSize: 18 }
+    }, "\xD7")), (!isConf) ? /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 12, color: "#64748B", fontStyle: "italic", padding: "8px 0" }
+    }, "Schedule for this day isn't finalized yet.") : (!a.rpic && !a.vo && extraM.length === 0) ? /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 12, color: "#64748B", fontStyle: "italic", padding: "8px 0" }
+    }, "Not yet scheduled for this day.") : /*#__PURE__*/React.createElement("div", null, row("RPIC (PRIMARY)", rpicM, "#4A90D9"), row("VISUAL OBSERVER", voM, "#34C759"), vo2M && row("VISUAL OBSERVER 2", vo2M, "#34C759"), extraM.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: { paddingTop: 8 }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 9, color: "#FFC107", letterSpacing: 1.5, marginBottom: 6 }
+    }, "ADDITIONAL CREW"), extraM.map(em => /*#__PURE__*/React.createElement("div", {
+      key: em.id,
+      style: { display: "flex", alignItems: "center", gap: 7, padding: "4px 0" }
+    }, /*#__PURE__*/React.createElement(CrewAvatar, { member: em, size: 20 }), /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "#E2E8F0" } }, em.name))))));
+  })(), isUASManager && selectedDay && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 14,
       background: "rgba(255,255,255,0.12)",
