@@ -1135,22 +1135,49 @@ function migrateLegacyAvail(member, year, month) {
   return Object.assign({}, member, { availByMonth });
 }
 
-// ── Unit (callsign) helpers ───────────────────────────────────────────────────
-// Per SOP: UAV121 is the program-lead callsign (Aaron Sanchez, crew id 1);
-// everyone else operates as UAV124. The VO inherits the RPIC's unit.
+// ── Unit (callsign) grouping ──────────────────────────────────────────────────
+// Mirrors chief.html EXACTLY so the schedule app and the chief's daily-status page
+// always agree. Units are derived automatically from the existing assignment
+// fields {rpic, vo, vo2, extra}; there is no manually-stored unit tag.
+// Rule: Sanchez (id 1) flies UAV121 (program-lead callsign); everyone else UAV124.
 const LEAD_PILOT_ID = 1; // Aaron Sanchez
 const UNIT_LEAD = "UAV121";
 const UNIT_PRIMARY = "UAV124";
-// Default unit for a given crew id (no explicit override).
-function defaultUnitForCrew(crewId) {
-  return crewId === LEAD_PILOT_ID ? UNIT_LEAD : UNIT_PRIMARY;
-}
-// Effective unit for a day's assignment: explicit override wins, else default
-// based on who the RPIC is. Returns null if there's no RPIC assigned.
-function effectiveUnit(a) {
-  if (!a || !a.rpic) return null;
-  if (a.rpicUnit === UNIT_LEAD || a.rpicUnit === UNIT_PRIMARY) return a.rpicUnit;
-  return defaultUnitForCrew(a.rpic);
+// Given a day's assignment object and the crew roster, return { uav121, uav124 }
+// where each is an array of { person, role, roleColor, badge }. Empty arrays mean
+// that unit isn't flying. Returns null if there's no primary RPIC (no coverage).
+function groupAssignmentByUnit(a, crew) {
+  const find = id => crew.find(c => c.id === id || c.id === parseInt(id));
+  const rpic = a && a.rpic ? find(a.rpic) : null;
+  if (!a || !rpic) return null;
+  const vo = a.vo ? find(a.vo) : null;
+  const vo2 = a.vo2 ? find(a.vo2) : null;
+  const extra = (a.extra || []).map(find).filter(Boolean);
+  const uav121 = [];
+  const uav124 = [];
+  const RPIC_ROW = p => ({ person: p, role: "RPIC", roleColor: "#4A90D9", badge: "RPIC" });
+  const VO_ROW = p => ({ person: p, role: "VISUAL OBSERVER", roleColor: "#34C759", badge: "VO" });
+  const EXTRA_ROW = p => ({
+    person: p,
+    role: p.role === "RPIC" ? "REMOTE PILOT IN COMMAND" : "UPSTAFF",
+    roleColor: p.role === "RPIC" ? "#4A90D9" : "#D4AF37",
+    badge: p.role
+  });
+  if (rpic.id === LEAD_PILOT_ID) {
+    uav121.push(RPIC_ROW(rpic));
+    if (vo) uav121.push(VO_ROW(vo));
+    extra.forEach(em => uav124.push(EXTRA_ROW(em)));
+    if (vo2) uav124.push(VO_ROW(vo2));
+  } else {
+    uav124.push(RPIC_ROW(rpic));
+    if (vo) uav124.push(VO_ROW(vo));
+    extra.forEach(em => {
+      if (em.id === LEAD_PILOT_ID) uav121.push(RPIC_ROW(em));
+      else uav124.push(EXTRA_ROW(em));
+    });
+    if (vo2) uav121.push(VO_ROW(vo2));
+  }
+  return { uav121, uav124 };
 }
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
@@ -1803,26 +1830,11 @@ function SchedulerPanel({
 
   // UAS Manager assigns (pending until confirmed)
   const proposeAssignment = (day, type, crewId) => {
-    setSchedule(prev => {
-      const dayData = { ...(prev[day] || {}) };
-      dayData[type] = crewId === "" ? null : parseInt(crewId);
-      dayData.confirmed = false;
-      // When the RPIC changes, reset the unit override to that person's default
-      // callsign (Aaron => UAV121, everyone else => UAV124). Manager can override
-      // afterward via the unit dropdown.
-      if (type === "rpic") {
-        dayData.rpicUnit = crewId === "" ? null : defaultUnitForCrew(parseInt(crewId));
-      }
-      return { ...prev, [day]: dayData };
-    });
-  };
-  // Explicit unit override for the day's RPIC/VO pairing.
-  const setDayUnit = (day, unit) => {
     setSchedule(prev => ({
       ...prev,
       [day]: {
         ...(prev[day] || {}),
-        rpicUnit: unit,
+        [type]: crewId === "" ? null : parseInt(crewId),
         confirmed: false
       }
     }));
@@ -2569,18 +2581,28 @@ function SchedulerPanel({
     const sc = SHIFT_COLORS[shift];
     const a = schedule[selectedDay] || {};
     const isConf = a.confirmed;
-    const rpicM = a.rpic ? crew.find(c => c.id === a.rpic) : null;
-    const voM = a.vo ? crew.find(c => c.id === a.vo) : null;
-    const vo2M = a.vo2 ? crew.find(c => c.id === a.vo2) : null;
-    const extraM = (a.extra || []).map(eid => crew.find(c => c.id === eid)).filter(Boolean);
-    const unit = effectiveUnit(a);
-    const row = (label, member, color, showUnit) => /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }
-    }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, color: color, letterSpacing: 1.5 } }, label), member ? /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", alignItems: "center", gap: 7 }
-    }, showUnit && unit && /*#__PURE__*/React.createElement("span", {
-      style: { fontSize: 9, fontWeight: 700, color: "#FF6B35", background: "rgba(255,107,53,0.12)", border: "1px solid rgba(255,107,53,0.4)", borderRadius: 4, padding: "2px 6px", letterSpacing: 0.5 }
-    }, unit), /*#__PURE__*/React.createElement(CrewAvatar, { member: member, size: 22 }), /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#E2E8F0" } }, member.name)) : /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "#64748B", fontStyle: "italic" } }, "\u2014"));
+    const groups = groupAssignmentByUnit(a, crew);
+    // Renders one unit block (e.g. UAV121) with its crew rows. Returns null if empty.
+    const renderUnit = (unitName, members) => {
+      if (!members || members.length === 0) return null;
+      return /*#__PURE__*/React.createElement("div", {
+        key: unitName,
+        style: { marginBottom: 12 }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 9, color: "#64748B", letterSpacing: 3, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: 4 }
+      }, unitName), members.map((m, i) => /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: { display: "flex", alignItems: "center", gap: 9, padding: "7px 0" }
+      }, /*#__PURE__*/React.createElement(CrewAvatar, { member: m.person, size: 24 }), /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1 }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 13, color: "#E2E8F0" }
+      }, m.person.name), /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 8, color: m.roleColor, letterSpacing: 1 }
+      }, m.role)), /*#__PURE__*/React.createElement("span", {
+        style: { fontSize: 9, fontWeight: 700, color: m.roleColor, background: `${m.roleColor}18`, border: `1px solid ${m.roleColor}44`, borderRadius: 4, padding: "2px 7px" }
+      }, m.badge))));
+    };
     return /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 14,
@@ -2607,16 +2629,9 @@ function SchedulerPanel({
       style: { background: "none", border: "none", color: "#64748B", cursor: "pointer", fontSize: 18 }
     }, "\xD7")), (!isConf) ? /*#__PURE__*/React.createElement("div", {
       style: { fontSize: 12, color: "#64748B", fontStyle: "italic", padding: "8px 0" }
-    }, "Schedule for this day isn't finalized yet.") : (!a.rpic && !a.vo && extraM.length === 0) ? /*#__PURE__*/React.createElement("div", {
+    }, "Schedule for this day isn't finalized yet.") : !groups ? /*#__PURE__*/React.createElement("div", {
       style: { fontSize: 12, color: "#64748B", fontStyle: "italic", padding: "8px 0" }
-    }, "Not yet scheduled for this day.") : /*#__PURE__*/React.createElement("div", null, row("RPIC (PRIMARY)", rpicM, "#4A90D9", true), row("VISUAL OBSERVER", voM, "#34C759", true), vo2M && row("VISUAL OBSERVER 2", vo2M, "#34C759", true), extraM.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: { paddingTop: 8 }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: { fontSize: 9, color: "#FFC107", letterSpacing: 1.5, marginBottom: 6 }
-    }, "ADDITIONAL CREW"), extraM.map(em => /*#__PURE__*/React.createElement("div", {
-      key: em.id,
-      style: { display: "flex", alignItems: "center", gap: 7, padding: "4px 0" }
-    }, /*#__PURE__*/React.createElement(CrewAvatar, { member: em, size: 20 }), /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "#E2E8F0" } }, em.name))))));
+    }, "No UAS coverage assigned for this day.") : /*#__PURE__*/React.createElement("div", null, renderUnit(UNIT_LEAD, groups.uav121), renderUnit(UNIT_PRIMARY, groups.uav124)));
   })(), isUASManager && selectedDay && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 14,
@@ -2734,33 +2749,7 @@ function SchedulerPanel({
           color: ok ? "#E2E8F0" : "#64748B"
         }
       }, c.name, !ok ? " (unavail)" : "");
-    })), a.rpic && /*#__PURE__*/React.createElement("div", {
-      style: { marginTop: 8 }
-    }, /*#__PURE__*/React.createElement("label", {
-      style: { fontSize: 9, color: "#FF6B35", letterSpacing: 2, display: "block", marginBottom: 5 }
-    }, "UNIT / CALLSIGN ", /*#__PURE__*/React.createElement("span", {
-      style: { color: "#64748B", letterSpacing: 0 }
-    }, "(VO inherits this)")), /*#__PURE__*/React.createElement("select", {
-      value: effectiveUnit(a) || UNIT_PRIMARY,
-      onChange: e => setDayUnit(selectedDay, e.target.value),
-      style: {
-        width: "100%",
-        background: "#334155",
-        border: "1px solid rgba(255,107,53,0.4)",
-        borderRadius: 6,
-        padding: "8px 10px",
-        color: "#E2E8F0",
-        fontSize: 13,
-        fontFamily: "inherit",
-        cursor: "pointer"
-      }
-    }, /*#__PURE__*/React.createElement("option", {
-      value: UNIT_PRIMARY,
-      style: { background: "#334155", color: "#E2E8F0" }
-    }, UNIT_PRIMARY, " \u2014 Primary Response"), /*#__PURE__*/React.createElement("option", {
-      value: UNIT_LEAD,
-      style: { background: "#334155", color: "#E2E8F0" }
-    }, UNIT_LEAD, " \u2014 Program Lead")))), /*#__PURE__*/React.createElement("div", {
+    }))), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 10
       }
