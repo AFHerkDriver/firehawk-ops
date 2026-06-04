@@ -4470,11 +4470,14 @@ function AirspaceModal({
   const [status, setStatus] = useState("loading");
   const [tab, setTab] = useState("status");
   const [selectedAirport, setSelectedAirport] = useState(null);
+  const [showComms, setShowComms] = useState(false);
 
   // Fixed airport data — airspace class and LAANC status never change
   const AIRPORTS = [{
     id: "KSAT",
     name: "San Antonio Intl",
+    ctaf: "119.8",
+    ctafNote: "Tower (Class C \u2014 towered)",
     cls: "C",
     classColor: "#C8A84B",
     classBg: "rgba(200,168,75,0.12)",
@@ -4503,6 +4506,8 @@ function AirspaceModal({
   }, {
     id: "KSKF",
     name: "Kelly Field / Lackland",
+    ctaf: "124.3",
+    ctafNote: "Kelly Tower (military \u2014 no civil CTAF)",
     cls: "D",
     classColor: "#4A90D9",
     classBg: "rgba(74,144,217,0.12)",
@@ -4531,6 +4536,8 @@ function AirspaceModal({
   }, {
     id: "KSSF",
     name: "Stinson Municipal",
+    ctaf: "118.2",
+    ctafNote: "CTAF / Tower",
     cls: "D",
     classColor: "#4A90D9",
     classBg: "rgba(74,144,217,0.12)",
@@ -4559,6 +4566,8 @@ function AirspaceModal({
   }, {
     id: "KRND",
     name: "Randolph AFB",
+    ctaf: "128.25",
+    ctafNote: "Randolph Tower (military \u2014 no civil CTAF)",
     cls: "D",
     classColor: "#7D3C98",
     classBg: "rgba(125,60,152,0.12)",
@@ -4633,6 +4642,34 @@ function AirspaceModal({
     url: "https://www.notams.faa.gov/dinsQueryWeb/queryRetrievalMapAction.do?method=displayByICAOs&reportType=RAW&formatType=DOMESTIC&retrieveLocId=KRND,KSSF,KSKF,KSAT&actionType=notamRetrievalByICAOs",
     icon: "📋",
     color: "#94A3B8"
+  }];
+  // National interoperability channels (NIFOG / CISA) - standardized nationwide,
+  // including Texas. Reference only: confirm against the incident ICS-205 and your
+  // STRAC/county radio template before operational use. Freqs in MHz, CTCSS in Hz.
+  const NIFOG_GROUPS = [{
+    group: "Aviation Common",
+    note: "Aircraft band - transmit only with proper authorization.",
+    rows: [{ name: "GUARD", freq: "121.500", tone: "\u2014", use: "Emergency / distress (monitor)" }, { name: "Air-to-Air", freq: "123.450", tone: "\u2014", use: "Air-to-air coordination" }, { name: "MULTICOM", freq: "122.900", tone: "\u2014", use: "CTAF at non-towered fields" }, { name: "Flight Watch", freq: "122.000", tone: "\u2014", use: "Flight Service (FSS)" }]
+  }, {
+    group: "VCALL / VTAC",
+    note: "Calling + tactical. Default CSQ receive, 156.7 CTCSS transmit.",
+    rows: [{ name: "VCALL10", freq: "155.7525", tone: "156.7", use: "Interagency calling" }, { name: "VTAC11", freq: "151.1375", tone: "156.7", use: "Tactical" }, { name: "VTAC12", freq: "154.4525", tone: "156.7", use: "Tactical" }, { name: "VTAC13", freq: "158.7375", tone: "156.7", use: "Tactical" }, { name: "VTAC14", freq: "159.4725", tone: "156.7", use: "Tactical" }]
+  }, {
+    group: "VFIRE (Fire Mutual Aid)",
+    note: "Simplex. 156.7 CTCSS recommended.",
+    rows: [{ name: "VFIRE21", freq: "154.2800", tone: "156.7", use: "Operations (PSAP coord)" }, { name: "VFIRE22", freq: "154.2650", tone: "156.7", use: "Command" }, { name: "VFIRE23", freq: "154.2950", tone: "156.7", use: "Regional coord" }, { name: "VFIRE24", freq: "154.2725", tone: "156.7", use: "Incident ops" }, { name: "VFIRE25", freq: "154.2875", tone: "156.7", use: "Mutual aid ops" }, { name: "VFIRE26", freq: "154.3025", tone: "156.7", use: "Staging" }]
+  }, {
+    group: "VMED (EMS)",
+    note: "EMS mutual aid.",
+    rows: [{ name: "VMED28", freq: "155.3400", tone: "156.7", use: "EMS / hospital" }, { name: "VMED29", freq: "155.3475", tone: "156.7", use: "EMS mutual aid" }]
+  }, {
+    group: "VLAW (Law Enforcement)",
+    note: "LE mutual aid.",
+    rows: [{ name: "VLAW31", freq: "155.4750", tone: "156.7", use: "LE mutual aid" }, { name: "VLAW32", freq: "155.4825", tone: "156.7", use: "LE mutual aid" }]
+  }, {
+    group: "Search & Rescue",
+    note: "127.3 CTCSS.",
+    rows: [{ name: "VSAR16", freq: "155.1600", tone: "127.3", use: "National SAR common" }]
   }];
   async function fetchData() {
     setStatus("loading");
@@ -5078,7 +5115,40 @@ function AirspaceModal({
       color: "#94A3B8",
       lineHeight: 1.7
     }
-  }, selectedAirport.description)), /*#__PURE__*/React.createElement("div", {
+  }, selectedAirport.description)), selectedAirport.ctaf && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      background: "rgba(74,144,217,0.08)",
+      border: "1px solid rgba(74,144,217,0.25)",
+      borderRadius: 14,
+      padding: "12px 16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 8,
+      color: "#4A90D9",
+      letterSpacing: 2,
+      flexShrink: 0
+    }
+  }, "CTAF"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 800,
+      color: "#E2E8F0",
+      fontFamily: "monospace",
+      letterSpacing: 1
+    }
+  }, selectedAirport.ctaf), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#94A3B8",
+      marginLeft: "auto",
+      textAlign: "right",
+      lineHeight: 1.4
+    }
+  }, selectedAirport.ctafNote)), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,255,255,0.055)",
       border: "1px solid rgba(255,255,255,0.06)",
@@ -5239,6 +5309,57 @@ function AirspaceModal({
       color: "#64748B"
     }
   }, "\u2197"))), /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 4 }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowComms(!showComms),
+    style: {
+      width: "100%",
+      background: "rgba(74,144,217,0.07)",
+      border: "1px solid rgba(74,144,217,0.2)",
+      borderRadius: 12,
+      padding: "14px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { width: 40, height: 40, borderRadius: 10, background: "rgba(74,144,217,0.15)", border: "1px solid rgba(74,144,217,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }
+  }, "\uD83D\uDCFB"), /*#__PURE__*/React.createElement("div", {
+    style: { flex: 1 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 13, color: "#E2E8F0", fontWeight: 600 }
+  }, "National Interop Channels"), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, color: "#64748B", marginTop: 3 }
+  }, "NIFOG reference \u2014 VFIRE / VTAC / VMED / aviation")), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 12, color: "#64748B" }
+  }, showComms ? "\u25B2" : "\u25BC")), showComms && /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 8, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 14px" }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, color: "#FFC107", lineHeight: 1.5, marginBottom: 10, padding: "8px 10px", background: "rgba(255,193,7,0.06)", border: "1px solid rgba(255,193,7,0.2)", borderRadius: 8 }
+  }, "Reference only. Confirm assignments on the incident ICS-205 and your STRAC / county template before transmitting."), NIFOG_GROUPS.map(g => /*#__PURE__*/React.createElement("div", {
+    key: g.group,
+    style: { marginBottom: 14 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, color: "#4A90D9", letterSpacing: 2, marginBottom: 2 }
+  }, g.group), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 8, color: "#64748B", marginBottom: 7, lineHeight: 1.4 }
+  }, g.note), g.rows.map(r => /*#__PURE__*/React.createElement("div", {
+    key: r.name,
+    style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11, color: "#E2E8F0", fontWeight: 600, width: 78, flexShrink: 0 }
+  }, r.name), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: "#E2E8F0", fontFamily: "monospace", width: 72, flexShrink: 0 }
+  }, r.freq), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, color: "#94A3B8", fontFamily: "monospace", width: 40, flexShrink: 0 }
+  }, r.tone), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 8, color: "#64748B", flex: 1, lineHeight: 1.3 }
+  }, r.use)))))), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 8, color: "#475569", marginTop: 4, textAlign: "right" }
+  }, "Source: CISA NIFOG")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,255,255,0.01)",
       border: "1px solid rgba(255,255,255,0.04)",
