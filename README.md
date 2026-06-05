@@ -28,12 +28,7 @@ Because both pages read the same schedule records, **any change to the assignmen
 
 ## Access
 
-Staff see a read-only view by default. Manager tools unlock with a PIN:
-
-| PIN | Holder | Access |
-|-----|--------|--------|
-| `241408` | Aaron Sanchez (Program Manager) | Admin (full) |
-| `0336` | Ryan Bauchman (Program Coordinator) | Manager (no admin panels) |
+Staff see a read-only view by default. Manager tools unlock with a PIN. There are two manager PINs — one admin (full access, including the login-history panel) and one standard manager (no admin panels). The actual codes are held by the Program Manager and are intentionally not recorded in this file.
 
 Successful logins are written to a Firebase access log; the admin-only login history panel appears at the top of the Crew Mgmt tab.
 
