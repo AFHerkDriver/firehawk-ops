@@ -1839,6 +1839,25 @@ function SchedulerPanel({
       }
     }));
   };
+  // Per-unit temporary out-of-service flag (chief.html display only).
+  // unit = "UAV121" | "UAV124"; patch = partial {reason, from, to, note} or null to clear.
+  const setUnitOOS = (day, unit, patch) => {
+    setSchedule(prev => {
+      const d = { ...(prev[day] || {}) };
+      const oos = { ...(d.oos || {}) };
+      if (patch === null) {
+        delete oos[unit];
+      } else {
+        oos[unit] = { ...(oos[unit] || { reason: "Training", from: "", to: "", note: "" }), ...patch };
+      }
+      if (Object.keys(oos).length === 0) {
+        delete d.oos;
+      } else {
+        d.oos = oos;
+      }
+      return { ...prev, [day]: d };
+    });
+  };
   const confirmDay = day => {
     setSchedule(prev => ({
       ...prev,
@@ -2959,7 +2978,76 @@ function SchedulerPanel({
         background: "#334155",
         color: "#E2E8F0"
       }
-    }, c.name, " (", c.role, ")")))), /*#__PURE__*/React.createElement("div", {
+    }, c.name, " (", c.role, ")")))), (() => {
+      const grp = groupAssignmentByUnit(a, crew);
+      if (!grp) return null;
+      const activeUnits = [];
+      if (grp.uav121.length) activeUnits.push(UNIT_LEAD);
+      if (grp.uav124.length) activeUnits.push(UNIT_PRIMARY);
+      if (!activeUnits.length) return null;
+      const oosAll = a.oos || {};
+      return /*#__PURE__*/React.createElement("div", {
+        style: { marginBottom: 14, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.06)" }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 9, color: "#D4AF37", letterSpacing: 2, marginBottom: 8, marginTop: 6 }
+      }, "TEMPORARY OUT OF SERVICE ", /*#__PURE__*/React.createElement("span", {
+        style: { color: "#64748B", letterSpacing: 0 }
+      }, "(chief's board only)")), activeUnits.map(unit => {
+        const o = oosAll[unit];
+        const on = !!o;
+        return /*#__PURE__*/React.createElement("div", {
+          key: unit,
+          style: { marginBottom: 10, background: on ? "rgba(212,175,55,0.07)" : "rgba(255,255,255,0.03)", border: on ? "1px solid rgba(212,175,55,0.3)" : "1px solid rgba(255,255,255,0.07)", borderRadius: 10, padding: 12 }
+        }, /*#__PURE__*/React.createElement("div", {
+          onClick: () => setUnitOOS(selectedDay, unit, on ? null : {}),
+          style: { display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: { width: 34, height: 20, borderRadius: 10, background: on ? "#D4AF37" : "rgba(255,255,255,0.15)", position: "relative", flexShrink: 0, transition: "background 0.15s" }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: { position: "absolute", top: 3, left: on ? 17 : 3, width: 14, height: 14, borderRadius: "50%", background: on ? "#0B1120" : "#94A3B8", transition: "left 0.15s" }
+        })), /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 12, color: on ? "#D4AF37" : "#94A3B8", fontWeight: 600 }
+        }, on ? "\u26A0 " : "", unit, on ? " \u2014 Out of Service" : " \u2014 In Service")), on && /*#__PURE__*/React.createElement("div", {
+          style: { marginTop: 10 }
+        }, /*#__PURE__*/React.createElement("label", {
+          style: { fontSize: 8, color: "#D4AF37", letterSpacing: 1.5, display: "block", marginBottom: 4 }
+        }, "REASON"), /*#__PURE__*/React.createElement("select", {
+          value: o.reason || "Training",
+          onChange: e => setUnitOOS(selectedDay, unit, { reason: e.target.value }),
+          style: { width: "100%", background: "#334155", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "8px 10px", color: "#E2E8F0", fontSize: 13, fontFamily: "inherit", marginBottom: 10 }
+        }, /*#__PURE__*/React.createElement("option", { value: "Training", style: { background: "#334155" } }, "Training"), /*#__PURE__*/React.createElement("option", { value: "Personnel", style: { background: "#334155" } }, "Personnel")), /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 10 }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: { flex: 1 }
+        }, /*#__PURE__*/React.createElement("label", {
+          style: { fontSize: 8, color: "#4A90D9", letterSpacing: 1.5, display: "block", marginBottom: 4 }
+        }, "OOS FROM (CST)"), /*#__PURE__*/React.createElement("input", {
+          type: "time",
+          value: o.from || "",
+          onChange: e => setUnitOOS(selectedDay, unit, { from: e.target.value }),
+          style: { width: "100%", boxSizing: "border-box", background: "#334155", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "8px 10px", color: "#E2E8F0", fontSize: 13, fontFamily: "inherit" }
+        })), /*#__PURE__*/React.createElement("div", {
+          style: { flex: 1 }
+        }, /*#__PURE__*/React.createElement("label", {
+          style: { fontSize: 8, color: "#4A90D9", letterSpacing: 1.5, display: "block", marginBottom: 4 }
+        }, "BACK IN SVC (CST)"), /*#__PURE__*/React.createElement("input", {
+          type: "time",
+          value: o.to || "",
+          onChange: e => setUnitOOS(selectedDay, unit, { to: e.target.value }),
+          style: { width: "100%", boxSizing: "border-box", background: "#334155", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "8px 10px", color: "#E2E8F0", fontSize: 13, fontFamily: "inherit" }
+        }))), /*#__PURE__*/React.createElement("label", {
+          style: { fontSize: 8, color: "#D4AF37", letterSpacing: 1.5, display: "block", margin: "10px 0 4px" }
+        }, "NOTE (OPTIONAL)"), /*#__PURE__*/React.createElement("input", {
+          type: "text",
+          value: o.note || "",
+          placeholder: "e.g. recurrency flight at Stinson",
+          onChange: e => setUnitOOS(selectedDay, unit, { note: e.target.value }),
+          style: { width: "100%", boxSizing: "border-box", background: "#334155", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "8px 10px", color: "#E2E8F0", fontSize: 13, fontFamily: "inherit" }
+        }), (!o.from || !o.to) && /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 8, color: "#FF9F0A", marginTop: 6 }
+        }, "Set both times for the flag to show on the chief's board.")));
+      }));
+    })(), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8,
@@ -4595,12 +4683,6 @@ function AirspaceModal({
     }]
   }];
   const QUICK_LINKS = [{
-    label: "TAK State of Texas",
-    sub: "BCESD2 TAK Operations",
-    url: "https://afherkdriver.github.io/bcesd2-tak-ops/",
-    icon: "tak",
-    color: "#C0392B"
-  }, {
     label: "Aloft LAANC",
     sub: "Instant LAANC authorization",
     url: "https://www.aloft.ai/",
