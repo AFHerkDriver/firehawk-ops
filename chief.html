@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- saved from url=(0043)file:///C:/Users/USAFS/Downloads/chief.html -->
-<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Firehawk UAS — Daily Status</title>
-  <link href="./chief_files/css2" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #07090F; color: #CBD5E1; font-family: 'DM Mono', monospace; min-height: 100vh; }
@@ -61,10 +61,10 @@
   </div>
   <div style="text-align:right">
     <div class="sync">
-      <div class="dot synced" id="dot"></div>
-      <span style="font-size:8px;color:#475569;letter-spacing:2px" id="syncText">SYNCED</span>
+      <div class="dot" id="dot"></div>
+      <span style="font-size:8px;color:#475569;letter-spacing:2px" id="syncText">CONNECTING...</span>
     </div>
-    <div style="font-size:9px;color:#334155;margin-top:4px" id="clockEl">03:41 PM</div>
+    <div style="font-size:9px;color:#334155;margin-top:4px" id="clockEl"></div>
   </div>
 </div>
 
@@ -79,7 +79,7 @@
   <div id="redFlagTime" style="font-size:8px;color:#64748B;letter-spacing:1px;flex-shrink:0"></div>
 </div>
 
-<div id="burnBanBar" style="display: flex; background: linear-gradient(135deg, rgba(255, 107, 53, 0.18), rgba(204, 32, 32, 0.12)); border-bottom: 1px solid rgba(255, 107, 53, 0.4); padding: 8px 18px; align-items: center; justify-content: space-between; gap: 12px; top: 64px;">
+<div id="burnBanBar" style="display:none;background:linear-gradient(135deg,rgba(255,107,53,0.18),rgba(204,32,32,0.12));border-bottom:1px solid rgba(255,107,53,0.4);padding:8px 18px;align-items:center;justify-content:space-between;gap:12px;">
   <div style="display:flex;align-items:center;gap:10px;">
     <span style="font-size:16px">🔥</span>
     <div>
@@ -87,78 +87,12 @@
       <span style="font-size:9px;color:#94A3B8;margin-left:10px;letter-spacing:1px">UNINCORPORATED BEXAR COUNTY</span>
     </div>
   </div>
-  <div id="burnBanTime" style="font-size:8px;color:#64748B;letter-spacing:1px;flex-shrink:0">TFS · 03:00 PM</div>
+  <div id="burnBanTime" style="font-size:8px;color:#64748B;letter-spacing:1px;flex-shrink:0"></div>
 </div>
 
-<div class="content" id="content"><div class="card">
-    <div>
-      <div class="label">TODAY</div>
-      <div class="date">June 6</div>
-      <div class="year">2026</div>
-    </div>
-    <div class="shift-box" style="background:rgba(255,59,48,0.12);border:1px solid rgba(255,59,48,0.35);box-shadow:0 0 18px rgba(255,59,48,0.15)">
-      <div class="shift-letter" style="color:#FF3B30">A</div>
-      <div class="shift-label" style="color:#FF3B30">SHIFT</div>
-    </div>
-  </div><div class="outlook"><div class="outlook-label">7-DAY OUTLOOK</div><div class="week-strip"><div class="day-cell" onclick="selectDay(0)" style="background:rgba(255,59,48,0.12);border:1px solid rgba(255,59,48,0.35)">
-      <div style="position:absolute;top:-2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#FF3B30"></div><div class="day-name">S</div>
-      <div class="day-num" style="color:#FF3B30">6</div>
-      <div class="day-avatar" style="background:#E67E22;border:none;font-size:6px;color:white">RB</div>
-      <div class="day-dot" style="background:#34C759"></div>
-    </div><div class="day-cell" onclick="selectDay(1)" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06)">
-      <div class="day-name">S</div>
-      <div class="day-num" style="color:#94A3B8">7</div>
-      <div class="day-avatar" style="background:#E67E22;border:none;font-size:6px;color:white">RB</div>
-      <div class="day-dot" style="background:#34C759"></div>
-    </div><div class="day-cell" onclick="selectDay(2)" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06)">
-      <div class="day-name">M</div>
-      <div class="day-num" style="color:#94A3B8">8</div>
-      <div class="day-avatar" style="background:#E67E22;border:none;font-size:6px;color:white">RB</div>
-      <div class="day-dot" style="background:#34C759"></div>
-    </div><div class="day-cell" onclick="selectDay(3)" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06)">
-      <div class="day-name">T</div>
-      <div class="day-num" style="color:#94A3B8">9</div>
-      <div class="day-avatar" style="background:#E67E22;border:none;font-size:6px;color:white">RB</div>
-      <div class="day-dot" style="background:#34C759"></div>
-    </div><div class="day-cell" onclick="selectDay(4)" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06)">
-      <div class="day-name">W</div>
-      <div class="day-num" style="color:#94A3B8">10</div>
-      <div class="day-avatar" style="background:#E67E22;border:none;font-size:6px;color:white">RB</div>
-      <div class="day-dot" style="background:#34C759"></div>
-    </div><div class="day-cell" onclick="selectDay(5)" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06)">
-      <div class="day-name">T</div>
-      <div class="day-num" style="color:#94A3B8">11</div>
-      <div class="day-avatar" style="background:#E67E22;border:none;font-size:6px;color:white">RB</div>
-      <div class="day-dot" style="background:#34C759"></div>
-    </div><div class="day-cell" onclick="selectDay(6)" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06)">
-      <div class="day-name">F</div>
-      <div class="day-num" style="color:#94A3B8">12</div>
-      <div class="day-avatar" style="background:rgba(255,59,48,0.15);border:1px solid rgba(255,59,48,0.25);font-size:9px;color:#FF3B30">—</div>
-      
-    </div></div><div class="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:#34C759"></div>Confirmed</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#FFC107"></div>Pending</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#FF3B30;opacity:0.6"></div>No Coverage</div>
-  </div></div><div class="crew-card">
-      <div class="crew-header">
-        <span class="crew-header-label">TODAY'S CREW</span>
-        <span class="status-badge" style="color:#34C759;background:rgba(52,199,89,0.1);border:1px solid rgba(52,199,89,0.3)">
-          ✓ CONFIRMED
-        </span>
-      </div>
-      
-      <div style="margin-bottom:12px">
-        <div style="font-size:8px;color:#64748B;letter-spacing:3px;padding:8px 16px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06)">UAV124</div>
-        
-        <div class="crew-row" style="">
-          <div class="avatar" style="background:linear-gradient(135deg,#E67E22,#E67E2288);box-shadow:0 0 14px #E67E2240;border:2px solid #E67E2255">RB</div>
-          <div style="flex:1"><div class="crew-name">Bauchman</div><div class="crew-role" style="color:#4A90D9">RPIC</div></div>
-          <div class="role-badge" style="background:#4A90D918;border:1px solid #4A90D944;color:#4A90D9">RPIC</div>
-        </div>
-      </div>
-      <a href="tel:+12108616643" class="contact-btn" style="background:rgba(74,144,217,0.07);border:1px solid rgba(74,144,217,0.18);color:#4A90D9">
-        📞 Contact UAS Program Manager
-      </a></div><div class="footer">AUTO-REFRESHES EVERY 5 MIN</div></div>
+<div class="content" id="content">
+  <div style="text-align:center;padding:60px;color:#334155;font-size:11px;letter-spacing:2px">LOADING...</div>
+</div>
 
 <script>
 const FS_PROJECT = "firehawk-scheduler";
@@ -489,5 +423,5 @@ function selectDay(i) {
 loadData();
 setInterval(loadData,300000);
 </script>
-
-</body></html>
+</body>
+</html>
