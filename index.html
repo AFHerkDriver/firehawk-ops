@@ -5486,22 +5486,39 @@ const MISSIONS = [{
   label: "Water Rescue",
   sub: "Victim in water, swimmer, flood ops",
   color: "#4A90D9",
-  dayNight: false,
-  config: {
+  dayNight: true,
+  toggleLabels: ["\uD83D\uDD25 THERMAL", "\uD83C\uDF0A RIPPLE"],
+  configDay: {
     gain: "LOW",
     gainReason: "Water temperature is relatively uniform — human body temp stands out strongly at low gain for surface victims",
-    palette: "Rainbow / Iron Bow",
-    paletteReason: "Rainbow and Iron Bow reveal water surface agitation from a struggling subject — color differentials show disturbance even when the victim is not directly visible. Confirmed by Reed field testing on M30T and Avata2. Enable Isotherm overlay on top of either palette to sharpen temperature differential mapping of the water surface.",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow makes partially exposed victims appear bright against the cool water surface. Look for any warm signature at the waterline.",
     isotherm: {
       enabled: false,
       low: null,
       high: null,
       unit: "\xB0F"
     },
-    isothermsReason: "Consider enabling Isotherm overlay on Rainbow or Iron Bow — sharpens water surface temperature differentials and ripple detection. Off by default.",
+    isothermsReason: "Off by default — victims at the waterline have enough thermal contrast without isotherm. Enable if ambient water temperature is close to body temp.",
     zoom: "High zoom, low altitude",
     altitude: "Below 200ft AGL",
-    tips: ["CRITICAL: Stay below 200ft AGL for thermal water SAR — Reed confirmed subjects do not register on thermal above this altitude", "Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to optical (RGB) for submerged search", "Rainbow and ISO palettes show water surface agitation from a struggling subject — look for color differentials in the water surface, not just a heat signature", "For submerged victims: use optical with high altitude + high zoom — gives better perpendicular viewing angles and optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust based on sun glare angle", "Partially exposed victims are detectable on thermal — look for any bright signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection — surface victims visible from much farther", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Debris, foam, and turbulence create false positives on optical — confirm with zoom before directing assets", "M30T SBS confirmed: same search path as Avata2 at recommended AGL and camera angle per white paper (Reed)"]
+    tips: ["CRITICAL: Stay below 200ft AGL — Reed confirmed subjects do not register on thermal above this altitude", "Thermal does NOT penetrate water — a fully submerged victim is invisible. Switch to optical (RGB) for submerged search", "Partially exposed victims are detectable — look for any warm signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection range", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue"]
+  },
+  configNight: {
+    gain: "LOW",
+    gainReason: "Low gain is best for ripple detection — you are reading subtle water surface temperature differentials, not a heat source. High gain introduces noise that obscures ripple patterns.",
+    palette: "Rainbow / Iron Bow",
+    paletteReason: "Rainbow and Iron Bow reveal water surface agitation from a struggling subject — color differentials show disturbance even when the victim is not directly visible. Confirmed by Reed field testing on M30T and Avata2.",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "\xB0F"
+    },
+    isothermsReason: "Consider enabling Isotherm overlay on Rainbow or Iron Bow — sharpens water surface temperature differentials and ripple patterns. Off by default.",
+    zoom: "High zoom, low altitude",
+    altitude: "Below 200ft AGL",
+    tips: ["CRITICAL: Stay below 200ft AGL — subjects and ripple patterns are not visible on thermal above this altitude", "Look for color differentials in the water surface, not a heat signature — the subject creates agitation/ripple that shows as temperature variation", "Rainbow shows the full ripple gradient; Iron Bow provides contrast for heat signatures at the waterline — run both", "M30T SBS confirmed: same search path as Avata2 at recommended AGL and camera angle per white paper (Reed)", "Debris, foam, and turbulence create false positives — confirm with zoom before directing assets"]
   }
 }, {
   id: "hazmat",
@@ -6008,7 +6025,7 @@ function ThermalModal({
       fontFamily: "inherit",
       letterSpacing: 1
     }
-  }, t === "day" ? "☀️ DAY" : "🌙 NIGHT")))), quickView && config && /*#__PURE__*/React.createElement("div", {
+  }, mission.toggleLabels ? mission.toggleLabels[t === "day" ? 0 : 1] : (t === "day" ? "☀️ DAY" : "🌙 NIGHT")))), quickView && config && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#0A0F1E",
       border: `2px solid ${mission.color}60`,
@@ -6024,7 +6041,7 @@ function ThermalModal({
       marginBottom: 16,
       textAlign: "center"
     }
-  }, "\u26A1 QUICK LAUNCH \u2014 ", mission.label.toUpperCase(), mission.dayNight ? ` · ${timeOfDay.toUpperCase()}` : ""), /*#__PURE__*/React.createElement("div", {
+  }, "\u26A1 QUICK LAUNCH \u2014 ", mission.label.toUpperCase(), mission.dayNight ? ` · ${mission.toggleLabels ? mission.toggleLabels[timeOfDay === "day" ? 0 : 1] : timeOfDay.toUpperCase()}` : ""), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr 1fr 1fr",
@@ -6375,7 +6392,7 @@ function ThermalModal({
       color: "#64748B",
       lineHeight: 1.7
     }
-  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)"))))));
+  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)")))))));
 }
 
 // ── Weather Modal ────────────────────────────────────────────────────────────
