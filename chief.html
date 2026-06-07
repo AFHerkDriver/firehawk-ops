@@ -360,10 +360,32 @@ function render(weekDays,schedCache,crewData) {
     // Per-unit temporary out-of-service flags, set from the scheduler.
     // Shape: a.oos = { UAV121: {reason, from, to, note}, UAV124: {...} }
     // from/to are "HH:MM" 24-hr CST strings.
+    // Display rule: on TODAY, only show while the window is active (auto-clears
+    // after the back-in-service time and stays hidden before the start time).
+    // On any other day in the outlook, show whenever it's set.
     const oosData = a.oos || {};
     const fmtHM = t => (t && /^\d{1,2}:\d{2}$/.test(t)) ? t.replace(':', '').padStart(4, '0') : t;
+    const toMins = t => { const mm = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return mm ? parseInt(mm[1]) * 60 + parseInt(mm[2]) : null; };
+    // Current time in US Central, as minutes-since-midnight (handles CST/CDT automatically).
+    const nowCentralMins = () => {
+      try {
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+        const h = parseInt(parts.find(p => p.type === 'hour').value) % 24;
+        const mi = parseInt(parts.find(p => p.type === 'minute').value);
+        return h * 60 + mi;
+      } catch (e) { return null; }
+    };
+    const isToday = selectedOffset === 0;
+    // Whether a given OOS window should be visible right now for the displayed day.
+    const oosActive = o => {
+      if (!o || !o.from || !o.to) return false;
+      if (!isToday) return true; // future/other days: show whenever set
+      const now = nowCentralMins(), f = toMins(o.from), t = toMins(o.to);
+      if (now === null || f === null || t === null) return true; // fail open
+      return t >= f ? (now >= f && now < t) : (now >= f || now < t); // handle past-midnight windows
+    };
     const renderOOS = o => {
-      if(!o || !o.from || !o.to) return '';
+      if(!oosActive(o)) return '';
       const reason = (o.reason || '').toUpperCase();
       return `<div style="background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.4);border-left:3px solid #D4AF37;border-radius:8px;margin:10px 16px 12px;padding:10px 14px">
         <div style="font-size:11px;letter-spacing:1.5px;color:#D4AF37;font-weight:700;display:flex;align-items:center;gap:7px">⚠ TEMPORARILY OUT OF SERVICE${reason?` <span style="font-size:9px;letter-spacing:1px;background:rgba(212,175,55,0.2);border:1px solid rgba(212,175,55,0.4);color:#D4AF37;border-radius:4px;padding:2px 7px">${reason}</span>`:''}</div>
@@ -374,7 +396,7 @@ function render(weekDays,schedCache,crewData) {
     const renderUnit = (unit, members) => {
       if(members.length === 0) return '';
       const oos = oosData[unit];
-      const dim = oos && oos.from && oos.to ? 'opacity:0.4' : '';
+      const dim = oosActive(oos) ? 'opacity:0.4' : '';
       return `<div style="margin-bottom:12px">
         <div style="font-size:8px;color:#64748B;letter-spacing:3px;padding:8px 16px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06)">${unit}</div>
         ${renderOOS(oos)}
