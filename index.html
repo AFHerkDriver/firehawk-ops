@@ -2369,7 +2369,7 @@ function SchedulerPanel({
     const showAssignment = isUASManager || status === "confirmed";
     return /*#__PURE__*/React.createElement("div", {
       key: day,
-      onClick: () => isUASManager && setSelectedDay(selectedDay === day ? null : day),
+      onClick: () => setSelectedDay(selectedDay === day ? null : day),
       style: {
         background: selectedDay === day ? "rgba(255,255,255,0.12)" : st.bg,
         border: `1px solid ${isToday ? "#FF6B35" : holiday ? "rgba(212,175,55,0.5)" : selectedDay === day ? "rgba(255,255,255,0.25)" : st.border}`,
@@ -5499,8 +5499,8 @@ const MISSIONS = [{
       unit: "\xB0F"
     },
     isothermsReason: "Consider enabling Isotherm overlay on Rainbow or Iron Bow — sharpens water surface temperature differentials and ripple detection. Off by default.",
-    zoom: "High zoom from low altitude — stay below 200ft AGL",
-    altitude: "Below 200ft AGL (Reed: subjects do not show on thermal above 200ft)",
+    zoom: "High zoom, low altitude",
+    altitude: "Below 200ft AGL",
     tips: ["CRITICAL: Stay below 200ft AGL for thermal water SAR — Reed confirmed subjects do not register on thermal above this altitude", "Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to optical (RGB) for submerged search", "Rainbow and ISO palettes show water surface agitation from a struggling subject — look for color differentials in the water surface, not just a heat signature", "For submerged victims: use optical with high altitude + high zoom — gives better perpendicular viewing angles and optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust based on sun glare angle", "Partially exposed victims are detectable on thermal — look for any bright signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection — surface victims visible from much farther", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Debris, foam, and turbulence create false positives on optical — confirm with zoom before directing assets", "M30T SBS confirmed: same search path as Avata2 at recommended AGL and camera angle per white paper (Reed)"]
   }
 }, {
@@ -5758,7 +5758,7 @@ const PALETTES = {
     label: "Rainbow — Ripple Detection",
     colors2: ["#0a0a3e", "#1a1a8e", "#5530b0", "#a020a0", "#d04020", "#e88000", "#ffff30"],
     label2: "Iron Bow — Heat Signatures",
-    desc: "Rainbow for ripple detection; Iron Bow for heat signatures"
+    desc: "Rainbow \u2014 Ripple Detection"
   }
 };
 function ThermalModal({
