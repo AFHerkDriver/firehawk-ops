@@ -3021,18 +3021,24 @@ function SchedulerPanel({
         /*#__PURE__*/React.createElement("label", {
           style: { fontSize: 8, color: "#4A90D9", letterSpacing: 1.5, display: "block", marginBottom: 4 }
         }, "OOS FROM (CST)"), /*#__PURE__*/React.createElement("input", {
-          type: "time",
+          type: "text",
+          inputMode: "numeric",
+          placeholder: "HH:MM",
+          maxLength: 5,
           value: o.from || "",
           onChange: e => setUnitOOS(selectedDay, unit, { from: e.target.value }),
-          style: { width: "100%", boxSizing: "border-box", background: "#334155", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "8px 10px", color: "#E2E8F0", fontSize: 13, fontFamily: "inherit" }
+          style: { width: "100%", boxSizing: "border-box", background: "#334155", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "8px 10px", color: "#E2E8F0", fontSize: 13, fontFamily: "inherit", letterSpacing: 2 }
         })), /*#__PURE__*/React.createElement("div", null,
         /*#__PURE__*/React.createElement("label", {
           style: { fontSize: 8, color: "#4A90D9", letterSpacing: 1.5, display: "block", marginBottom: 4 }
         }, "BACK IN SVC (CST)"), /*#__PURE__*/React.createElement("input", {
-          type: "time",
+          type: "text",
+          inputMode: "numeric",
+          placeholder: "HH:MM",
+          maxLength: 5,
           value: o.to || "",
           onChange: e => setUnitOOS(selectedDay, unit, { to: e.target.value }),
-          style: { width: "100%", boxSizing: "border-box", background: "#334155", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "8px 10px", color: "#E2E8F0", fontSize: 13, fontFamily: "inherit" }
+          style: { width: "100%", boxSizing: "border-box", background: "#334155", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "8px 10px", color: "#E2E8F0", fontSize: 13, fontFamily: "inherit", letterSpacing: 2 }
         }))), /*#__PURE__*/React.createElement("label", {
           style: { fontSize: 8, color: "#D4AF37", letterSpacing: 1.5, display: "block", margin: "10px 0 4px" }
         }, "NOTE (OPTIONAL)"), /*#__PURE__*/React.createElement("input", {
@@ -5822,6 +5828,10 @@ const PALETTES = {
   "Rainbow": {
     colors: ["#0000cc", "#0066ff", "#00ccff", "#00ff88", "#ffff00", "#ff8800", "#ff0000"],
     desc: "Full spectrum gradient"
+  },
+  "Rainbow / Iron Bow": {
+    colors: ["#0000cc", "#0066ff", "#00ccff", "#00ff88", "#ffff00", "#ff8800", "#ff0000"],
+    desc: "Rainbow for ripple detection; Iron Bow for heat signatures"
   }
 };
 function ThermalModal({
@@ -6143,13 +6153,13 @@ function ThermalModal({
       height: 16,
       marginBottom: 4
     }
-  }, PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
+  }, PALETTES[config.palette] ? PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
       flex: 1,
       background: c
     }
-  }))), /*#__PURE__*/React.createElement("div", {
+  })) : null), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between"
@@ -6268,13 +6278,13 @@ function ThermalModal({
       height: 24,
       marginBottom: 8
     }
-  }, PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
+  }, PALETTES[config.palette] ? PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
       flex: 1,
       background: c
     }
-  }))), /*#__PURE__*/React.createElement("div", {
+  })) : null), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between"
