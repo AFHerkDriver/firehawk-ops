@@ -2301,7 +2301,7 @@ function SchedulerPanel({
       gap: 4,
       padding: "14px 20px 0"
     }
-  }, (isUASManager ? [["calendar", "Schedule"], ["crew", "Availability"], ["autofill", "Auto-Fill"], ["stats", "YTD Stats"]] : [["calendar", "Schedule"], ["stats", "YTD Stats"]]).map(([id, label]) => /*#__PURE__*/React.createElement("button", {
+  }, (isUASManager ? [["calendar", "Schedule"], ["crew", "Availability"], ["autofill", "Auto-Fill"]] : [["calendar", "Schedule"], ["stats", "YTD Stats"]]).map(([id, label]) => /*#__PURE__*/React.createElement("button", {
     key: id,
     onClick: () => setTab(id),
     style: {
@@ -6071,7 +6071,42 @@ function ThermalModal({
       lineHeight: 1.2,
       whiteSpace: "pre-line"
     }
-  }, item.value)))), !quickView && config && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, item.value)))), PALETTES[config.palette] && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 2,
+      borderRadius: 6,
+      overflow: "hidden",
+      height: 16,
+      marginBottom: 4
+    }
+  }, PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      flex: 1,
+      background: c
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#64748B"
+    }
+  }, "COOL"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#64748B"
+    }
+  }, config.palette), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#64748B"
+    }
+  }, "HOT")))), !quickView && config && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,255,255,0.055)",
       border: "1px solid rgba(255,255,255,0.07)",
@@ -6168,46 +6203,9 @@ function ThermalModal({
       borderRadius: 6,
       overflow: "hidden",
       height: 24,
-      marginBottom: 4
+      marginBottom: 8
     }
-  }, PALETTES[config.palette] ? PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      flex: 1,
-      background: c
-    }
-  })) : null), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      marginBottom: PALETTES[config.palette].colors2 ? 12 : 0
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 8,
-      color: "#64748B"
-    }
-  }, "COOL"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 8,
-      color: "#FF6B35",
-      fontWeight: 700
-    }
-  }, PALETTES[config.palette].label || (PALETTES[config.palette] ? PALETTES[config.palette].desc : "")), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 8,
-      color: "#64748B"
-    }
-  }, "HOT")), PALETTES[config.palette].colors2 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 3,
-      borderRadius: 6,
-      overflow: "hidden",
-      height: 24,
-      marginBottom: 4
-    }
-  }, PALETTES[config.palette].colors2.map((c, i) => /*#__PURE__*/React.createElement("div", {
+  }, PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
       flex: 1,
@@ -6226,15 +6224,35 @@ function ThermalModal({
   }, "COOL"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 8,
-      color: "#FF6B35",
-      fontWeight: 700
+      color: "#64748B"
     }
-  }, PALETTES[config.palette].label2 || ""), /*#__PURE__*/React.createElement("span", {
+  }, PALETTES[config.palette].desc), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 8,
       color: "#64748B"
     }
-  }, "HOT")))), /*#__PURE__*/React.createElement("div", {
+  }, "HOT"))), PALETTES[config.palette].colors2 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 3,
+      borderRadius: 6,
+      overflow: "hidden",
+      height: 24,
+      marginBottom: 8,
+      marginTop: 10
+    }
+  }, PALETTES[config.palette].colors2.map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: { flex: 1, background: c }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", justifyContent: "space-between" }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 8, color: "#64748B" }
+  }, "COOL"), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 8, color: "#FF6B35", fontWeight: 700 }
+  }, PALETTES[config.palette].desc2 || ""), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 8, color: "#64748B" }
+  }, "HOT"))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,255,255,0.055)",
       border: "1px solid rgba(255,255,255,0.06)",
@@ -6357,7 +6375,7 @@ function ThermalModal({
       color: "#64748B",
       lineHeight: 1.7
     }
-  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)")))))));
+  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)"))))));
 }
 
 // ── Weather Modal ────────────────────────────────────────────────────────────
