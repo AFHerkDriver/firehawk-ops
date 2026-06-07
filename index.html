@@ -5567,17 +5567,17 @@ const MISSIONS = [{
     gain: "LOW",
     gainReason: "Water temperature is relatively uniform — human body temp stands out strongly at low gain for surface victims",
     palette: "Rainbow / Iron Bow",
-    paletteReason: "Submerged victims are invisible to thermal. Use Rainbow or Iron Bow to detect surface ripples from a flailing subject — these palettes show water disturbance more clearly than White Hot (Reed, DroneSense)",
+    paletteReason: "Rainbow and Iron Bow reveal water surface agitation from a struggling subject — color differentials show disturbance even when the victim is not directly visible. Confirmed by Reed field testing on M30T and Avata2. Enable Isotherm overlay on top of either palette to sharpen temperature differential mapping of the water surface.",
     isotherm: {
       enabled: false,
       low: null,
       high: null,
-      unit: "°F"
+      unit: "\xB0F"
     },
-    isothermsReason: "Off — for surface victims thermal contrast is strong enough without isotherm; focus is on movement and ripple detection for submerged subjects",
-    zoom: "High zoom from altitude preferred",
-    altitude: "200–300ft AGL with zoom",
-    tips: ["Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to optical (RGB) for submerged search", "For submerged victims: use high altitude + high zoom (not low altitude + wide angle) — gives more perpendicular viewing angles across the image and better optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust based on sun glare angle", "Rainbow or Iron Bow shows ripple patterns from a flailing subject more clearly — may not show the subject but shows water disturbance", "Partially exposed victims are detectable on thermal — look for any bright signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection — surface victims visible from much farther", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Debris, foam, and turbulence create false positives on optical — confirm with zoom before directing assets"]
+    isothermsReason: "Consider enabling Isotherm overlay on Rainbow or Iron Bow — sharpens water surface temperature differentials and ripple detection. Off by default.",
+    zoom: "High zoom from low altitude — stay below 200ft AGL",
+    altitude: "Below 200ft AGL (Reed: subjects do not show on thermal above 200ft)",
+    tips: ["CRITICAL: Stay below 200ft AGL for thermal water SAR — Reed confirmed subjects do not register on thermal above this altitude", "Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to optical (RGB) for submerged search", "Rainbow and ISO palettes show water surface agitation from a struggling subject — look for color differentials in the water surface, not just a heat signature", "For submerged victims: use optical with high altitude + high zoom — gives better perpendicular viewing angles and optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust based on sun glare angle", "Partially exposed victims are detectable on thermal — look for any bright signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection — surface victims visible from much farther", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Debris, foam, and turbulence create false positives on optical — confirm with zoom before directing assets", "M30T SBS confirmed: same search path as Avata2 at recommended AGL and camera angle per white paper (Reed)"]
   }
 }, {
   id: "hazmat",
@@ -5831,6 +5831,9 @@ const PALETTES = {
   },
   "Rainbow / Iron Bow": {
     colors: ["#0000cc", "#0066ff", "#00ccff", "#00ff88", "#ffff00", "#ff8800", "#ff0000"],
+    label: "Rainbow — Ripple Detection",
+    colors2: ["#0a0a3e", "#1a1a8e", "#5530b0", "#a020a0", "#d04020", "#e88000", "#ffff30"],
+    label2: "Iron Bow — Heat Signatures",
     desc: "Rainbow for ripple detection; Iron Bow for heat signatures"
   }
 };
@@ -6174,7 +6177,43 @@ function ThermalModal({
       fontSize: 7,
       color: "#64748B"
     }
-  }, config.palette), /*#__PURE__*/React.createElement("span", {
+  }, PALETTES[config.palette].label || config.palette), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#64748B"
+    }
+  }, "HOT")), PALETTES[config.palette].colors2 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 2,
+      borderRadius: 6,
+      overflow: "hidden",
+      height: 16,
+      marginBottom: 4,
+      marginTop: 8
+    }
+  }, PALETTES[config.palette].colors2.map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      flex: 1,
+      background: c
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#64748B"
+    }
+  }, "COOL"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 7,
+      color: "#64748B"
+    }
+  }, PALETTES[config.palette].label2 || ""), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 7,
       color: "#64748B"
@@ -6276,7 +6315,7 @@ function ThermalModal({
       borderRadius: 6,
       overflow: "hidden",
       height: 24,
-      marginBottom: 8
+      marginBottom: 4
     }
   }, PALETTES[config.palette] ? PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
@@ -6285,6 +6324,43 @@ function ThermalModal({
       background: c
     }
   })) : null), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      marginBottom: PALETTES[config.palette].colors2 ? 12 : 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: "#64748B"
+    }
+  }, "COOL"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: "#FF6B35",
+      fontWeight: 700
+    }
+  }, PALETTES[config.palette].label || (PALETTES[config.palette] ? PALETTES[config.palette].desc : "")), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: "#64748B"
+    }
+  }, "HOT")), PALETTES[config.palette].colors2 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 3,
+      borderRadius: 6,
+      overflow: "hidden",
+      height: 24,
+      marginBottom: 4
+    }
+  }, PALETTES[config.palette].colors2.map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      flex: 1,
+      background: c
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between"
@@ -6297,14 +6373,15 @@ function ThermalModal({
   }, "COOL"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 8,
-      color: "#64748B"
+      color: "#FF6B35",
+      fontWeight: 700
     }
-  }, PALETTES[config.palette].desc), /*#__PURE__*/React.createElement("span", {
+  }, PALETTES[config.palette].label2 || ""), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 8,
       color: "#64748B"
     }
-  }, "HOT"))), /*#__PURE__*/React.createElement("div", {
+  }, "HOT")))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,255,255,0.055)",
       border: "1px solid rgba(255,255,255,0.06)",
@@ -6427,7 +6504,7 @@ function ThermalModal({
       color: "#64748B",
       lineHeight: 1.7
     }
-  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)"))))));
+  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)")))))));
 }
 
 // ── Weather Modal ────────────────────────────────────────────────────────────
