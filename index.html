@@ -228,12 +228,7 @@ const STATUS_STYLE = {
     label: "NOT SET"
   }
 };
-const PIN = "241408"; // legacy admin PIN (kept for back-compat)
-// Manager PINs — each maps to a person + role. Admin can see the login log.
-const MANAGER_PINS = {
-  "241408": { name: "Aaron Sanchez (Program Manager)", admin: true },
-  "0336": { name: "Ryan Bauchman (Program Coordinator)", admin: false }
-};
+const PIN = "241408";
 
 // ── Main App ──────────────────────────────────────────────────────────────
 
@@ -1032,107 +1027,52 @@ function getFirstDay(y, m) {
 
 // callClaude removed
 
-function parseAvailability(rawText, daysInMonth, year, month) {
-  const text = (rawText || "").toLowerCase().trim();
-  const allDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const hasYM = typeof year === "number" && typeof month === "number";
+function parseAvailability(rawText, daysInMonth) {
+  const text = rawText.toLowerCase();
+  const allDays = Array.from({
+    length: daysInMonth
+  }, (_, i) => i + 1);
 
-  if (!text) return { days: [], matched: false, mode: "empty" };
-
-  if (/^(none|no days?|n\/a|nothing|nada|unavailable|not available|none this month|off all month)\.?$/.test(text)) {
-    return { days: [], matched: true, mode: "none" };
-  }
-
-  const MONTH_NAMES = "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
-  let scrubbed = text
-    .replace(new RegExp("(" + MONTH_NAMES + ")\\s*\\d{1,2}(?:st|nd|rd|th)?", "g"), " ")
-    .replace(new RegExp("\\d{1,2}(?:st|nd|rd|th)?\\s*(?:of\\s*)?(" + MONTH_NAMES + ")", "g"), " ");
-
-  if (/\b(all month|every ?day|whole month|entire month|all days|anytime|any day|always|fully available|available all|free all|open all)\b/.test(scrubbed)) {
-    const exceptMatch = scrubbed.match(/(?:except|but|besides|aside from|other than|excluding|minus)\b(.+)/);
+  // "all month" or "every day"
+  if (/all month|every day|all days/.test(text)) {
+    // check for exceptions: "all month except the 5th and 10th"
+    const exceptMatch = text.match(/except (.+)/);
     if (exceptMatch) {
-      const ex = extractDayNumbers(exceptMatch[1], daysInMonth);
-      if (ex.length) return { days: allDays.filter(d => !ex.includes(d)), matched: true, mode: "all-except" };
+      const excluded = extractDayNumbers(exceptMatch[1], daysInMonth);
+      return allDays.filter(d => !excluded.includes(d));
     }
-    return { days: allDays, matched: true, mode: "all" };
+    return allDays;
   }
 
-  if (hasYM && /\bweekends?( only)?\b/.test(scrubbed) && !/weekday/.test(scrubbed)) {
-    return { days: allDays.filter(d => { const w = new Date(year, month, d).getDay(); return w === 0 || w === 6; }), matched: true, mode: "weekends" };
-  }
-  if (hasYM && /\bweekdays?( only)?\b/.test(scrubbed)) {
-    return { days: allDays.filter(d => { const w = new Date(year, month, d).getDay(); return w >= 1 && w <= 5; }), matched: true, mode: "weekdays" };
-  }
-
-  const NEG = /\b(not available|unavailable|unable|can'?t|cannot|cant|off on|off the|won'?t|will not|not free|busy|out|except|excluding|other than|besides|aside from|minus|but not)\b/;
-  if (NEG.test(scrubbed)) {
-    const ex = extractDayNumbers(scrubbed, daysInMonth);
-    if (ex.length) return { days: allDays.filter(d => !ex.includes(d)), matched: true, mode: "negation" };
-    return { days: [], matched: true, mode: "none-implied" };
+  // "not available" / "unavailable" / "unable" / "except" — invert
+  if (/not available|unavailable|unable|can't|cannot|off on|won't be|will not be|not free|busy/.test(text)) {
+    const excluded = extractDayNumbers(text, daysInMonth);
+    return excluded.length ? allDays.filter(d => !excluded.includes(d)) : allDays;
   }
 
-  const pos = extractDayNumbers(scrubbed, daysInMonth);
-  if (pos.length) return { days: pos, matched: true, mode: "list" };
-
-  return { days: [], matched: false, mode: "unparsed" };
+  // default: extract available days
+  return extractDayNumbers(text, daysInMonth);
 }
 function extractDayNumbers(text, daysInMonth) {
   const days = new Set();
-  const rangeRe = /(\d{1,2})(?:st|nd|rd|th)?\s*(?:through|thru|to|till|until|[-\u2013\u2014])\s*(\d{1,2})(?:st|nd|rd|th)?/g;
+
+  // ranges like "3rd through 8th", "10-15", "3 to 8", "3 thru 8"
+  const rangeRe = /(\d{1,2})(?:st|nd|rd|th)?\s*(?:through|thru|to|-|–)\s*(\d{1,2})(?:st|nd|rd|th)?/g;
   let m;
-  const rangeMatches = [];
   while ((m = rangeRe.exec(text)) !== null) {
-    const start = parseInt(m[1]), end = parseInt(m[2]);
-    if (start >= 1 && start <= 31 && end >= 1 && end <= 31) {
-      for (let d = Math.min(start, end); d <= Math.max(start, end) && d <= daysInMonth; d++) days.add(d);
-      rangeMatches.push(m[0]);
-    }
+    const start = parseInt(m[1]),
+      end = parseInt(m[2]);
+    for (let d = Math.min(start, end); d <= Math.max(start, end) && d <= daysInMonth; d++) days.add(d);
   }
-  let stripped = text;
-  for (const rm of rangeMatches) stripped = stripped.split(rm).join(" ");
-  const numRe = /\b(\d{1,2})(?:st|nd|rd|th)?\b/g;
+
+  // individual numbers with optional ordinal: "the 3rd", "on the 15", "5th", "22"
+  const stripped = text.replace(rangeRe, " ");
+  const numRe = /(\d{1,2})(?:st|nd|rd|th)?/g;
   while ((m = numRe.exec(stripped)) !== null) {
     const d = parseInt(m[1]);
     if (d >= 1 && d <= daysInMonth) days.add(d);
   }
   return Array.from(days).sort((a, b) => a - b);
-}
-
-// ── Per-month availability helpers ────────────────────────────────────────────
-// Crew members store availByMonth: { "YEAR-MONTH": { days:[...], raw:"..." } }
-// Legacy flat fields (availability / availRaw) are migrated into a member's
-// availByMonth on load so nothing is lost. Blank for a month = UNAVAILABLE.
-function monthKey(year, month) {
-  return year + "-" + month;
-}
-// Returns { days, raw } for the given month, or empty (= unavailable) if none.
-function getAvail(member, year, month) {
-  if (member && member.availByMonth) {
-    const entry = member.availByMonth[monthKey(year, month)];
-    if (entry) return { days: entry.days || [], raw: entry.raw || "" };
-  }
-  return { days: [], raw: "" };
-}
-// Returns a new availByMonth object with the given month set.
-function withAvailForMonth(member, year, month, days, raw) {
-  const next = Object.assign({}, member && member.availByMonth);
-  next[monthKey(year, month)] = { days: days || [], raw: raw || "" };
-  return next;
-}
-// One-time migration: fold a legacy flat availability/availRaw into availByMonth
-// under the supplied (current) month, if the member has no availByMonth yet.
-function migrateLegacyAvail(member, year, month) {
-  if (!member) return member;
-  if (member.availByMonth && Object.keys(member.availByMonth).length) return member;
-  const hasLegacy = (member.availability && member.availability.length) || member.availRaw;
-  const availByMonth = {};
-  if (hasLegacy) {
-    availByMonth[monthKey(year, month)] = {
-      days: member.availability || [],
-      raw: member.availRaw || ""
-    };
-  }
-  return Object.assign({}, member, { availByMonth });
 }
 
 // ── Unit (callsign) grouping ──────────────────────────────────────────────────
@@ -1237,8 +1177,8 @@ function AutoFillTab({
 
       // Find which RPICs are available on this start day
       const availRpics = rpicList.filter(c => {
-        const avail = getAvail(c, year, month).days;
-        return avail.includes(blockStart); // blank month = unavailable
+        const avail = c.availability;
+        return !avail || !avail.length || avail.includes(blockStart);
       }).sort((a, b) => (tally[a.id] || 0) - (tally[b.id] || 0));
       if (!availRpics.length) {
         conflicts.push(blockStart);
@@ -1253,8 +1193,8 @@ function AutoFillTab({
       let blockLen = 0;
       while (i + blockLen < openDays.length && openDays[i + blockLen] === blockStart + blockLen && blockLen < 7) {
         const day = openDays[i + blockLen];
-        const avail = getAvail(rpic, year, month).days;
-        if (!avail.includes(day)) break;
+        const avail = rpic.availability;
+        if (avail && avail.length && !avail.includes(day)) break;
         blockLen++;
       }
       if (blockLen === 0) blockLen = 1; // safety — always advance at least 1
@@ -1267,8 +1207,8 @@ function AutoFillTab({
         availRpics.slice(1).forEach(c => {
           let len = 0;
           while (i + len < openDays.length && openDays[i + len] === blockStart + len && len < 7) {
-            const avail = getAvail(c, year, month).days;
-            if (!avail.includes(openDays[i + len])) break;
+            const avail = c.availability;
+            if (avail && avail.length && !avail.includes(openDays[i + len])) break;
             len++;
           }
           if (len > bestLen) {
@@ -1287,8 +1227,8 @@ function AutoFillTab({
       while (safeLen < blockLen) {
         const day = openDays[i + safeLen];
         if (day === undefined) break;
-        const avail = getAvail(chosenRpic, year, month).days;
-        if (!avail.includes(day)) break;
+        const avail = chosenRpic.availability;
+        if (avail && avail.length && !avail.includes(day)) break;
         safeLen++;
       }
       blockLen = safeLen || 1;
@@ -1906,12 +1846,10 @@ function SchedulerPanel({
   };
   const handleParseAvailability = crewId => {
     if (!availInput.trim()) return;
-    const result = parseAvailability(availInput, daysInMonth, year, month);
-    if (result.matched) {
-      const days = result.days;
+    const days = parseAvailability(availInput, daysInMonth);
+    if (days && days.length > 0) {
       const updatedCrew = crew.map(c => c.id === crewId ? {
         ...c,
-        availByMonth: withAvailForMonth(c, year, month, days, availInput),
         availability: days,
         availRaw: availInput
       } : c);
@@ -1924,13 +1862,12 @@ function SchedulerPanel({
           id: c.id,
           availability: c.availability || [],
           availRaw: c.availRaw || "",
-          availByMonth: c.availByMonth || {},
           role: c.role,
           part107: c.part107 || null
         }))
       });
     } else {
-      alert("Couldn't read that. Try day numbers ('8 15 16 21'), ranges ('3rd through 8th'), 'all month except the 10th', 'weekends only', or 'none'.");
+      alert("Couldn't find any day numbers — try: '8 15 16 21 25 26 30' or '3rd through 8th, also the 15th' or 'all month except the 10th'");
     }
   };
   const prevMonth = () => {
@@ -2196,9 +2133,8 @@ function SchedulerPanel({
       letterSpacing: 1
     }
   }, "AVAILABILITY FOR ", MONTHS[month].toUpperCase(), " \u2014 tell us which days you can work"), (() => {
-    const me = crew.find(c => c.id === staffMember.id);
-    const myAvail = getAvail(me, year, month).days;
-    const myRaw = getAvail(me, year, month).raw;
+    const myAvail = crew.find(c => c.id === staffMember.id)?.availability || [];
+    const myRaw = crew.find(c => c.id === staffMember.id)?.availRaw || "";
     return /*#__PURE__*/React.createElement(React.Fragment, null, myRaw && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 10,
@@ -2248,19 +2184,16 @@ function SchedulerPanel({
       onClick: () => {
         const raw = staffAvailText;
         if (!raw.trim()) return;
-        const result = parseAvailability(raw, daysInMonth, year, month);
-        if (result.matched) {
-          const days = result.days;
+        const days = parseAvailability(raw, daysInMonth);
+        if (days && days.length > 0) {
           const updatedCrew = crew.map(c => c.id === staffMember.id ? {
             ...c,
-            availByMonth: withAvailForMonth(c, year, month, days, raw),
             availability: days,
             availRaw: raw
           } : c);
           setCrew(updatedCrew);
           setStaffMember(prev => ({
             ...prev,
-            availByMonth: withAvailForMonth(prev, year, month, days, raw),
             availability: days,
             availRaw: raw
           }));
@@ -2270,13 +2203,12 @@ function SchedulerPanel({
               id: c.id,
               availability: c.availability || [],
               availRaw: c.availRaw || "",
-              availByMonth: c.availByMonth || {},
               role: c.role,
               part107: c.part107 || null
             }))
           });
         } else {
-          alert("Couldn't read that. Try day numbers ('8 15 16 21'), ranges ('1st through 10th'), 'all month except the 15th', 'weekends only', or 'none'.");
+          alert("Couldn't find any days — try: '8 15 16 21 25 26 30' or '1st through 10th' or 'all month except the 15th'");
         }
       },
       style: {
@@ -2437,14 +2369,14 @@ function SchedulerPanel({
     const showAssignment = isUASManager || status === "confirmed";
     return /*#__PURE__*/React.createElement("div", {
       key: day,
-      onClick: () => setSelectedDay(selectedDay === day ? null : day),
+      onClick: () => isUASManager && setSelectedDay(selectedDay === day ? null : day),
       style: {
         background: selectedDay === day ? "rgba(255,255,255,0.12)" : st.bg,
         border: `1px solid ${isToday ? "#FF6B35" : holiday ? "rgba(212,175,55,0.5)" : selectedDay === day ? "rgba(255,255,255,0.25)" : st.border}`,
         borderRadius: 7,
         padding: "5px 5px 6px",
         minHeight: 72,
-        cursor: "pointer",
+        cursor: isUASManager ? "pointer" : "default",
         transition: "all 0.12s",
         boxShadow: isToday ? "0 0 10px rgba(255,107,53,0.3)" : "none"
       }
@@ -2757,8 +2689,8 @@ function SchedulerPanel({
         color: "#94A3B8"
       }
     }, "\u2014 Unassigned \u2014"), rpicCrew.map(c => {
-      const avail = getAvail(c, year, month).days;
-      const ok = avail.includes(selectedDay); // blank month = unavailable
+      const avail = c.availability;
+      const ok = !avail || !avail.length || avail.includes(selectedDay);
       return /*#__PURE__*/React.createElement("option", {
         key: c.id,
         value: c.id,
@@ -2801,8 +2733,8 @@ function SchedulerPanel({
         color: "#94A3B8"
       }
     }, "\u2014 None \u2014"), voCrew.map(c => {
-      const avail = getAvail(c, year, month).days;
-      const ok = avail.includes(selectedDay); // blank month = unavailable
+      const avail = c.availability;
+      const ok = !avail || !avail.length || avail.includes(selectedDay);
       return /*#__PURE__*/React.createElement("option", {
         key: c.id,
         value: c.id,
@@ -3451,7 +3383,6 @@ function SchedulerPanel({
           id: m.id,
           availability: m.availability || [],
           availRaw: m.availRaw || "",
-          availByMonth: m.availByMonth || {},
           role: m.role,
           part107: m.part107 || null
         }))
@@ -3481,7 +3412,7 @@ function SchedulerPanel({
   }, "RPIC"))))), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setEditingCrew(editingCrew === c.id ? null : c.id);
-      setAvailInput(getAvail(c, year, month).raw || getAvail(c, year, month).days.join(", ") || "");
+      setAvailInput(c.availRaw || c.availability?.join(", ") || "");
     },
     style: {
       background: "rgba(255,255,255,0.10)",
@@ -3493,24 +3424,24 @@ function SchedulerPanel({
       fontSize: 10,
       fontFamily: "inherit"
     }
-  }, editingCrew === c.id ? "Cancel" : "Set Availability")), getAvail(c, year, month).days.length > 0 && editingCrew !== c.id && /*#__PURE__*/React.createElement("div", {
+  }, editingCrew === c.id ? "Cancel" : "Set Availability")), c.availability?.length > 0 && editingCrew !== c.id && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 7
     }
-  }, getAvail(c, year, month).raw && /*#__PURE__*/React.createElement("div", {
+  }, c.availRaw && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 9,
       color: "#64748B",
       marginBottom: 3,
       fontStyle: "italic"
     }
-  }, "\"", getAvail(c, year, month).raw, "\""), /*#__PURE__*/React.createElement("div", {
+  }, "\"", c.availRaw, "\""), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexWrap: "wrap",
       gap: 3
     }
-  }, getAvail(c, year, month).days.map(d => /*#__PURE__*/React.createElement("span", {
+  }, c.availability.map(d => /*#__PURE__*/React.createElement("span", {
     key: d,
     style: {
       fontSize: 9,
@@ -3520,14 +3451,7 @@ function SchedulerPanel({
       padding: "2px 6px",
       color: "#94A3B8"
     }
-  }, d)))), getAvail(c, year, month).days.length === 0 && editingCrew !== c.id && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 7,
-      fontSize: 10,
-      color: "#64748B",
-      fontStyle: "italic"
-    }
-  }, "No availability entered for ", MONTHS[month], " ", year, " \u2014 treated as unavailable"), editingCrew === c.id && /*#__PURE__*/React.createElement("div", {
+  }, d)))), editingCrew === c.id && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10,
       animation: "fadeIn 0.2s ease"
@@ -7535,35 +7459,6 @@ function FirehawkOps() {
   const [showPin, setShowPin] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
-  const [managerInfo, setManagerInfo] = useState(null); // { name, admin } of who's logged in
-  const [accessLog, setAccessLog] = useState([]); // [{ name, ts }] most-recent-first
-
-  // Record a successful manager login to Firebase (keeps last 50)
-  const recordLogin = async info => {
-    try {
-      const existing = await fsGetPath("firehawk/access_log");
-      let entries = [];
-      if (existing && existing.logJson) {
-        try { entries = JSON.parse(existing.logJson); } catch {}
-      }
-      entries.unshift({ name: info.name, ts: new Date().toISOString() });
-      entries = entries.slice(0, 50);
-      setAccessLog(entries);
-      await fsSetPath("firehawk/access_log", { logJson: JSON.stringify(entries) });
-    } catch (e) {}
-  };
-
-  // When the admin opens manager mode, load the login history
-  useEffect(() => {
-    if (isManager && managerInfo && managerInfo.admin) {
-      (async () => {
-        const data = await fsGetPath("firehawk/access_log");
-        if (data && data.logJson) {
-          try { setAccessLog(JSON.parse(data.logJson)); } catch {}
-        }
-      })();
-    }
-  }, [isManager, managerInfo]);
   // Currency edit
   const [editingId, setEditingId] = useState(null);
   const [dateInput, setDateInput] = useState("");
@@ -7622,21 +7517,15 @@ function FirehawkOps() {
   useEffect(() => {
     const unsub = fsListen("firehawk", "crew", data => {
       if (data && data.members) {
-        const nowD = new Date();
-        const curY = nowD.getFullYear(), curM = nowD.getMonth();
         setCrew(CREW_DEFAULT.map(c => {
           const match = data.members.find(x => x.id === c.id);
-          if (!match) return c;
-          let merged = {
+          return match ? {
             ...c,
             availability: match.availability || [],
             availRaw: match.availRaw || "",
-            availByMonth: match.availByMonth || null,
             role: match.role || c.role,
             part107: match.part107 || null
-          };
-          merged = migrateLegacyAvail(merged, curY, curM);
-          return merged;
+          } : c;
         }));
       }
       setSyncStatus("synced");
@@ -7658,7 +7547,6 @@ function FirehawkOps() {
         id: c.id,
         availability: c.availability || [],
         availRaw: c.availRaw || "",
-        availByMonth: c.availByMonth || {},
         role: c.role,
         part107: c.part107 || null,
         reserve: c.reserve || false,
@@ -7675,8 +7563,7 @@ function FirehawkOps() {
       id: Date.now(),
       part107: null,
       availability: [],
-      availRaw: "",
-      availByMonth: {}
+      availRaw: ""
     };
     const updated = [...crew, member];
     await saveCrewToFirebase(updated);
@@ -7715,7 +7602,6 @@ function FirehawkOps() {
         id: c.id,
         availability: c.availability || [],
         availRaw: c.availRaw || "",
-        availByMonth: c.availByMonth || {},
         role: c.role,
         part107: c.part107 || null
       }))
@@ -7776,7 +7662,7 @@ function FirehawkOps() {
     return s === "warning" || s === "expired";
   });
   const allCurrent = activeCrew.every(c => certStatus(c.part107) === "current");
-  const TABS_MANAGER = [["schedule", "Schedule"], ["currency", "Crew Mgmt"], ["bulletin", "Bulletin Board"]];
+  const TABS_MANAGER = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["currency", "Crew Mgmt"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
   const TABS_STAFF = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
   const tabs = isManager ? TABS_MANAGER : TABS_STAFF;
   const SHIFT_PATTERN = ["A", "A", "B", "B", "C", "C"];
@@ -7908,7 +7794,7 @@ const BUGLES_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAA
       letterSpacing: 1
     }
   }, todayShift, " SHIFT"))), isManager ? /*#__PURE__*/React.createElement("button", {
-    onClick: () => { setIsManager(false); setManagerInfo(null); setTab("dashboard"); },
+    onClick: () => setIsManager(false),
     style: {
       background: "rgba(255,107,53,0.2)",
       border: "1px solid rgba(255,107,53,0.5)",
@@ -8063,13 +7949,9 @@ const BUGLES_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAA
     },
     onKeyDown: e => {
       if (e.key === "Enter") {
-        const who = MANAGER_PINS[pinInput];
-        if (who) {
+        if (pinInput === PIN) {
           setIsManager(true);
-          setManagerInfo(who);
           setShowPin(false);
-          setTab("schedule");
-          recordLogin(who);
         } else {
           setPinError(true);
           setPinInput("");
@@ -8115,13 +7997,9 @@ const BUGLES_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAA
     }
   }, "Cancel"), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
-      const who = MANAGER_PINS[pinInput];
-      if (who) {
+      if (pinInput === PIN) {
         setIsManager(true);
-        setManagerInfo(who);
         setShowPin(false);
-        setTab("schedule");
-        recordLogin(who);
       } else {
         setPinError(true);
         setPinInput("");
@@ -8622,50 +8500,7 @@ const BUGLES_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAA
       gap: 10,
       animation: "fadeUp 0.4s ease"
     }
-  }, managerInfo && managerInfo.admin && /*#__PURE__*/React.createElement("details", {
-    style: {
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.08)",
-      borderRadius: 10,
-      padding: "10px 14px",
-      marginBottom: 4
-    }
-  }, /*#__PURE__*/React.createElement("summary", {
-    style: {
-      fontSize: 10,
-      color: "#94A3B8",
-      letterSpacing: 1,
-      cursor: "pointer",
-      userSelect: "none"
-    }
-  }, "\uD83D\uDD12 MANAGER LOGIN HISTORY (", (accessLog ? accessLog.length : 0), ")"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 10,
-      display: "flex",
-      flexDirection: "column",
-      gap: 6,
-      maxHeight: 260,
-      overflowY: "auto"
-    }
-  }, (!accessLog || accessLog.length === 0) ? /*#__PURE__*/React.createElement("div", {
-    style: { fontSize: 11, color: "#64748B", fontStyle: "italic" }
-  }, "No logins recorded yet.") : accessLog.map((entry, i) => {
-    const d = new Date(entry.ts);
-    const when = isNaN(d.getTime()) ? entry.ts : d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
-    return /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        fontSize: 11,
-        padding: "6px 10px",
-        background: "rgba(255,255,255,0.02)",
-        borderRadius: 6,
-        borderLeft: "2px solid rgba(255,107,53,0.5)"
-      }
-    }, /*#__PURE__*/React.createElement("span", { style: { color: "#E2E8F0" } }, entry.name || "Unknown"), /*#__PURE__*/React.createElement("span", { style: { color: "#64748B", fontVariantNumeric: "tabular-nums" } }, when));
-  }))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -9611,7 +9446,7 @@ const BUGLES_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAA
     icon: "mapnova"
   }, {
     name: "Chief's Daily Status",
-    desc: "Command board — today's crew, units, and OOS flags",
+    desc: "Command board \u2014 today's crew, units, and OOS flags",
     url: "https://afherkdriver.github.io/firehawk-ops/chief.html",
     color: "#D4AF37",
     icon: "bugles"
