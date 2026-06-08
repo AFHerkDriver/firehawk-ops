@@ -4948,12 +4948,19 @@ const [showComms, setShowComms] = useState(false);
         ),
 
         /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 155, r: 6, fill: "none", stroke: "#94A3B8", strokeWidth: 1.5 }),
-        /*#__PURE__*/React.createElement("line", {
-          x1: 160, y1: 155,
-          x2: 160 + 14 * Math.sin(heading * Math.PI / 180),
-          y2: 155 - 14 * Math.cos(heading * Math.PI / 180),
-          stroke: "#94A3B8", strokeWidth: 1.5, strokeLinecap: "round"
-        })
+        scopeMode === "north"
+          ? /*#__PURE__*/React.createElement("line", {
+              x1: 160, y1: 155,
+              x2: 160 + 14 * Math.sin(heading * Math.PI / 180),
+              y2: 155 - 14 * Math.cos(heading * Math.PI / 180),
+              stroke: "#94A3B8", strokeWidth: 1.5, strokeLinecap: "round"
+            })
+          : /*#__PURE__*/React.createElement("line", {
+              x1: 160, y1: 155,
+              x2: 160,
+              y2: 141,
+              stroke: "#94A3B8", strokeWidth: 1.5, strokeLinecap: "round"
+            })
       )
     )
     ),
@@ -5870,7 +5877,16 @@ function ThermalModal({
       cursor: "pointer",
       fontFamily: "inherit"
     }
-  }, "\u2715 Close"))), !mission ? /*#__PURE__*/React.createElement("div", {
+  }, "\u2715 Close")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch",
+      maxWidth: 480,
+      margin: "0 auto",
+      width: "100%"
+    }
+  }, !mission ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "14px"
     }
@@ -6357,7 +6373,7 @@ function ThermalModal({
       color: "#64748B",
       lineHeight: 1.7
     }
-  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)"))))));
+  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)"))))))));
 }
 
 // ── Weather Modal ────────────────────────────────────────────────────────────
