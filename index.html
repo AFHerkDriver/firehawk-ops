@@ -5204,6 +5204,10 @@ function AirspaceModal({
     /*#__PURE__*/React.createElement("div", {
       style: { background: "#060E1A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden", marginBottom: 8 }
     },
+      /* Track-up heading readout box */
+      scopeMode === "track" && /*#__PURE__*/React.createElement("div", {
+        style: { textAlign: "center", padding: "6px 0 2px", fontSize: 13, color: "#E2E8F0", fontFamily: "monospace", letterSpacing: 2 }
+      }, heading + "\xb0 " + (() => { const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"]; return dirs[Math.round(heading / 22.5) % 16]; })()),
       /*#__PURE__*/React.createElement("svg", { viewBox: "0 0 320 280", width: "100%", style: { display: "block" } },
         /*#__PURE__*/React.createElement("g", { transform: scopeMode === "track" ? "rotate(" + (-heading) + ", 160, 150)" : undefined },
           /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 60, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
@@ -5212,7 +5216,34 @@ function AirspaceModal({
           /*#__PURE__*/React.createElement("line", { x1: 20, y1: 150, x2: 300, y2: 150, stroke: "rgba(255,255,255,0.04)", strokeWidth: 1 }),
           /*#__PURE__*/React.createElement("text", { x: 164, y: 97, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "1nm"),
           /*#__PURE__*/React.createElement("text", { x: 164, y: 37, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "2nm"),
-          /*#__PURE__*/React.createElement("text", { x: 153, y: 22, fill: "rgba(255,255,255,0.3)", fontSize: 11, fontFamily: "monospace", fontWeight: "bold" }, "N"),
+
+          /* North-up: 30-degree tick marks + labels around outer ring */
+          scopeMode === "north" && /*#__PURE__*/React.createElement("g", null,
+            ...[0,30,60,90,120,150,180,210,240,270,300,330].map(deg => {
+              const r = (deg * Math.PI) / 180;
+              const sinD = Math.sin(r), cosD = Math.cos(r);
+              const x1 = 160 + 116 * sinD, y1 = 150 - 116 * cosD;
+              const x2 = 160 + 124 * sinD, y2 = 150 - 124 * cosD;
+              const lx = 160 + 134 * sinD, ly = 150 - 134 * cosD;
+              const label = deg === 0 ? "360" : String(deg).padStart(3, "0");
+              const isCardi = deg % 90 === 0;
+              return /*#__PURE__*/React.createElement("g", { key: deg },
+                /*#__PURE__*/React.createElement("line", { x1, y1, x2, y2, stroke: isCardi ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.15)", strokeWidth: isCardi ? 1.5 : 1 }),
+                /*#__PURE__*/React.createElement("text", { x: lx, y: ly, fill: isCardi ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.25)", fontSize: isCardi ? 9 : 7, fontFamily: "monospace", textAnchor: "middle", dominantBaseline: "middle" }, label)
+              );
+            })
+          ),
+
+          /* Track-up: cardinal labels only, rotate with scope */
+          scopeMode === "track" && /*#__PURE__*/React.createElement("g", null,
+            ...["N","E","S","W"].map((lbl, i) => {
+              const deg = i * 90;
+              const r = (deg * Math.PI) / 180;
+              const lx = 160 + 134 * Math.sin(r), ly = 150 - 134 * Math.cos(r);
+              return /*#__PURE__*/React.createElement("text", { key: lbl, x: lx, y: ly, fill: "rgba(255,255,255,0.45)", fontSize: 10, fontFamily: "monospace", fontWeight: "bold", textAnchor: "middle", dominantBaseline: "middle" }, lbl);
+            })
+          ),
+
           adsbTraffic.map(ac => {
             const color = ac.alt <= 400 ? "#FF3B30" : "#FF9F0A";
             const rad = (ac.brg - 90) * Math.PI / 180;
@@ -5239,8 +5270,7 @@ function AirspaceModal({
         /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 6, fill: "none", stroke: "#94A3B8", strokeWidth: 1.5 }),
         scopeMode === "north"
           ? /*#__PURE__*/React.createElement("line", { x1: 160, y1: 150, x2: 160 + 14 * Math.sin(heading * Math.PI / 180), y2: 150 - 14 * Math.cos(heading * Math.PI / 180), stroke: "#94A3B8", strokeWidth: 1.5, strokeLinecap: "round" })
-          : /*#__PURE__*/React.createElement("polygon", { points: "160,138 155,153 165,153", fill: "#94A3B8" }),
-        scopeMode === "track" && /*#__PURE__*/React.createElement("text", { x: 145, y: 22, fill: "rgba(255,255,255,0.3)", fontSize: 9, fontFamily: "monospace" }, "AHEAD")
+          : /*#__PURE__*/React.createElement("polygon", { points: "160,138 155,153 165,153", fill: "#94A3B8" })
       )
     ),
 
