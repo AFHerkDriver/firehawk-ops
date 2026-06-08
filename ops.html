@@ -90,9 +90,9 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
   </div>
 
   <!-- BANNERS -->
-  <div class="banners">
+  <div class="banners" id="bannerWrap">
     <!-- Red Flag Warning -->
-    <div style="background:linear-gradient(135deg,rgba(255,59,48,0.12),rgba(204,32,32,0.08));border:1px solid rgba(255,59,48,0.4);border-radius:8px;padding:7px 16px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="background:linear-gradient(135deg,rgba(255,59,48,0.12),rgba(204,32,32,0.08));id="bannerRedFlag" style="display:none;background:linear-gradient(135deg,rgba(255,59,48,0.12),rgba(204,32,32,0.08));border:1px solid rgba(255,59,48,0.4);border-radius:8px;padding:7px 16px;align-items:center;justify-content:space-between;">
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="font-size:14px;">🚩</span>
         <div>
@@ -100,10 +100,10 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
           <span style="font-size:9px;color:#94A3B8;margin-left:10px;letter-spacing:1px;">EXTREME FIRE WEATHER CONDITIONS · NWS BEXAR COUNTY</span>
         </div>
       </div>
-      <div style="font-size:8px;color:#64748B;letter-spacing:1px;">NWS · 20:00Z</div>
+      <div style="font-size:8px;color:#64748B;letter-spacing:1px;"id="bannerRedFlagTime">NWS</div>
     </div>
     <!-- Burn Ban -->
-    <div style="background:linear-gradient(135deg,rgba(255,107,53,0.12),rgba(204,32,32,0.07));border:1px solid rgba(255,107,53,0.4);border-radius:8px;padding:7px 16px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="background:linear-gradient(135deg,rgba(255,107,53,0.12),rgba(204,32,32,0.07));id="bannerBurnBan" style="display:none;background:linear-gradient(135deg,rgba(255,107,53,0.12),rgba(204,32,32,0.07));border:1px solid rgba(255,107,53,0.4);border-radius:8px;padding:7px 16px;align-items:center;justify-content:space-between;">
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="font-size:14px;">🔥</span>
         <div>
@@ -111,7 +111,7 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
           <span style="font-size:9px;color:#94A3B8;margin-left:10px;letter-spacing:1px;">BEXAR COUNTY · OUTDOOR BURNING PROHIBITED</span>
         </div>
       </div>
-      <div style="font-size:8px;color:#64748B;letter-spacing:1px;">TFS · UPDATED TODAY</div>
+      <div style="font-size:8px;color:#64748B;letter-spacing:1px;"id="bannerBurnBanTime">TFS</div>
     </div>
   </div>
 
@@ -149,35 +149,23 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
         <div class="pos-row" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">
           <div class="pos-label" style="color:#64748B;">COORDINATES</div>
           <button class="copy-btn" onclick="copyText('29.4241° N, 98.4936° W',this)">COPY</button>
-          <div class="pos-value" style="font-size:10px;">29.4241° N, 98.4936° W</div>
+          <div class="pos-value" style="font-size:10px;"><span id="posCoords">— · —</span></div>
         </div>
         <div class="pos-row" style="background:rgba(74,144,217,0.07);border:1px solid rgba(74,144,217,0.2);">
           <div class="pos-label" style="color:#4A90D9;">MGRS</div>
           <button class="copy-btn" style="color:#4A90D9;border-color:rgba(74,144,217,0.3);background:rgba(74,144,217,0.1);" onclick="copyText('14RMU 82345 67891',this)">COPY</button>
-          <div class="pos-value">14RMU 82345 67891</div>
+          <div id="posMGRS" class="pos-value">—</div>
           <div class="pos-sub">TAK · TDEM · TXTF1</div>
         </div>
         <div class="pos-row" style="background:rgba(255,107,53,0.07);border:1px solid rgba(255,107,53,0.2);">
           <div class="pos-label" style="color:#FF6B35;">WHAT3WORDS</div>
           <button class="copy-btn" style="color:#FF6B35;border-color:rgba(255,107,53,0.3);background:rgba(255,107,53,0.1);" onclick="copyText('///tables.index.ropes',this)">COPY</button>
-          <div class="pos-value" style="font-size:10px;">///tables.index.ropes</div>
+          <div id="posW3W" class="pos-value" style="font-size:10px;">///—.—.—</div>
           <div class="pos-sub">radio-friendly</div>
         </div>
         <div style="margin-top:8px;">
           <div class="lbl">Nearest Airspace</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-            <div><div style="font-size:11px;color:#E2E8F0;">KSAT</div><div style="font-size:7px;color:#64748B;">Class C · 119.8</div></div>
-            <div style="text-align:right;"><div style="font-size:14px;color:#34C759;font-weight:700;">13.6nm</div><div style="font-size:7px;color:#64748B;">hdg 138°</div></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-            <div><div style="font-size:11px;color:#E2E8F0;">KSSF</div><div style="font-size:7px;color:#64748B;">Class D · 118.2</div></div>
-            <div style="text-align:right;"><div style="font-size:14px;color:#34C759;font-weight:700;">8.4nm</div><div style="font-size:7px;color:#64748B;">hdg 210°</div></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div><div style="font-size:11px;color:#E2E8F0;">KSKF</div><div style="font-size:7px;color:#64748B;">Class D · Tower 124.3</div></div>
-            <div style="text-align:right;"><div style="font-size:14px;color:#34C759;font-weight:700;">19.1nm</div><div style="font-size:7px;color:#64748B;">hdg 263°</div></div>
-          </div>
-        </div>
+          <div id="airfieldList"><div style="font-size:9px;color:#475569;padding:4px 0;">Waiting for GPS…</div></div></div>
       </div>
     </div>
 
@@ -187,15 +175,15 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
       <!-- WEATHER -->
       <div class="panel">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div class="lbl" style="margin:0;">Weather — KSAT</div>
-          <div style="font-size:8px;color:#64748B;">METAR 2000Z · <span style="color:#34C759;">VFR</span></div>
+          <div class="lbl" style="margin:0;">Weather — KSKF</div>
+          <div id="wxMeta" style="font-size:8px;color:#64748B;">METAR — · <span id="wxFlt" style="color:#64748B;">—</span></div>
         </div>
         <div class="wx-grid">
-          <div class="wx-cell"><div class="wx-val" style="color:#4A90D9;">180°</div><div style="font-size:11px;font-weight:700;color:#E2E8F0;">12kt</div><div class="wx-lbl">WIND</div></div>
-          <div class="wx-cell"><div class="wx-val" style="color:#FF9F0A;">G18</div><div style="font-size:9px;color:#FF9F0A;margin-top:2px;">⚠ gusts</div><div class="wx-lbl">GUSTS</div></div>
-          <div class="wx-cell"><div class="wx-val" style="color:#34C759;">10+</div><div style="font-size:9px;color:#64748B;margin-top:2px;">miles</div><div class="wx-lbl">VIS</div></div>
-          <div class="wx-cell"><div class="wx-val" style="color:#34C759;">FEW</div><div style="font-size:9px;color:#64748B;margin-top:2px;">4,500ft</div><div class="wx-lbl">CEILING</div></div>
-          <div class="wx-cell"><div class="wx-val" style="color:#E2E8F0;">88°F</div><div style="font-size:9px;color:#64748B;margin-top:2px;">29.92</div><div class="wx-lbl">TEMP / ALT</div></div>
+          <div class="wx-cell"><div class="wx-val" style="id="wxWindDir" class="wx-val" style="color:#4A90D9;">—°</div><div id="wxWindSpd" style="font-size:11px;font-weight:700;color:#E2E8F0;">—kt</div><div class="wx-lbl">WIND</div></div>
+          <div class="wx-cell"><div class="wx-val" style="id="wxGust" class="wx-val" style="color:#64748B;">—</div><div id="wxGustLbl" style="font-size:9px;color:#64748B;margin-top:2px;">—</div><div class="wx-lbl">GUSTS</div></div>
+          <div class="wx-cell"><div class="wx-val" style="id="wxVis" class="wx-val" style="color:#64748B;">—</div><div style="font-size:9px;color:#64748B;margin-top:2px;">miles</div><div class="wx-lbl">VIS</div></div>
+          <div class="wx-cell"><div class="wx-val" style="id="wxCld" class="wx-val" style="color:#64748B;">—</div><div id="wxCldAlt" style="font-size:9px;color:#64748B;margin-top:2px;">—</div><div class="wx-lbl">CEILING</div></div>
+          <div class="wx-cell"><div class="wx-val" style="id="wxTemp" class="wx-val" style="color:#E2E8F0;">—°F</div><div id="wxAlt" style="font-size:9px;color:#64748B;margin-top:2px;">—</div><div class="wx-lbl">TEMP / ALT</div></div>
         </div>
       </div>
 
@@ -267,6 +255,7 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
           <text x="254" y="124" fill="rgba(255,255,255,0.18)" font-size="8" font-family="monospace">1nm</text>
           <text x="254" y="74" fill="rgba(255,255,255,0.18)" font-size="8" font-family="monospace">2nm</text>
           <text x="254" y="24" fill="rgba(255,255,255,0.18)" font-size="8" font-family="monospace">3nm</text>
+          <g id="adsbBlips"></g>
           <!-- Ownship -->
           <circle cx="250" cy="170" r="7" fill="none" stroke="#94A3B8" stroke-width="2"/>
           <polygon points="250,157 244,172 256,172" fill="#94A3B8"/>
@@ -281,104 +270,8 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
           <text x="266" y="298" fill="#34C759" font-size="10" font-family="monospace" font-weight="700">UAL412</text>
           <text x="266" y="309" fill="rgba(52,199,89,0.6)" font-size="8" font-family="monospace">3,200ft · 180kt</text>
         </svg>
-        <div style="border-top:1px solid rgba(255,255,255,0.05);margin-top:6px;padding-top:8px;display:flex;flex-direction:column;gap:4px;">
-          <div class="traffic-row" style="background:rgba(255,59,48,0.07);border:1px solid rgba(255,59,48,0.25);border-left:3px solid #FF3B30;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-weight:700;color:#FF3B30;font-size:11px;">AIRLIFE</span>
-            </div>
-            <div style="display:flex;gap:12px;align-items:center;">
-              <div style="font-size:8px;color:#64748B;">NE · 1.3nm</div>
-              <div style="color:#FF3B30;font-weight:700;font-size:12px;">320ft</div>
-              <div style="font-size:8px;color:#64748B;">65kt · hdg 225°</div>
-            </div>
-          </div>
-          <div class="traffic-row" style="background:rgba(255,159,10,0.05);border:1px solid rgba(255,159,10,0.2);border-left:3px solid #FF9F0A;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-weight:700;color:#FF9F0A;font-size:11px;">N8842P</span>
-            </div>
-            <div style="display:flex;gap:12px;align-items:center;">
-              <div style="font-size:8px;color:#64748B;">NW · 1.4nm</div>
-              <div style="color:#FF9F0A;font-weight:700;font-size:12px;">750ft</div>
-              <div style="font-size:8px;color:#64748B;">90kt · hdg 135°</div>
-            </div>
-          </div>
-          <div class="traffic-row" style="background:rgba(52,199,89,0.04);border:1px solid rgba(52,199,89,0.15);border-left:3px solid #34C759;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-weight:700;color:#34C759;font-size:11px;">UAL412</span>
-            </div>
-            <div style="display:flex;gap:12px;align-items:center;">
-              <div style="font-size:8px;color:#64748B;">S · 1.9nm</div>
-              <div style="color:#34C759;font-weight:700;font-size:12px;">3,200ft</div>
-              <div style="font-size:8px;color:#64748B;">180kt · hdg 010°</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- RIGHT: THERMAL -->
-    <div class="right">
-      <div class="panel" style="flex:1;overflow-y:auto;">
-        <div class="lbl">Quick Thermal Config</div>
-
-        <div style="font-size:7px;color:#FF3B30;letter-spacing:2px;margin:4px 0 4px;">FIRE</div>
-        <div class="thermal-card" style="border-color:rgba(255,59,48,0.3);background:rgba(255,59,48,0.05);">
-          <div class="t-icon">🔥</div><div><div class="t-name">Structure Fire</div><div class="t-sub">White Hot · ULTRA-HIGH</div></div>
-          <span class="t-badge" style="background:rgba(255,59,48,0.15);color:#FF3B30;border:1px solid rgba(255,59,48,0.3);">FIRE</span>
-        </div>
-        <div class="thermal-card" style="border-color:rgba(255,107,53,0.3);background:rgba(255,107,53,0.05);">
-          <div class="t-icon">🌲</div><div><div class="t-name">Wildland Fire</div><div class="t-sub">Iron Bow · HIGH</div></div>
-          <span class="t-badge" style="background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.3);">FIRE</span>
-        </div>
-
-        <div style="font-size:7px;color:#4A90D9;letter-spacing:2px;margin:8px 0 4px;">SAR</div>
-        <div class="thermal-card" style="border-color:rgba(74,144,217,0.3);background:rgba(74,144,217,0.05);">
-          <div class="t-icon">🔦</div><div><div class="t-name">Search &amp; Rescue</div><div class="t-sub">White Hot · HIGH · Day/Night</div></div>
-          <span class="t-badge" style="background:rgba(74,144,217,0.15);color:#4A90D9;border:1px solid rgba(74,144,217,0.3);">SAR</span>
-        </div>
-        <div class="thermal-card" style="border-color:rgba(74,144,217,0.3);background:rgba(74,144,217,0.05);">
-          <div class="t-icon">🌊</div><div><div class="t-name">Water Rescue</div><div class="t-sub">Iron Bow / Rainbow · LOW</div></div>
-          <span class="t-badge" style="background:rgba(74,144,217,0.15);color:#4A90D9;border:1px solid rgba(74,144,217,0.3);">SAR</span>
-        </div>
-
-        <div style="font-size:7px;color:#FF9F0A;letter-spacing:2px;margin:8px 0 4px;">HAZ</div>
-        <div class="thermal-card" style="border-color:rgba(255,159,10,0.3);background:rgba(255,159,10,0.05);">
-          <div class="t-icon">☣️</div><div><div class="t-name">Hazmat</div><div class="t-sub">Rainbow · ULTRA-HIGH</div></div>
-          <span class="t-badge" style="background:rgba(255,159,10,0.15);color:#FF9F0A;border:1px solid rgba(255,159,10,0.3);">HAZ</span>
-        </div>
-
-        <div style="font-size:7px;color:#94A3B8;letter-spacing:2px;margin:8px 0 4px;">OPS</div>
-        <div class="thermal-card" style="border-color:rgba(148,163,184,0.15);">
-          <div class="t-icon">🏗️</div><div><div class="t-name">Damage Assessment</div><div class="t-sub">Iron Bow · HIGH</div></div>
-          <span class="t-badge" style="background:rgba(148,163,184,0.08);color:#94A3B8;border:1px solid rgba(148,163,184,0.2);">OPS</span>
-        </div>
-        <div class="thermal-card" style="border-color:rgba(148,163,184,0.15);">
-          <div class="t-icon">⛈️</div><div><div class="t-name">Storm / Severe Wx</div><div class="t-sub">Iron Bow · HIGH</div></div>
-          <span class="t-badge" style="background:rgba(148,163,184,0.08);color:#94A3B8;border:1px solid rgba(148,163,184,0.2);">OPS</span>
-        </div>
-        <div class="thermal-card" style="border-color:rgba(148,163,184,0.15);">
-          <div class="t-icon">⚡</div><div><div class="t-name">Power / Infrastructure</div><div class="t-sub">Rainbow · ULTRA-HIGH</div></div>
-          <span class="t-badge" style="background:rgba(148,163,184,0.08);color:#94A3B8;border:1px solid rgba(148,163,184,0.2);">OPS</span>
-        </div>
-        <div class="thermal-card" style="border-color:rgba(148,163,184,0.15);">
-          <div class="t-icon">👁️</div><div><div class="t-name">General Overwatch</div><div class="t-sub">White Hot · HIGH</div></div>
-          <span class="t-badge" style="background:rgba(148,163,184,0.08);color:#94A3B8;border:1px solid rgba(148,163,184,0.2);">OPS</span>
-        </div>
-        <div class="thermal-card" style="border-color:rgba(148,163,184,0.15);">
-          <div class="t-icon">🐄</div><div><div class="t-name">Large Animal</div><div class="t-sub">Iron Bow · HIGH</div></div>
-          <span class="t-badge" style="background:rgba(148,163,184,0.08);color:#94A3B8;border:1px solid rgba(148,163,184,0.2);">OPS</span>
-        </div>
-
-        <div style="font-size:7px;color:#C084FC;letter-spacing:2px;margin:8px 0 4px;">MCI</div>
-        <div class="thermal-card" style="border-color:rgba(192,132,252,0.25);background:rgba(192,132,252,0.04);">
-          <div class="t-icon">🏥</div><div><div class="t-name">Mass Casualty</div><div class="t-sub">Iron Bow · HIGH</div></div>
-          <span class="t-badge" style="background:rgba(192,132,252,0.12);color:#C084FC;border:1px solid rgba(192,132,252,0.3);">MCI</span>
-        </div>
-
-        <div style="font-size:7px;color:#64748B;letter-spacing:2px;margin:8px 0 4px;">LE</div>
-        <div class="thermal-card" style="border-color:rgba(148,163,184,0.15);">
-          <div class="t-icon">🚗</div><div><div class="t-name">Vehicle Pursuit</div><div class="t-sub">White Hot · LOW</div></div>
-          <span class="t-badge" style="background:rgba(148,163,184,0.08);color:#94A3B8;border:1px solid rgba(148,163,184,0.2);">LE</span>
+        <div id="trafficList" style="border-top:1px solid rgba(255,255,255,0.05);margin-top:6px;padding-top:8px;display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:9px;color:#475569;text-align:center;padding:8px 0;">Waiting for position…</div>
         </div>
       </div>
     </div>
@@ -388,7 +281,7 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
   <!-- FOOTER -->
   <div class="footer">
     <div style="font-size:7px;color:#334155;letter-spacing:2px;">BC2FD FIREHAWK UAS · BEXAR COUNTY ESD NO. 2</div>
-    <div style="font-size:7px;color:#475569;letter-spacing:2px;">AUTO-REFRESH 10s · LAST SYNC 20:14:28 CST</div>
+    <div style="font-size:7px;color:#475569;letter-spacing:2px;">AUTO-REFRESH 10s · <span id="lastSync">LAST SYNC —</span></div>
     <a href="https://afherkdriver.github.io/firehawk-ops/" target="_blank" style="font-size:7px;color:#334155;letter-spacing:1px;text-decoration:none;opacity:0.6;transition:opacity 0.2s;" onmouseover="this.style.opacity='1';this.style.color='#4A90D9'" onmouseout="this.style.opacity='0.6';this.style.color='#334155'">&#8599; Firehawk Scheduler</a>
 
   </div>
@@ -396,6 +289,7 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
 </div>
 
 <script>
+// ── Utilities ──────────────────────────────────────────────────────────────
 function copyText(text, btn) {
   navigator.clipboard.writeText(text).catch(()=>{});
   const orig = btn.textContent;
@@ -415,6 +309,402 @@ function showAC(model, status, rows) {
 function closePopup(e) {
   if (e.target.id === 'popup') document.getElementById('popup').classList.remove('show');
 }
+
+// ── Math helpers ───────────────────────────────────────────────────────────
+const toRad = d => d * Math.PI / 180;
+function bearingTo(lat1, lon1, lat2, lon2) {
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+            Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+function distNm(lat1, lon1, lat2, lon2) {
+  const R = 3440.065;
+  const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function dirLabel(brg) {
+  return ['N','NE','E','SE','S','SW','W','NW'][Math.round(brg/45)%8];
+}
+function latLonToMGRS(lat, lon) {
+  try {
+    const a=6378137, f=1/298.257223563, b=a*(1-f);
+    const e2=(a**2-b**2)/a**2;
+    const latR=toRad(lat), lonR=toRad(lon);
+    const zone=Math.floor((lon+180)/6)+1;
+    const lon0=toRad((zone-1)*6-180+3);
+    const N=a/Math.sqrt(1-e2*Math.sin(latR)**2);
+    const T=Math.tan(latR)**2, C=e2/(1-e2)*Math.cos(latR)**2, A=Math.cos(latR)*(lonR-lon0);
+    const M=a*((1-e2/4-3*e2**2/64-5*e2**3/256)*latR
+      -(3*e2/8+3*e2**2/32+45*e2**3/1024)*Math.sin(2*latR)
+      +(15*e2**2/256+45*e2**3/1024)*Math.sin(4*latR)
+      -(35*e2**3/3072)*Math.sin(6*latR));
+    const x=0.9996*(N*(A+(1-T+C)*A**3/6+(5-18*T+T**2+72*C-58*e2/(1-e2))*A**5/120))+500000;
+    const y=0.9996*(M+N*Math.tan(latR)*(A**2/2+(5-T+9*C+4*C**2)*A**4/24+(61-58*T+T**2+600*C-330*e2/(1-e2))*A**6/720))+(lat<0?10000000:0);
+    const bands='CDEFGHJKLMNPQRSTUVWX';
+    const latBand=bands[Math.floor((lat+80)/8)];
+    const colIdx=((zone-1)%3)*8+Math.floor((x-100000)/100000);
+    const rowIdx=(Math.floor(y/100000)+(zone%2===0?5:0))%20;
+    const cols='ABCDEFGHJKLMNPQRSTUVWXYZ', rows='ABCDEFGHJKLMNPQRSTUV';
+    const easting=Math.floor(x%100000).toString().padStart(5,'0');
+    const northing=Math.floor(y%100000).toString().padStart(5,'0');
+    return zone+latBand+cols[colIdx]+rows[rowIdx]+' '+easting+' '+northing;
+  } catch(e){ return null; }
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────
+const WORKER = 'https://firehawk-wx.usafsentinel-45e.workers.dev';
+const W3W_KEY = '38EG0MIO'; // placeholder — replace with working key
+const KSKF = { lat: 29.3842, lon: -98.5811 };
+const AIRFIELDS = [
+  { id:'KSAT', name:'San Antonio Intl', cls:'Class C', ctaf:'Tower 119.8', lat:29.5337, lon:-98.4698 },
+  { id:'KSSF', name:'Stinson Municipal', cls:'Class D', ctaf:'CTAF 118.2',  lat:29.3369, lon:-98.4711 },
+  { id:'KSKF', name:'Kelly Field',       cls:'Class D', ctaf:'Tower 124.3', lat:29.3842, lon:-98.5811 },
+  { id:'KRND', name:'Randolph AFB',      cls:'Class D', ctaf:'Tower 128.25',lat:29.5297, lon:-98.2789 }
+];
+
+let posCoords = null;
+let wxData = null;
+
+// ── Sync timestamp ─────────────────────────────────────────────────────────
+function updateSync() {
+  const el = document.getElementById('lastSync');
+  if (!el) return;
+  const now = new Date();
+  el.textContent = 'LAST SYNC ' + now.toLocaleTimeString('en-US',{
+    hour:'2-digit', minute:'2-digit', second:'2-digit',
+    timeZone:'America/Chicago', timeZoneName:'short'
+  });
+}
+
+// ── Burn Ban ───────────────────────────────────────────────────────────────
+async function fetchBurnBan() {
+  try {
+    const r = await fetch(WORKER + '/burnban');
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('bannerBurnBan');
+    if (!el) return;
+    if (d && d.underBan) {
+      el.style.display = 'flex';
+      const ts = document.getElementById('bannerBurnBanTime');
+      if (ts && d.updated) {
+        ts.textContent = 'TFS · ' + new Date(d.updated).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+      }
+    } else {
+      el.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+// ── Red Flag Warning ───────────────────────────────────────────────────────
+async function fetchRedFlag() {
+  try {
+    const r = await fetch(WORKER + '/redflag');
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('bannerRedFlag');
+    if (!el) return;
+    if (d && d.active) {
+      el.style.display = 'flex';
+      const ts = document.getElementById('bannerRedFlagTime');
+      if (ts && d.updated) {
+        ts.textContent = 'NWS · ' + new Date(d.updated).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+      }
+    } else {
+      el.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+// ── METAR ──────────────────────────────────────────────────────────────────
+function wxColor(val, ok, warn) {
+  if (val >= ok) return '#34C759';
+  if (val >= warn) return '#FF9F0A';
+  return '#FF3B30';
+}
+function cldCover(code) {
+  const map = { SKC:'SKC', CLR:'CLR', FEW:'FEW', SCT:'SCT', BKN:'BKN', OVC:'OVC', VV:'VV' };
+  return map[code] || code;
+}
+async function fetchMETAR() {
+  try {
+    const url = 'https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false';
+    const proxy = WORKER + '/?url=' + encodeURIComponent(url);
+    let data = null;
+    // try proxy first, fall back to direct
+    for (const endpoint of [proxy, url]) {
+      try {
+        const r = await fetch(endpoint);
+        if (!r.ok) continue;
+        const arr = await r.json();
+        if (Array.isArray(arr) && arr.length > 0) { data = arr[0]; break; }
+      } catch(e) {}
+    }
+    if (!data) return;
+
+    wxData = data;
+
+    // Wind
+    const wdir = data.wdir ?? 0;
+    const wspd = data.wspd ?? 0;
+    const wgst = data.wgst ?? 0;
+    const vis  = data.visib ?? 10;
+    const tmpF = data.temp != null ? Math.round(data.temp * 9/5 + 32) : null;
+    const altim = data.altim ?? null;
+
+    // Ceiling: lowest BKN or OVC layer
+    let ceilCode = 'CLEAR', ceilAlt = null;
+    if (data.clouds && data.clouds.length > 0) {
+      const cld = data.clouds.find(c => c.cover === 'BKN' || c.cover === 'OVC' || c.cover === 'VV')
+               || data.clouds[0];
+      ceilCode = ceilCover(cld.cover);
+      ceilAlt  = cld.base != null ? cld.base : null;
+    }
+
+    // Flight rules
+    let flt = 'VFR', fltColor = '#34C759';
+    if (vis < 1 || (ceilAlt != null && ceilAlt < 500)) { flt='LIFR'; fltColor='#FF3B30'; }
+    else if (vis < 3 || (ceilAlt != null && ceilAlt < 1000)) { flt='IFR'; fltColor='#FF3B30'; }
+    else if (vis < 5 || (ceilAlt != null && ceilAlt < 3000)) { flt='MVFR'; fltColor='#FF9F0A'; }
+
+    // Time
+    const obsTime = data.reportTime || data.obsTime || '';
+    const metarTime = obsTime ? new Date(obsTime).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'}) : '—';
+
+    // Update DOM
+    const g = id => document.getElementById(id);
+    if (g('wxMeta')) g('wxMeta').innerHTML = 'METAR ' + metarTime + ' · <span id="wxFlt" style="color:'+fltColor+'">'+flt+'</span>';
+    if (g('wxWindDir')) { g('wxWindDir').textContent = wdir.toString().padStart(3,'0')+'°'; g('wxWindDir').style.color='#4A90D9'; }
+    if (g('wxWindSpd')) g('wxWindSpd').textContent = wspd+'kt';
+    if (g('wxGust')) {
+      if (wgst > 0) {
+        g('wxGust').textContent = 'G'+wgst;
+        g('wxGust').style.color = '#FF9F0A';
+        if (g('wxGustLbl')) { g('wxGustLbl').textContent = '⚠ gusts'; g('wxGustLbl').style.color='#FF9F0A'; }
+      } else {
+        g('wxGust').textContent = 'CALM'; g('wxGust').style.color='#34C759';
+        if (g('wxGustLbl')) { g('wxGustLbl').textContent = 'no gusts'; g('wxGustLbl').style.color='#64748B'; }
+      }
+    }
+    if (g('wxVis')) { g('wxVis').textContent = vis >= 10 ? '10+' : vis.toString(); g('wxVis').style.color = wxColor(vis,5,3); }
+    if (g('wxCld')) { g('wxCld').textContent = ceilCode; g('wxCld').style.color = ceilAlt == null ? '#34C759' : wxColor(ceilAlt,3000,1000); }
+    if (g('wxCldAlt')) g('wxCldAlt').textContent = ceilAlt != null ? ceilAlt.toLocaleString()+'ft' : '—';
+    if (g('wxTemp')) g('wxTemp').textContent = tmpF != null ? tmpF+'°F' : '—°F';
+    if (g('wxAlt')) g('wxAlt').textContent = altim != null ? altim.toFixed(2) : '—';
+
+    // Update aircraft readiness with live weather
+    updateReadiness(wspd, wgst, tmpF, vis);
+
+    updateSync();
+  } catch(e) { console.warn('METAR error', e); }
+}
+// helper alias
+function ceilCover(code) {
+  return { SKC:'SKC',CLR:'CLR',FEW:'FEW',SCT:'SCT',BKN:'BKN',OVC:'OVC',VV:'VV' }[code] || code;
+}
+
+// ── Aircraft readiness ─────────────────────────────────────────────────────
+function acStatus(wspd, wgst, tmpF, vis, limitWind, limitTemp, hasIP) {
+  const effectiveWind = Math.max(wspd, wgst);
+  const rows = [];
+  let status = 'GO';
+  if (effectiveWind > limitWind) { rows.push('⚠ Wind '+effectiveWind+'kt (limit '+limitWind+'kt)'); status='NO-GO'; }
+  else rows.push('Wind '+effectiveWind+'kt ✓ (limit '+limitWind+'kt)');
+  if (tmpF != null && tmpF > limitTemp) { rows.push('⚠ Temp '+tmpF+'°F (limit '+limitTemp+'°F)'); status='NO-GO'; }
+  else if (tmpF != null) rows.push('Temp '+tmpF+'°F ✓ (limit '+limitTemp+'°F)');
+  if (!hasIP && wgst > 10) { rows.push('⚠ Gusts '+wgst+'kt — No IP rating'); if (status==='GO') status='CAUTION'; }
+  if (vis < 1) { rows.push('⚠ Visibility '+vis+'mi (min 1mi)'); status='NO-GO'; }
+  else rows.push('Visibility '+vis+'mi ✓');
+  return { status, rows };
+}
+function updateReadiness(wspd, wgst, tmpF, vis) {
+  const platforms = [
+    { id:'pillM30T', model:'M30T', limitWind:27, limitTemp:104, hasIP:true },
+    { id:'pillM4TD', model:'M4TD', limitWind:27, limitTemp:104, hasIP:true },
+    { id:'pillM4T',  model:'M4T',  limitWind:27, limitTemp:104, hasIP:false }
+  ];
+  const colors = { GO:'rgba(52,199,89', CAUTION:'rgba(255,159,10', 'NO-GO':'rgba(255,59,48' };
+  platforms.forEach(p => {
+    const el = document.getElementById(p.id);
+    if (!el) return;
+    const { status, rows } = acStatus(wspd||0, wgst||0, tmpF, vis||10, p.limitWind, p.limitTemp, p.hasIP);
+    const c = colors[status];
+    el.style.background = c+',0.08)';
+    el.style.borderColor = c+',0.35)';
+    const modelEl = el.querySelector('.ac-model');
+    if (modelEl) modelEl.style.color = status==='GO'?'#34C759':status==='CAUTION'?'#FF9F0A':'#FF3B30';
+    el.setAttribute('onclick', "showAC('"+p.model+"','"+status+"',"+JSON.stringify(rows)+")");
+  });
+}
+
+// ── Geolocation + W3W + Airfields ─────────────────────────────────────────
+function startGeolocation() {
+  if (!navigator.geolocation) { updatePosError('GPS not available'); return; }
+  navigator.geolocation.watchPosition(pos => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    posCoords = { lat, lon };
+
+    // Coordinates
+    const latStr = lat.toFixed(4)+'° N';
+    const lonStr = Math.abs(lon).toFixed(4)+'° W';
+    const coordEl = document.getElementById('posCoords');
+    if (coordEl) coordEl.textContent = latStr+' · '+lonStr;
+
+    // MGRS
+    const mgrs = latLonToMGRS(lat, lon);
+    const mgrsEl = document.getElementById('posMGRS');
+    if (mgrsEl) mgrsEl.textContent = mgrs || '—';
+
+    // W3W — placeholder key, call API with correct endpoint
+    fetch('https://api.what3words.com/v3/convert-to-3wa?coordinates='+lat.toFixed(6)+'%2C'+lon.toFixed(6)+'&language=en&format=json&key='+W3W_KEY)
+      .then(r => r.json())
+      .then(d => {
+        const el = document.getElementById('posW3W');
+        if (el && d.words) el.textContent = '///'+d.words;
+        else if (el && d.error) el.textContent = '///key.not.active'; // graceful fallback
+      }).catch(() => {
+        const el = document.getElementById('posW3W');
+        if (el) el.textContent = '///api.unavailable';
+      });
+
+    // Nearest airfields
+    updateAirfields(lat, lon);
+
+    // Trigger ADS-B on first fix
+    if (!adsbInterval) startADSB();
+
+  }, err => {
+    updatePosError('GPS unavailable ('+err.message+')');
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+}
+
+function updatePosError(msg) {
+  const coordEl = document.getElementById('posCoords');
+  if (coordEl) coordEl.textContent = msg;
+}
+
+function updateAirfields(lat, lon) {
+  const list = AIRFIELDS.map(a => ({
+    ...a,
+    dist: distNm(lat, lon, a.lat, a.lon),
+    brg:  Math.round(bearingTo(lat, lon, a.lat, a.lon))
+  })).sort((a,b) => a.dist-b.dist);
+
+  const el = document.getElementById('airfieldList');
+  if (!el) return;
+  el.innerHTML = list.map((a,i) => {
+    const distColor = a.dist < 5 ? '#FF9F0A' : a.dist < 10 ? '#E2E8F0' : '#34C759';
+    const mb = i < list.length-1 ? 'margin-bottom:5px;' : '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;'+mb+'">'+
+      '<div><div style="font-size:11px;color:#E2E8F0;">'+a.id+'</div>'+
+      '<div style="font-size:7px;color:#64748B;">'+a.cls+' · '+a.ctaf+'</div></div>'+
+      '<div style="text-align:right;"><div style="font-size:14px;color:'+distColor+';font-weight:700;">'+a.dist.toFixed(1)+'nm</div>'+
+      '<div style="font-size:7px;color:#64748B;">hdg '+a.brg+'°</div></div>'+
+      '</div>';
+  }).join('');
+}
+
+// ── ADS-B ──────────────────────────────────────────────────────────────────
+let adsbInterval = null;
+const ALT_FILTER = 3000; // default ft AGL filter
+
+function startADSB() {
+  fetchADSB();
+  adsbInterval = setInterval(fetchADSB, 10000);
+}
+
+async function fetchADSB() {
+  if (!posCoords) return;
+  try {
+    const url = 'https://api.airplanes.live/v2/point/'+posCoords.lat.toFixed(4)+'/'+posCoords.lon.toFixed(4)+'/3';
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const data = await r.json();
+    const ac = (data.ac || [])
+      .filter(a => a.alt_baro && a.alt_baro !== 'ground' && a.alt_baro <= ALT_FILTER && a.lat && a.lon)
+      .map(a => ({
+        call: (a.flight || a.hex || 'UNKN').trim(),
+        alt:  Math.round(a.alt_baro),
+        spd:  Math.round(a.gs || 0),
+        hdg:  Math.round(a.track || 0),
+        dist: distNm(posCoords.lat, posCoords.lon, a.lat, a.lon),
+        brg:  Math.round(bearingTo(posCoords.lat, posCoords.lon, a.lat, a.lon)),
+        dir:  dirLabel(bearingTo(posCoords.lat, posCoords.lon, a.lat, a.lon))
+      }))
+      .filter(a => a.dist <= 3)
+      .sort((a,b) => a.alt - b.alt);
+
+    renderADSBScope(ac);
+    renderTrafficList(ac);
+    updateSync();
+  } catch(e) {}
+}
+
+function acColor(alt) {
+  if (alt <= 400)  return '#FF3B30'; // CONFLICT
+  if (alt <= 1000) return '#FF9F0A'; // NEARBY
+  return '#34C759'; // HIGH
+}
+
+function renderADSBScope(ac) {
+  const g = document.getElementById('adsbBlips');
+  if (!g) return;
+  // SVG center = 250,170; 3nm = 150px radius; 1nm = 50px
+  const CX=250, CY=170, SCALE=50;
+  g.innerHTML = ac.map(a => {
+    const brgR = (a.brg - 90) * Math.PI / 180; // convert bearing to SVG angle
+    const px = CX + Math.cos(brgR) * a.dist * SCALE;
+    const py = CY + Math.sin(brgR) * a.dist * SCALE;
+    const c = acColor(a.alt);
+    const callTrunc = a.call.length > 7 ? a.call.slice(0,7) : a.call;
+    const tx = px > 350 ? px - 5 : px + 12;
+    const anchor = px > 350 ? 'end' : 'start';
+    return '<g transform="translate('+px.toFixed(1)+','+py.toFixed(1)+') rotate('+a.hdg+')">'+
+           '<polygon points="0,-8 -4,6 0,3 4,6" fill="'+c+'"/></g>'+
+           '<text x="'+tx.toFixed(1)+'" y="'+(py-2).toFixed(1)+'" fill="'+c+'" font-size="9" font-family="monospace" font-weight="700" text-anchor="'+anchor+'">'+callTrunc+'</text>'+
+           '<text x="'+tx.toFixed(1)+'" y="'+(py+9).toFixed(1)+'" fill="'+c+'88" font-size="7" font-family="monospace" text-anchor="'+anchor+'">'+a.alt+'ft · '+a.spd+'kt</text>';
+  }).join('');
+}
+
+function renderTrafficList(ac) {
+  const el = document.getElementById('trafficList');
+  if (!el) return;
+  if (ac.length === 0) {
+    el.innerHTML = '<div style="font-size:9px;color:#475569;text-align:center;padding:8px 0;">No traffic within 3nm below 3,000ft</div>';
+    return;
+  }
+  el.innerHTML = ac.map(a => {
+    const c = acColor(a.alt);
+    const layer = a.alt <= 400 ? 'CONFLICT' : a.alt <= 1000 ? 'NEARBY' : 'HIGH';
+    return '<div class="traffic-row" style="background:'+c+'0D;border:1px solid '+c+'44;border-left:3px solid '+c+';">'+
+      '<div style="display:flex;align-items:center;gap:6px;">'+
+      '<span style="font-weight:700;color:'+c+';font-size:11px;">'+a.call+'</span>'+
+      '<span style="font-size:7px;color:'+c+'88;letter-spacing:1px;">'+layer+'</span></div>'+
+      '<div style="display:flex;gap:12px;align-items:center;">'+
+      '<div style="font-size:8px;color:#64748B;">'+a.dir+' · '+a.dist.toFixed(1)+'nm</div>'+
+      '<div style="color:'+c+';font-weight:700;font-size:12px;">'+a.alt+'ft</div>'+
+      '<div style="font-size:8px;color:#64748B;">'+a.spd+'kt · hdg '+a.hdg+'°</div>'+
+      '</div></div>';
+  }).join('');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async function init() {
+  // Banners — fetch immediately then schedule
+  await Promise.allSettled([fetchBurnBan(), fetchRedFlag()]);
+  setInterval(fetchBurnBan, 3600000);   // hourly
+  setInterval(fetchRedFlag, 1800000);   // 30 min
+
+  // METAR — fetch immediately then every 10 min
+  fetchMETAR();
+  setInterval(fetchMETAR, 600000);
+
+  // GPS
+  startGeolocation();
+})();
 </script>
 </body>
 </html>
