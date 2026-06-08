@@ -4582,7 +4582,7 @@ function AirspaceModal({
   useEffect(() => {
     if (!posCoords) return;
     const fetchADSB = () => {
-      fetch("https://api.airplanes.live/v2/point/" + posCoords.lat.toFixed(4) + "/" + posCoords.lon.toFixed(4) + "/2")
+      fetch("https://api.airplanes.live/v2/point/" + posCoords.lat.toFixed(4) + "/" + posCoords.lon.toFixed(4) + "/3")
         .then(r => r.json()).then(data => {
           const ac = (data.ac || [])
             .filter(a => a.alt_baro && a.alt_baro !== "ground" && a.alt_baro <= 1000 && a.lat && a.lon)
@@ -5166,7 +5166,7 @@ function AirspaceModal({
   /* ── ADS-B SCOPE ──────────────────────────────────────────────────── */
   /*#__PURE__*/React.createElement("div", null,
     /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 3 } }, "ADS-B TRAFFIC — 2nm"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 3 } }, "ADS-B TRAFFIC — 3nm"),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 1 } }, "BELOW 1,000ft AGL")
     ),
 
@@ -5205,12 +5205,14 @@ function AirspaceModal({
       }, heading + "\xb0 " + (() => { const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"]; return dirs[Math.round(heading / 22.5) % 16]; })()),
       /*#__PURE__*/React.createElement("svg", { viewBox: "0 0 320 280", width: "100%", style: { display: "block" } },
         /*#__PURE__*/React.createElement("g", { transform: scopeMode === "track" ? "rotate(" + (-heading) + ", 160, 150)" : undefined },
-          /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 60, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 40, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 80, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
           /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 120, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
           /*#__PURE__*/React.createElement("line", { x1: 160, y1: 10, x2: 160, y2: 290, stroke: "rgba(255,255,255,0.04)", strokeWidth: 1 }),
           /*#__PURE__*/React.createElement("line", { x1: 20, y1: 150, x2: 300, y2: 150, stroke: "rgba(255,255,255,0.04)", strokeWidth: 1 }),
-          /*#__PURE__*/React.createElement("text", { x: 164, y: 97, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "1nm"),
-          /*#__PURE__*/React.createElement("text", { x: 164, y: 37, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "2nm"),
+          /*#__PURE__*/React.createElement("text", { x: 164, y: 117, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "1nm"),
+          /*#__PURE__*/React.createElement("text", { x: 164, y: 77, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "2nm"),
+          /*#__PURE__*/React.createElement("text", { x: 164, y: 37, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "3nm"),
 
           /* North-up: 30-degree tick marks + labels around outer ring */
           scopeMode === "north" && /*#__PURE__*/React.createElement("g", null,
@@ -5242,7 +5244,7 @@ function AirspaceModal({
           adsbTraffic.map(ac => {
             const color = ac.alt <= 400 ? "#FF3B30" : "#FF9F0A";
             const rad = (ac.brg - 90) * Math.PI / 180;
-            const r = (ac.dist / 2) * 120;
+            const r = (ac.dist / 3) * 120;
             const x = 160 + r * Math.cos(rad);
             const y = 150 + r * Math.sin(rad);
             return /*#__PURE__*/React.createElement("g", { key: ac.call, transform: "translate(" + x + "," + y + ") rotate(" + ac.hdg + ")" },
@@ -5252,7 +5254,7 @@ function AirspaceModal({
           adsbTraffic.map(ac => {
             const color = ac.alt <= 400 ? "#FF3B30" : "#FF9F0A";
             const rad = (ac.brg - 90) * Math.PI / 180;
-            const r = (ac.dist / 2) * 120;
+            const r = (ac.dist / 3) * 120;
             const x = 160 + r * Math.cos(rad);
             const y = 150 + r * Math.sin(rad);
             return /*#__PURE__*/React.createElement("g", { key: ac.call + "_lbl" },
@@ -5271,7 +5273,7 @@ function AirspaceModal({
 
     /* Traffic list */
     adsbTraffic.length === 0
-      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#64748B", textAlign: "center", padding: "12px 0", fontStyle: "italic" } }, adsbLoading ? "Scanning for traffic..." : "No traffic below 1,000ft within 2nm")
+      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#64748B", textAlign: "center", padding: "12px 0", fontStyle: "italic" } }, adsbLoading ? "Scanning for traffic..." : "No traffic below 1,000ft within 3nm")
       : /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
         adsbTraffic.map(ac => {
           const isConflict = ac.alt <= 400;
