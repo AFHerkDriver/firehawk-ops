@@ -4548,12 +4548,10 @@ const [showComms, setShowComms] = useState(false);
         .then(r => r.json()).then(d => { if(d.words) setPosW3W("///" + d.words); else setPosW3W("///key.not.active"); }).catch(()=>{ setPosW3W("///key.not.active"); });
       // Nearest airfields
       const af = [
-        { id:"KSAT", name:"San Antonio Intl", cls:"C", ctaf:"Tower 119.8", lat:29.5337, lon:-98.4698 },
-        { id:"KSSF", name:"Stinson Municipal", cls:"D", ctaf:"CTAF 118.2", lat:29.3369, lon:-98.4711 },
-        { id:"KSKF", name:"Kelly Field", cls:"D", ctaf:"Tower 124.3", lat:29.3842, lon:-98.5811 },
-        { id:"KRND", name:"Randolph AFB", cls:"D", ctaf:"Tower 128.25", lat:29.5297, lon:-98.2789 }
-      ].map(a => ({ ...a, dist: distNm(lat,lon,a.lat,a.lon), brg: Math.round(bearingTo(lat,lon,a.lat,a.lon)) }))
-       .sort((a,b) => a.dist-b.dist).slice(0,2);
+        { id:"KSKF", name:"Kelly Field",        cls:"D", ctaf:"Tower 124.3",  lat:29.3842, lon:-98.5811 },
+        { id:"KSAT", name:"San Antonio Intl",   cls:"C", ctaf:"Tower 119.8",  lat:29.5337, lon:-98.4698 },
+        { id:"KSSF", name:"Stinson Municipal",  cls:"D", ctaf:"CTAF 118.2",   lat:29.3369, lon:-98.4711 }
+      ].map(a => ({ ...a, dist: distNm(lat,lon,a.lat,a.lon), brg: Math.round(bearingTo(lat,lon,a.lat,a.lon)) }));
       setNearestAirfields(af);
     }, () => setPosErr(true), { enableHighAccuracy: true, maximumAge: 5000 });
     return () => navigator.geolocation.clearWatch(watchId);
@@ -4782,7 +4780,7 @@ const [showComms, setShowComms] = useState(false);
     /*#__PURE__*/React.createElement("div", {
       style: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 12, marginBottom: 8 }
     },
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2, marginBottom: 8 } }, "NEAREST CONTROLLED AIRSPACE"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2, marginBottom: 8 } }, "KSKF · KSAT · KSSF"),
       nearestAirfields.map((af, i) => /*#__PURE__*/React.createElement("div", { key: af.id },
         i > 0 && /*#__PURE__*/React.createElement("div", { style: { height: 1, background: "rgba(255,255,255,0.05)", margin: "7px 0" } }),
         /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
@@ -4791,7 +4789,7 @@ const [showComms, setShowComms] = useState(false);
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } }, "Class " + af.cls + " \xb7 " + af.ctaf)
           ),
           /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } },
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: i === 0 ? "#FF6B35" : "#D4AF37", fontWeight: 700 } },
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: af.dist < 2 ? "#FF3B30" : af.dist < 5 ? "#FF9F0A" : "#34C759", fontWeight: 700 } },
               af.dist !== null ? af.dist.toFixed(1) + " nm" : "---"
             ),
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } },
@@ -4931,14 +4929,20 @@ const [showComms, setShowComms] = useState(false);
         ),
 
         scopeMode === "north" && /*#__PURE__*/React.createElement(React.Fragment, null,
-          ...[[0,"360"],[90,"090"],[180,"180"],[270,"270"]].map(function(pair) {
-            var deg = pair[0]; var lbl = pair[1];
+          ...Array.from({length: 12}, function(_, i) {
+            var deg = i * 30;
+            var isCard = deg % 90 === 0;
+            var lbl = String(deg === 0 ? 360 : deg).padStart(3, "0");
             var rad = (deg - 90) * Math.PI / 180;
-            var lx = 160 + 133 * Math.cos(rad); var ly = 155 + 133 * Math.sin(rad);
+            var lx = 160 + 133 * Math.cos(rad);
+            var ly = 155 + 133 * Math.sin(rad);
             return /*#__PURE__*/React.createElement("text", {
               key: "nl" + deg, x: lx, y: ly + 3,
-              fill: "rgba(255,255,255,0.55)",
-              fontSize: 8, fontFamily: "monospace", fontWeight: "bold", textAnchor: "middle"
+              fill: isCard ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.22)",
+              fontSize: isCard ? 8 : 7,
+              fontFamily: "monospace",
+              fontWeight: isCard ? "bold" : "normal",
+              textAnchor: "middle"
             }, lbl);
           })
         ),
