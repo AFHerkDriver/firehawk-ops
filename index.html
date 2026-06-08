@@ -5502,22 +5502,40 @@ const MISSIONS = [{
   label: "Water Rescue",
   sub: "Victim in water, swimmer, flood ops",
   color: "#4A90D9",
-  dayNight: false,
-  config: {
+  dayNight: true,
+  dayLabel: "THERMAL",
+  nightLabel: "RIPPLE",
+  configDay: {
     gain: "LOW",
-    gainReason: "Water temperature is relatively uniform — human body temp stands out strongly at low gain for surface victims",
-    palette: "Rainbow / Iron Bow",
-    paletteReason: "Submerged victims are invisible to thermal. Use Rainbow or Iron Bow to detect surface ripples from a flailing subject — these palettes show water disturbance more clearly than White Hot (Reed, DroneSense)",
+    gainReason: "Surface victim thermal mode — water temp is relatively uniform, body temp stands out strongly at low gain for surface victims and partially exposed subjects",
+    palette: "Iron Bow",
+    paletteReason: "Iron Bow provides strong contrast between human body temp and water surface — best palette for victim detection at the waterline",
     isotherm: {
       enabled: false,
       low: null,
       high: null,
       unit: "°F"
     },
-    isothermsReason: "Off — for surface victims thermal contrast is strong enough without isotherm; focus is on movement and ripple detection for submerged subjects",
+    isothermsReason: "Off — surface victim signatures are strong enough without isotherm. Full gradient gives better situational awareness at the waterline",
     zoom: "High zoom from altitude preferred",
-    altitude: "200–300ft AGL with zoom",
-    tips: ["Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to optical (RGB) for submerged search", "For submerged victims: use high altitude + high zoom (not low altitude + wide angle) — gives more perpendicular viewing angles across the image and better optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust based on sun glare angle", "Rainbow or Iron Bow shows ripple patterns from a flailing subject more clearly — may not show the subject but shows water disturbance", "Partially exposed victims are detectable on thermal — look for any bright signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection — surface victims visible from much farther", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Debris, foam, and turbulence create false positives on optical — confirm with zoom before directing assets"]
+    altitude: "200ft AGL minimum with zoom",
+    tips: ["Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to Ripple mode or optical (RGB) for submerged search", "Partially exposed victims are detectable — look for any bright signature at the waterline or on debris", "Below 200ft AGL is the critical threshold — closer gives better resolution on surface victims (Reed)", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Spotlight in conjunction with thermal at night greatly increases detection range"]
+  },
+  configNight: {
+    gain: "LOW",
+    gainReason: "Ripple detection mode — Rainbow palette shows water surface disturbance from a flailing or submerged subject. Low gain keeps water surface in full range",
+    palette: "Rainbow",
+    paletteReason: "Rainbow maps temperature gradients across the water surface — ripples and disturbance from a submerged or flailing subject appear as color variation even when the body itself is not visible (Reed, DroneSense)",
+    isotherm: {
+      enabled: false,
+      low: null,
+      high: null,
+      unit: "°F"
+    },
+    isothermsReason: "Off — ripple detection relies on full gradient color variation across the water surface, not a temperature band",
+    zoom: "High zoom from altitude — more perpendicular angle improves water penetration",
+    altitude: "300ft AGL with high zoom",
+    tips: ["Ripple mode detects water disturbance — may not show the victim but shows WHERE they are", "For submerged victims: high altitude + high zoom (not low altitude + wide angle) — more perpendicular viewing angle improves optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust for sun glare angle", "Debris, foam, and turbulence create false positives — confirm with zoom before directing rescue assets", "Switch to optical (RGB) once ripple location is confirmed — visual confirmation before directing divers"]
   }
 }, {
   id: "hazmat",
@@ -5770,599 +5788,271 @@ const PALETTES = {
     desc: "Full spectrum gradient"
   }
 };
-function ThermalModal({
-  onClose
-}) {
-  const [selected, setSelected] = useState(null);
-  const [timeOfDay, setTimeOfDay] = useState("night");
-  const [quickView, setQuickView] = useState(false);
+function ThermalModal({onClose}) {
+  const [selected, setSelected] = React.useState(null);
+  const [dayNight, setDayNight] = React.useState("night");
+  const [quickView, setQuickView] = React.useState(false);
   const mission = selected ? MISSIONS.find(m => m.id === selected) : null;
-  const getConfig = m => {
-    if (!m) return null;
-    if (!m.dayNight) return m.config;
-    return timeOfDay === "day" ? m.configDay : m.configNight;
+  const config = mission ? (mission.dayNight ? (dayNight === "day" ? mission.configDay : mission.configNight) : mission.config) : null;
+
+  const hdr = {
+    background: "linear-gradient(135deg,rgba(255,107,53,0.15),transparent 55%)",
+    borderBottom: "1px solid rgba(255,255,255,0.06)",
+    padding: "14px 18px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexShrink: 0
   };
-  const config = getConfig(mission);
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "fixed",
-      inset: 0,
-      background: "#0D1117",
-      zIndex: 999,
-      display: "flex",
-      flexDirection: "column",
-      fontFamily: "'DM Mono','Courier New',monospace",
-      color: "#CBD5E1"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "linear-gradient(135deg,rgba(255,107,53,0.15),transparent 55%)",
-      borderBottom: "1px solid rgba(255,255,255,0.06)",
-      padding: "14px 18px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      flexShrink: 0
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "'Bebas Neue', serif",
-      fontSize: 16,
-      letterSpacing: 3,
-      color: "#FF6B35",
-      fontWeight: 900
-    }
-  }, "THERMAL CONFIG"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 3,
-      marginTop: 2
-    }
-  }, "M30T (IP55) \xB7 M4TD (IP55) \xB7 M4T (No IP) \xB7 DRONESENSE")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      alignItems: "center"
-    }
-  }, mission && config && /*#__PURE__*/React.createElement("button", {
-    onClick: () => setQuickView(!quickView),
-    style: {
-      background: quickView ? "rgba(255,107,53,0.2)" : "rgba(255,255,255,0.10)",
-      border: `1px solid ${quickView ? "rgba(255,107,53,0.5)" : "rgba(255,255,255,0.1)"}`,
-      borderRadius: 8,
-      padding: "6px 10px",
-      color: quickView ? "#FF6B35" : "#94A3B8",
-      fontSize: 9,
-      cursor: "pointer",
-      fontFamily: "inherit",
-      letterSpacing: 1
-    }
-  }, "\u26A1 QUICK"), mission && /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setSelected(null);
-      setQuickView(false);
+
+  const PaletteBar = ({name}) => {
+    const p = PALETTES[name];
+    if (!p) return null;
+    return React.createElement("div", {style:{display:"flex",alignItems:"center",gap:8,marginTop:4}},
+      React.createElement("div", {style:{display:"flex",flex:1,height:12,borderRadius:6,overflow:"hidden"}},
+        p.colors.map((c,i) => React.createElement("div", {key:i, style:{flex:1,background:c}}))
+      ),
+      React.createElement("span", {style:{fontSize:9,color:"#64748B",whiteSpace:"nowrap"}}, p.desc)
+    );
+  };
+
+  const GainBadge = ({gain}) => {
+    const colors = {
+      "LOW":         {bg:"rgba(255,107,53,0.15)", border:"rgba(255,107,53,0.4)", color:"#FF6B35"},
+      "HIGH":        {bg:"rgba(74,144,217,0.15)", border:"rgba(74,144,217,0.4)", color:"#4A90D9"},
+      "ULTRA-HIGH":  {bg:"rgba(255,193,7,0.15)",  border:"rgba(255,193,7,0.4)",  color:"#FFC107"}
+    };
+    const s = colors[gain] || colors["HIGH"];
+    return React.createElement("span", {style:{
+      fontSize:10, fontWeight:700, letterSpacing:1,
+      background:s.bg, border:`1px solid ${s.border}`, color:s.color,
+      borderRadius:5, padding:"2px 8px"
+    }}, gain);
+  };
+
+  // ── Mission list ──────────────────────────────────────────────────────────
+  const MissionList = () => React.createElement("div", {style:{padding:"14px"}},
+    React.createElement("div", {style:{fontSize:9,color:"#64748B",letterSpacing:2,marginBottom:12}}, "SELECT MISSION TYPE"),
+    MISSIONS.map(m => React.createElement("div", {
+      key: m.id,
+      onClick: () => setSelected(m.id),
+      style:{
+        display:"flex", alignItems:"center", gap:12,
+        background:"rgba(255,255,255,0.055)",
+        border:`1px solid rgba(255,255,255,0.08)`,
+        borderRadius:10, padding:"12px 14px", marginBottom:8,
+        cursor:"pointer"
+      }
     },
-    style: {
-      background: "rgba(255,255,255,0.10)",
-      border: "1px solid rgba(255,255,255,0.1)",
-      borderRadius: 8,
-      padding: "6px 12px",
-      color: "#94A3B8",
-      fontSize: 10,
-      cursor: "pointer",
-      fontFamily: "inherit"
-    }
-  }, "\u2190 Back"), /*#__PURE__*/React.createElement("button", {
-    onClick: onClose,
-    style: {
-      background: "rgba(255,255,255,0.10)",
-      border: "1px solid rgba(255,255,255,0.1)",
-      borderRadius: 8,
-      padding: "6px 12px",
-      color: "#94A3B8",
-      fontSize: 10,
-      cursor: "pointer",
-      fontFamily: "inherit"
-    }
-  }, "\u2715 Close")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      minHeight: 0,
-      overflowY: "auto",
-      WebkitOverflowScrolling: "touch"
-    }
-  }, !mission ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "14px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      color: "#64748B",
-      letterSpacing: 3,
-      marginBottom: 12,
-      paddingLeft: 2
-    }
-  }, "SELECT MISSION TYPE"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
-    }
-  }, MISSIONS.map(m => /*#__PURE__*/React.createElement("button", {
-    key: m.id,
-    onClick: () => setSelected(m.id),
-    style: {
-      background: "rgba(255,255,255,0.055)",
-      border: "1px solid rgba(255,255,255,0.07)",
-      borderRadius: 12,
-      padding: "14px 16px",
-      display: "flex",
-      alignItems: "center",
-      gap: 14,
-      cursor: "pointer",
-      fontFamily: "inherit",
-      textAlign: "left",
-      width: "100%",
-      transition: "border 0.15s"
-    },
-    onMouseEnter: e => e.currentTarget.style.borderColor = `${m.color}55`,
-    onMouseLeave: e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 22,
-      flexShrink: 0
-    }
-  }, m.icon), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 13,
-      color: "#E2E8F0",
-      fontWeight: 600
-    }
-  }, m.label), m.dayNight && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 7,
-      background: "rgba(74,144,217,0.15)",
-      border: "1px solid rgba(74,144,217,0.3)",
-      borderRadius: 3,
-      padding: "1px 5px",
-      color: "#4A90D9",
-      letterSpacing: 1
-    }
-  }, "DAY/NIGHT")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      color: "#64748B",
-      letterSpacing: 0.5,
-      marginTop: 3
-    }
-  }, m.sub)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: "#64748B"
-    }
-  }, "\u2192"))))) : /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "14px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 12,
-      paddingBottom: 40
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: `${mission.color}12`,
-      border: `1px solid ${mission.color}30`,
-      borderRadius: 14,
-      padding: "14px 16px",
-      display: "flex",
-      alignItems: "center",
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 26
-    }
-  }, mission.icon), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 16,
-      color: "#E2E8F0",
-      fontWeight: 700,
-      letterSpacing: 1
-    }
-  }, mission.label), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      color: "#64748B",
-      marginTop: 2
-    }
-  }, mission.sub)), mission.dayNight && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      background: "rgba(255,255,255,0.10)",
-      border: "1px solid rgba(255,255,255,0.08)",
-      borderRadius: 8,
-      overflow: "hidden",
-      flexShrink: 0
-    }
-  }, ["day", "night"].map(t => /*#__PURE__*/React.createElement("button", {
-    key: t,
-    onClick: () => setTimeOfDay(t),
-    style: {
-      background: timeOfDay === t ? "rgba(74,144,217,0.25)" : "transparent",
-      border: "none",
-      padding: "6px 10px",
-      color: timeOfDay === t ? "#4A90D9" : "#64748B",
-      fontSize: 9,
-      cursor: "pointer",
-      fontFamily: "inherit",
-      letterSpacing: 1
-    }
-  }, t === "day" ? "☀️ DAY" : "🌙 NIGHT")))), quickView && config && /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "#0A0F1E",
-      border: `2px solid ${mission.color}60`,
-      borderRadius: 16,
-      padding: "20px",
-      boxShadow: `0 0 30px ${mission.color}20`
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 3,
-      marginBottom: 16,
-      textAlign: "center"
-    }
-  }, "\u26A1 QUICK LAUNCH \u2014 ", mission.label.toUpperCase(), mission.dayNight ? ` · ${timeOfDay.toUpperCase()}` : ""), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr 1fr 1fr",
-      gap: 8,
-      marginBottom: 16
-    }
-  }, [{
-    label: "GAIN",
-    value: config.gain,
-    color: config.gain === "HIGH" ? "#FF6B35" : config.gain === "ULTRA-HIGH" ? "#FFC107" : "#4A90D9"
-  }, {
-    label: "PALETTE",
-    value: config.palette.replace(" ", "\n"),
-    color: "#E2E8F0"
-  }, {
-    label: "ISOTHERM",
-    value: config.isotherm.enabled ? `ON\n${config.isotherm.low}–${config.isotherm.high}°` : "OFF",
-    color: config.isotherm.enabled ? "#FFC107" : "#64748B"
-  }, {
-    label: "ALT",
-    value: config.altitude.split("–")[0],
-    color: "#E2E8F0"
-  }].map((item, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      background: "rgba(255,255,255,0.09)",
-      border: "1px solid rgba(255,255,255,0.08)",
-      borderRadius: 10,
-      padding: "12px 8px",
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 7,
-      color: "#64748B",
-      letterSpacing: 1.5,
-      marginBottom: 6
-    }
-  }, item.label), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 14,
-      fontWeight: 900,
-      color: item.color,
-      lineHeight: 1.2,
-      whiteSpace: "pre-line"
-    }
-  }, item.value)))), PALETTES[config.palette] && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 2,
-      borderRadius: 6,
-      overflow: "hidden",
-      height: 16,
-      marginBottom: 4
-    }
-  }, PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      flex: 1,
-      background: c
-    }
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 7,
-      color: "#64748B"
-    }
-  }, "COOL"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 7,
-      color: "#64748B"
-    }
-  }, config.palette), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 7,
-      color: "#64748B"
-    }
-  }, "HOT")))), !quickView && config && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.055)",
-      border: "1px solid rgba(255,255,255,0.07)",
-      borderRadius: 14,
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.12)",
-      borderBottom: "1px solid rgba(255,255,255,0.05)",
-      padding: "10px 16px",
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 3
-    }
-  }, "QUICK REFERENCE"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 0
-    }
-  }, [{
-    label: "GAIN",
-    value: config.gain,
-    color: config.gain === "HIGH" ? "#FF6B35" : config.gain === "ULTRA-HIGH" ? "#FFC107" : "#4A90D9"
-  }, {
-    label: "PALETTE",
-    value: config.palette,
-    color: "#E2E8F0"
-  }, {
-    label: "ISOTHERM",
-    value: config.isotherm.enabled ? `ON · ${config.isotherm.low}–${config.isotherm.high}${config.isotherm.unit}` : "OFF",
-    color: config.isotherm.enabled ? "#FFC107" : "#64748B"
-  }, {
-    label: "ALTITUDE",
-    value: config.altitude,
-    color: "#E2E8F0"
-  }].map((item, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      padding: "12px 16px",
-      borderBottom: "1px solid rgba(255,255,255,0.03)",
-      borderRight: i % 2 === 0 ? "1px solid rgba(255,255,255,0.03)" : "none"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 2,
-      marginBottom: 5
-    }
-  }, item.label), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: item.color,
-      fontWeight: 700
-    }
-  }, item.value)))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "12px 16px",
-      borderTop: "1px solid rgba(255,255,255,0.03)"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 2,
-      marginBottom: 5
-    }
-  }, "ZOOM"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: "#E2E8F0",
-      fontWeight: 700
-    }
-  }, config.zoom))), PALETTES[config.palette] && /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.055)",
-      border: "1px solid rgba(255,255,255,0.06)",
-      borderRadius: 14,
-      padding: "14px 16px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 3,
-      marginBottom: 10
-    }
-  }, "PALETTE \u2014 ", config.palette.toUpperCase()), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 3,
-      borderRadius: 6,
-      overflow: "hidden",
-      height: 24,
-      marginBottom: 8
-    }
-  }, PALETTES[config.palette].colors.map((c, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      flex: 1,
-      background: c
-    }
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 8,
-      color: "#64748B"
-    }
-  }, "COOL"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 8,
-      color: "#64748B"
-    }
-  }, PALETTES[config.palette].desc), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 8,
-      color: "#64748B"
-    }
-  }, "HOT"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.055)",
-      border: "1px solid rgba(255,255,255,0.06)",
-      borderRadius: 14,
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.12)",
-      borderBottom: "1px solid rgba(255,255,255,0.05)",
-      padding: "10px 16px",
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 3
-    }
-  }, "WHY THESE SETTINGS"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "14px 16px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 10
-    }
-  }, [{
-    label: "Gain",
-    icon: "⚡",
-    text: config.gainReason
-  }, {
-    label: "Palette",
-    icon: "🎨",
-    text: config.paletteReason
-  }, {
-    label: "Isotherm",
-    icon: "🌡",
-    text: config.isothermsReason
-  }].map((item, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      display: "flex",
-      gap: 10,
-      alignItems: "flex-start"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 14,
-      flexShrink: 0
-    }
-  }, item.icon), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9,
-      color: "#64748B",
-      letterSpacing: 1
-    }
-  }, item.label, ": "), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "#CBD5E1",
-      lineHeight: 1.6
-    }
-  }, item.text)))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.055)",
-      border: "1px solid rgba(255,255,255,0.06)",
-      borderRadius: 14,
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.12)",
-      borderBottom: "1px solid rgba(255,255,255,0.05)",
-      padding: "10px 16px",
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 3
-    }
-  }, "OPERATIONAL TIPS"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "14px 16px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 10
-    }
-  }, config.tips.map((tip, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      display: "flex",
-      gap: 10,
-      alignItems: "flex-start"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      color: mission.color,
-      flexShrink: 0,
-      marginTop: 2,
-      fontWeight: 700
-    }
-  }, String(i + 1).padStart(2, '0')), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: "#94A3B8",
-      lineHeight: 1.7
-    }
-  }, tip))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.01)",
-      border: "1px solid rgba(255,255,255,0.04)",
-      borderRadius: 10,
-      padding: "10px 14px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 2,
-      marginBottom: 5
-    }
-  }, "DRONESENSE SETTINGS PATH"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: "#64748B",
-      lineHeight: 1.7
-    }
-  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)")))))));
+      React.createElement("span", {style:{fontSize:24}}, m.icon),
+      React.createElement("div", null,
+        React.createElement("div", {style:{display:"flex",alignItems:"center",gap:8}},
+          React.createElement("span", {style:{fontSize:13,color:"#E2E8F0",fontWeight:600}}, m.label),
+          m.dayNight && React.createElement("span", {style:{
+            fontSize:8, letterSpacing:1, color:"#4A90D9",
+            background:"rgba(74,144,217,0.15)", border:"1px solid rgba(74,144,217,0.3)",
+            borderRadius:4, padding:"1px 6px"
+          }}, "DAY/NIGHT")
+        ),
+        React.createElement("div", {style:{fontSize:10,color:"#64748B",marginTop:2}}, m.sub)
+      ),
+      React.createElement("span", {style:{fontSize:12,color:"#4A90D9",opacity:0.6,marginLeft:"auto"}}, "\u2192")
+    ))
+  );
+
+  // ── Config detail ─────────────────────────────────────────────────────────
+  const ConfigDetail = () => {
+    if (!mission || !config) return null;
+
+    // Quick view — just the essential settings
+    if (quickView) return React.createElement("div", {style:{padding:"14px",display:"flex",flexDirection:"column",gap:10}},
+      React.createElement("div", {style:{
+        background:`${mission.color}12`, border:`1px solid ${mission.color}33`,
+        borderRadius:10, padding:"10px 14px",
+        display:"flex", alignItems:"center", gap:10
+      }},
+        React.createElement("span", {style:{fontSize:22}}, mission.icon),
+        React.createElement("span", {style:{fontSize:14,color:"#E2E8F0",fontWeight:700}}, mission.label),
+        mission.dayNight && React.createElement("div", {style:{marginLeft:"auto",display:"flex",gap:6}},
+          ["day","night"].map(dn => {
+            const label = dn === "day" ? (mission.dayLabel || "\u2600") : (mission.nightLabel || "\u263D");
+            return React.createElement("button", {
+              key:dn,
+              onClick: e => { e.stopPropagation(); setDayNight(dn); },
+              style:{
+                background: dayNight===dn ? "rgba(74,144,217,0.3)" : "rgba(255,255,255,0.08)",
+                border: dayNight===dn ? "1px solid rgba(74,144,217,0.6)" : "1px solid rgba(255,255,255,0.1)",
+                borderRadius:6, padding:"4px 8px",
+                color: dayNight===dn ? "#4A90D9" : "#64748B",
+                fontSize:9, cursor:"pointer", fontFamily:"inherit"
+              }
+            }, label);
+          })
+        )
+      ),
+      React.createElement("div", {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
+        React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 10px",textAlign:"center"}},
+          React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "GAIN"),
+          React.createElement(GainBadge, {gain:config.gain})
+        ),
+        React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 10px",textAlign:"center"}},
+          React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "PALETTE"),
+          React.createElement("div", {style:{fontSize:11,color:"#E2E8F0",fontWeight:600,marginBottom:4}}, config.palette),
+          React.createElement(PaletteBar, {name: config.palette.split(" / ")[0]})
+        ),
+        React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 10px",textAlign:"center"}},
+          React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "ISOTHERM"),
+          config.isotherm.enabled
+            ? React.createElement("div", {style:{fontSize:10,fontWeight:700,color:"#34C759"}}, `${config.isotherm.low}\u2013${config.isotherm.high}`)
+            : React.createElement("div", {style:{fontSize:11,color:"#64748B"}}, "OFF")
+        )
+      ),
+      React.createElement("div", {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"10px 14px"}},
+          React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:4}}, "ALTITUDE"),
+          React.createElement("div", {style:{fontSize:12,color:"#E2E8F0",fontWeight:600}}, config.altitude)
+        ),
+        React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"10px 14px"}},
+          React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:4}}, "ZOOM"),
+          React.createElement("div", {style:{fontSize:12,color:"#E2E8F0",fontWeight:600}}, config.zoom)
+        )
+      )
+    );
+
+    return React.createElement("div", {style:{padding:"14px",display:"flex",flexDirection:"column",gap:12,paddingBottom:40}},
+
+      // Mission header
+      React.createElement("div", {style:{
+        background:`${mission.color}12`, border:`1px solid ${mission.color}33`,
+        borderRadius:10, padding:"12px 14px",
+        display:"flex", alignItems:"center", gap:12
+      }},
+        React.createElement("span", {style:{fontSize:28}}, mission.icon),
+        React.createElement("div", null,
+          React.createElement("div", {style:{fontSize:15,color:"#E2E8F0",fontWeight:700}}, mission.label),
+          React.createElement("div", {style:{fontSize:10,color:"#94A3B8",marginTop:2}}, mission.sub)
+        ),
+        mission.dayNight && React.createElement("div", {style:{marginLeft:"auto",display:"flex",gap:6}},
+          ["day","night"].map(dn => {
+            const label = dn === "day"
+              ? (mission.dayLabel || "\u2600 DAY")
+              : (mission.nightLabel || "\u263D NIGHT");
+            return React.createElement("button", {
+              key:dn,
+              onClick: e => { e.stopPropagation(); setDayNight(dn); },
+              style:{
+                background: dayNight===dn ? "rgba(74,144,217,0.3)" : "rgba(255,255,255,0.08)",
+                border: dayNight===dn ? "1px solid rgba(74,144,217,0.6)" : "1px solid rgba(255,255,255,0.1)",
+                borderRadius:6, padding:"5px 10px",
+                color: dayNight===dn ? "#4A90D9" : "#64748B",
+                fontSize:9, cursor:"pointer", fontFamily:"inherit", letterSpacing:1
+              }
+            }, label);
+          })
+        )
+      ),
+
+      // Gain
+      React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+        React.createElement("div", {style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
+          React.createElement("div", {style:{fontSize:9,color:"#64748B",letterSpacing:2}}, "GAIN MODE"),
+          React.createElement(GainBadge, {gain:config.gain})
+        ),
+        React.createElement("div", {style:{fontSize:10,color:"#94A3B8",lineHeight:1.5}}, config.gainReason)
+      ),
+
+      // Palette
+      React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+        React.createElement("div", {style:{fontSize:9,color:"#64748B",letterSpacing:2,marginBottom:6}}, "COLOR PALETTE"),
+        React.createElement("div", {style:{fontSize:13,color:"#E2E8F0",fontWeight:600,marginBottom:4}}, config.palette),
+        React.createElement(PaletteBar, {name: config.palette.split(" / ")[0]}),
+        config.palette.includes(" / ") && React.createElement(PaletteBar, {name: config.palette.split(" / ")[1]}),
+        React.createElement("div", {style:{fontSize:10,color:"#94A3B8",lineHeight:1.5,marginTop:8}}, config.paletteReason)
+      ),
+
+      // Isotherm
+      React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+        React.createElement("div", {style:{display:"flex",alignItems:"center",gap:8,marginBottom:6}},
+          React.createElement("div", {style:{fontSize:9,color:"#64748B",letterSpacing:2}}, "ISOTHERM"),
+          config.isotherm.enabled
+            ? React.createElement("span", {style:{fontSize:10,fontWeight:700,color:"#34C759",background:"rgba(52,199,89,0.15)",border:"1px solid rgba(52,199,89,0.3)",borderRadius:4,padding:"1px 8px"}},
+                `ON \u00B7 ${config.isotherm.low}\u2013${config.isotherm.high}${config.isotherm.unit}`)
+            : React.createElement("span", {style:{fontSize:10,color:"#64748B",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:4,padding:"1px 8px"}}, "OFF")
+        ),
+        React.createElement("div", {style:{fontSize:10,color:"#94A3B8",lineHeight:1.5}}, config.isothermsReason)
+      ),
+
+      // Altitude / zoom
+      React.createElement("div", {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+          React.createElement("div", {style:{fontSize:9,color:"#64748B",letterSpacing:2,marginBottom:4}}, "ALTITUDE"),
+          React.createElement("div", {style:{fontSize:12,color:"#E2E8F0",fontWeight:600}}, config.altitude)
+        ),
+        React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+          React.createElement("div", {style:{fontSize:9,color:"#64748B",letterSpacing:2,marginBottom:4}}, "ZOOM"),
+          React.createElement("div", {style:{fontSize:12,color:"#E2E8F0",fontWeight:600}}, config.zoom)
+        )
+      ),
+
+      // Tips
+      config.tips && config.tips.length > 0 && React.createElement("div", {style:{background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+        React.createElement("div", {style:{fontSize:9,color:"#64748B",letterSpacing:2,marginBottom:10}}, "FIELD NOTES"),
+        config.tips.map((tip, i) => React.createElement("div", {
+          key:i,
+          style:{display:"flex",gap:8,marginBottom:8,alignItems:"flex-start"}
+        },
+          React.createElement("span", {style:{fontSize:9,color:"#FF6B35",marginTop:2,flexShrink:0}}, "\u25B8"),
+          React.createElement("span", {style:{fontSize:10,color:"#94A3B8",lineHeight:1.6}}, tip)
+        ))
+      ),
+
+      // Bottom label
+      React.createElement("div", {style:{fontSize:9,color:"#475569",textAlign:"center",letterSpacing:1}},
+        "Camera \u2192 Thermal \u2192 Gain Mode \u00B7 Color Palette \u00B7 Isotherm (toggle + set range)"
+      )
+    );
+  };
+
+  return React.createElement("div", {style:{
+    position:"fixed", inset:0, background:"#0D1117", zIndex:999,
+    display:"flex", flexDirection:"column",
+    fontFamily:"'DM Mono','Courier New',monospace", color:"#CBD5E1"
+  }},
+    // Header
+    React.createElement("div", {style: hdr},
+      React.createElement("div", null,
+        React.createElement("div", {style:{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:3,color:"#FF6B35",fontWeight:900}}, "THERMAL CONFIG"),
+        React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:3,marginTop:2}}, "M30T (IP55) \u00B7 M4TD (IP55) \u00B7 M4T (No IP) \u00B7 DRONESENSE")
+      ),
+      React.createElement("div", {style:{display:"flex",gap:8,alignItems:"center"}},
+        mission && React.createElement("button", {
+          onClick: () => { setQuickView(q => !q); },
+          style:{
+            background: quickView ? "rgba(255,107,53,0.2)" : "rgba(255,255,255,0.10)",
+            border: quickView ? "1px solid rgba(255,107,53,0.5)" : "1px solid rgba(255,255,255,0.1)",
+            borderRadius:8, padding:"6px 12px",
+            color: quickView ? "#FF6B35" : "#94A3B8",
+            fontSize:11, cursor:"pointer", fontFamily:"inherit"
+          }
+        }, "\u26A1 Quick"),
+        mission && React.createElement("button", {
+          onClick: () => { setSelected(null); setQuickView(false); },
+          style:{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 12px",color:"#94A3B8",fontSize:11,cursor:"pointer",fontFamily:"inherit"}
+        }, "\u2190 Back"),
+        React.createElement("button", {
+          onClick: onClose,
+          style:{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 12px",color:"#94A3B8",fontSize:11,cursor:"pointer",fontFamily:"inherit"}
+        }, "\u00D7 Close")
+      )
+    ),
+    // Scrollable content
+    React.createElement("div", {style:{flex:1,minHeight:0,overflowY:"auto",WebkitOverflowScrolling:"touch"}},
+      mission ? React.createElement(ConfigDetail, null) : React.createElement(MissionList, null)
+    )
+  );
 }
 
-// ── Weather Modal ────────────────────────────────────────────────────────────
+
 function WeatherModal({
   onClose
 }) {
