@@ -5789,7 +5789,8 @@ function ThermalModal({
       inset: 0,
       background: "#0D1117",
       zIndex: 999,
-      overflowY: "auto",
+      display: "flex",
+      flexDirection: "column",
       fontFamily: "'DM Mono','Courier New',monospace",
       color: "#CBD5E1"
     }
@@ -5801,10 +5802,7 @@ function ThermalModal({
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      position: "sticky",
-      top: 0,
-      zIndex: 10,
-      backdropFilter: "blur(10px)"
+      flexShrink: 0
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5867,7 +5865,13 @@ function ThermalModal({
       cursor: "pointer",
       fontFamily: "inherit"
     }
-  }, "\u2715 Close")), !mission ? /*#__PURE__*/React.createElement("div", {
+  }, "\u2715 Close")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch"
+    }
+  }, !mission ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "14px"
     }
@@ -6354,7 +6358,7 @@ function ThermalModal({
       color: "#64748B",
       lineHeight: 1.7
     }
-  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)"))))));
+  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)")))))));
 }
 
 // ── Weather Modal ────────────────────────────────────────────────────────────
