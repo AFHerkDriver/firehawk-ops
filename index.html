@@ -4487,6 +4487,129 @@ function AirspaceModal({
   const [tab, setTab] = useState("status");
   const [selectedAirport, setSelectedAirport] = useState(null);
   const [showComms, setShowComms] = useState(false);
+  const [posCoords, setPosCoords] = useState(null);
+  const [posStatus, setPosStatus] = useState("acquiring");
+  const [posErr, setPosErr] = useState(false);
+  const [posMGRS, setPosMGRS] = useState(null);
+  const [posW3W, setPosW3W] = useState(null);
+  const [copyLabel, setCopyLabel] = useState(null);
+  const [nearestAirfields, setNearestAirfields] = useState([]);
+  const [adsbTraffic, setAdsbTraffic] = useState([]);
+  const [adsbLoading, setAdsbLoading] = useState(true);
+  const [scopeMode, setScopeMode] = useState("north");
+  const [heading, setHeading] = useState(0);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const copyPos = (text) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+    const key = text.includes("///") ? "w3w" : text.includes("RMU") || text.match(/\d{2}[A-Z]/) ? "mgrs" : "coords";
+    setCopyLabel(key);
+    setTimeout(() => setCopyLabel(null), 1500);
+  };
+  const toRad = d => d * Math.PI / 180;
+  const bearingTo = (lat1, lon1, lat2, lon2) => {
+    const dLon = toRad(lon2 - lon1);
+    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  };
+  const distNm = (lat1, lon1, lat2, lon2) => {
+    const R = 3440.065;
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+  const dirLabel = brg => { const dirs = ["N","NE","E","SE","S","SW","W","NW"]; return dirs[Math.round(brg/45)%8]; };
+  // Minimal lat/lon → MGRS (accurate for zone 14R covering San Antonio)
+  const latLonToMGRS = (lat, lon) => {
+    try {
+      const a = 6378137, f = 1/298.257223563, b = a*(1-f);
+      const e2 = (a**2-b**2)/a**2, e = Math.sqrt(e2);
+      const latR = toRad(lat), lonR = toRad(lon);
+      const zone = Math.floor((lon+180)/6)+1;
+      const lon0 = toRad((zone-1)*6-180+3);
+      const N = a/Math.sqrt(1-e2*Math.sin(latR)**2);
+      const T = Math.tan(latR)**2, C = e2/(1-e2)*Math.cos(latR)**2, A = Math.cos(latR)*(lonR-lon0);
+      const M = a*((1-e2/4-3*e2**2/64-5*e2**3/256)*latR-(3*e2/8+3*e2**2/32+45*e2**3/1024)*Math.sin(2*latR)+(15*e2**2/256+45*e2**3/1024)*Math.sin(4*latR)-(35*e2**3/3072)*Math.sin(6*latR));
+      const x = 0.9996*(N*(A+(1-T+C)*A**3/6+(5-18*T+T**2+72*C-58*e2/(1-e2))*A**5/120))+500000;
+      const y = 0.9996*(M+N*Math.tan(latR)*(A**2/2+(5-T+9*C+4*C**2)*A**4/24+(61-58*T+T**2+600*C-330*e2/(1-e2))*A**6/720))+(lat<0?10000000:0);
+      const bandLetters = "CDEFGHJKLMNPQRSTUVWX";
+      const latBand = bandLetters[Math.floor((lat+80)/8)];
+      const colIdx = ((zone-1)%3)*8 + Math.floor((x-100000)/100000);
+      const rowIdx = (Math.floor(y/100000) + (zone%2===0?5:0)) % 20;
+      const cols = "ABCDEFGHJKLMNPQRSTUVWXYZ"; const rows = "ABCDEFGHJKLMNPQRSTUV";
+      const col = cols[colIdx]; const row = rows[rowIdx];
+      const easting = Math.floor(x%100000).toString().padStart(5,"0");
+      const northing = Math.floor(y%100000).toString().padStart(5,"0");
+      return zone + latBand + col + row + " " + easting.slice(0,5) + " " + northing.slice(0,5);
+    } catch(e) { return null; }
+  };
+
+  // ── Geolocation ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!navigator.geolocation) { setPosErr(true); return; }
+    const watchId = navigator.geolocation.watchPosition(pos => {
+      const { latitude: lat, longitude: lon } = pos.coords;
+      setPosCoords({ lat, lon });
+      setPosStatus("live");
+      setPosErr(false);
+      setPosMGRS(latLonToMGRS(lat, lon));
+      // What3Words via their free API
+      fetch("https://api.what3words.com/v3/convert-to-3wa?coordinates=" + lat + "%2C" + lon + "&key=38EG0MIO")
+        .then(r => r.json()).then(d => { if(d.words) setPosW3W("///" + d.words); }).catch(()=>{});
+      // Nearest airfields
+      const af = [
+        { id:"KSAT", name:"San Antonio Intl", cls:"C", ctaf:"Tower 119.8", lat:29.5337, lon:-98.4698 },
+        { id:"KSSF", name:"Stinson Municipal", cls:"D", ctaf:"CTAF 118.2", lat:29.3369, lon:-98.4711 },
+        { id:"KSKF", name:"Kelly Field", cls:"D", ctaf:"Tower 124.3", lat:29.3842, lon:-98.5811 },
+        { id:"KRND", name:"Randolph AFB", cls:"D", ctaf:"Tower 128.25", lat:29.5297, lon:-98.2789 }
+      ].map(a => ({ ...a, dist: distNm(lat,lon,a.lat,a.lon), brg: Math.round(bearingTo(lat,lon,a.lat,a.lon)) }))
+       .sort((a,b) => a.dist-b.dist).slice(0,2);
+      setNearestAirfields(af);
+    }, () => setPosErr(true), { enableHighAccuracy: true, maximumAge: 5000 });
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // ── ADS-B fetch (airplanes.live, free, no key) ───────────────────────────
+  useEffect(() => {
+    if (!posCoords) return;
+    const fetchADSB = () => {
+      fetch("https://api.airplanes.live/v2/point/" + posCoords.lat.toFixed(4) + "/" + posCoords.lon.toFixed(4) + "/2")
+        .then(r => r.json()).then(data => {
+          const ac = (data.ac || [])
+            .filter(a => a.alt_baro && a.alt_baro !== "ground" && a.alt_baro <= 1000 && a.lat && a.lon)
+            .map(a => ({
+              call: (a.flight || a.hex || "UNKN").trim(),
+              alt: Math.round(a.alt_baro),
+              spd: Math.round(a.gs || 0),
+              hdg: Math.round(a.track || 0),
+              dist: distNm(posCoords.lat, posCoords.lon, a.lat, a.lon),
+              brg: Math.round(bearingTo(posCoords.lat, posCoords.lon, a.lat, a.lon)),
+              dir: dirLabel(bearingTo(posCoords.lat, posCoords.lon, a.lat, a.lon))
+            }))
+            .sort((a,b) => a.alt - b.alt);
+          setAdsbTraffic(ac);
+          setAdsbLoading(false);
+        }).catch(() => setAdsbLoading(false));
+    };
+    fetchADSB();
+    const interval = setInterval(fetchADSB, 10000);
+    return () => clearInterval(interval);
+  }, [posCoords]);
+
+  // ── Compass heading ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = e => {
+      if (e.webkitCompassHeading !== undefined) setHeading(Math.round(e.webkitCompassHeading));
+      else if (e.alpha !== null) setHeading(Math.round(360 - e.alpha));
+    };
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      DeviceOrientationEvent.requestPermission().then(p => { if(p==="granted") window.addEventListener("deviceorientation", handler); }).catch(()=>{});
+    } else {
+      window.addEventListener("deviceorientation", handler);
+    }
+    return () => window.removeEventListener("deviceorientation", handler);
+  }, []);
 
   // Fixed airport data — airspace class and LAANC status never change
   const AIRPORTS = [{
@@ -4843,7 +4966,7 @@ function AirspaceModal({
       lineHeight: 1.7,
       marginBottom: 12
     }
-  }, "The FAA does not provide a browser-accessible TFR API. Always verify active TFRs before launch using the FAA TFR map or Aloft."), /*#__PURE__*/React.createElement("a", {
+  }, "Always verify active TFRs before launch."), /*#__PURE__*/React.createElement("a", {
     href: "https://tfr.faa.gov/tfr3/?page=map",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -4945,7 +5068,247 @@ function AirspaceModal({
   }, "UASFM data updated ", new Date().toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit'
-  }))), status === "loaded" && tab === "airports" && /*#__PURE__*/React.createElement("div", {
+  })),
+
+  /* ── POSITION PANEL ──────────────────────────────────────────────── */
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 8, color: "#64748B", letterSpacing: 3, marginBottom: 8 }
+    }, "POSITION — CURRENT LOCATION"),
+
+    /* Coordinates */
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12, marginBottom: 8 }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }
+      },
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2 } }, "COORDINATES"),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: posErr ? "#FF3B30" : posStatus === "live" ? "#34C759" : "#FF9F0A", letterSpacing: 1 } },
+            posErr ? "⚠ ERROR" : posStatus === "live" ? "● LIVE" : "● ACQUIRING..."
+          ),
+          posCoords && /*#__PURE__*/React.createElement("button", {
+            onClick: () => copyPos(posCoords.lat.toFixed(4) + "° N, " + Math.abs(posCoords.lon.toFixed(4)) + "° W"),
+            style: { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 5, color: "#94A3B8", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
+          }, copyLabel === "coords" ? "✓" : "COPY")
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: "#E2E8F0" } },
+        posCoords ? posCoords.lat.toFixed(4) + "° N, " + Math.abs(posCoords.lon).toFixed(4) + "° W" : "Requesting location..."
+      )
+    ),
+
+    /* MGRS + W3W row */
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } },
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(74,144,217,0.08)", border: "1px solid rgba(74,144,217,0.2)", borderRadius: 12, padding: 12 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#4A90D9", letterSpacing: 2 } }, "MGRS"),
+          posMGRS && /*#__PURE__*/React.createElement("button", {
+            onClick: () => copyPos(posMGRS),
+            style: { background: "rgba(74,144,217,0.15)", border: "1px solid rgba(74,144,217,0.3)", borderRadius: 5, color: "#4A90D9", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
+          }, copyLabel === "mgrs" ? "✓" : "COPY")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "#E2E8F0", letterSpacing: 1, fontWeight: 700, lineHeight: 1.4 } },
+          posMGRS || "---"
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#475569", marginTop: 3 } }, "TAK · TDEM · TXTF1")
+      ),
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(255,107,53,0.08)", border: "1px solid rgba(255,107,53,0.2)", borderRadius: 12, padding: 12 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#FF6B35", letterSpacing: 2 } }, "W3W"),
+          posW3W && /*#__PURE__*/React.createElement("button", {
+            onClick: () => copyPos(posW3W),
+            style: { background: "rgba(255,107,53,0.15)", border: "1px solid rgba(255,107,53,0.3)", borderRadius: 5, color: "#FF6B35", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
+          }, copyLabel === "w3w" ? "✓" : "COPY")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#E2E8F0", lineHeight: 1.5 } },
+          posW3W || "---"
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#475569", marginTop: 3 } }, "dispatcher-ready")
+      )
+    ),
+
+    /* Nearest airspace */
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 12, marginBottom: 8 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2, marginBottom: 8 } }, "NEAREST CONTROLLED AIRSPACE"),
+      nearestAirfields.map((af, i) => /*#__PURE__*/React.createElement("div", { key: af.id },
+        i > 0 && /*#__PURE__*/React.createElement("div", { style: { height: 1, background: "rgba(255,255,255,0.05)", margin: "7px 0" } }),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#E2E8F0" } }, af.id + " " + af.name),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } }, "Class " + af.cls + " · " + af.ctaf)
+          ),
+          /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } },
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: i === 0 ? "#FF6B35" : "#D4AF37", fontWeight: 700 } },
+              af.dist !== null ? af.dist.toFixed(1) + " nm" : "---"
+            ),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } },
+              af.brg !== null ? "hdg " + af.brg + "°" : ""
+            )
+          )
+        )
+      ))
+    )
+  ),
+
+  /* ── ADS-B SCOPE ──────────────────────────────────────────────────── */
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 3 } }, "ADS-B TRAFFIC — 2nm"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 1 } }, "BELOW 1,000ft AGL")
+    ),
+
+    /* Conflict banner — only shown when red traffic present */
+    adsbTraffic.filter(a => a.alt <= 400).length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: { background: "rgba(255,59,48,0.1)", border: "1px solid rgba(255,59,48,0.35)", borderRadius: 8, padding: "8px 12px", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#FF3B30", flexShrink: 0 } }),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#FF3B30", letterSpacing: 1 } },
+        "POTENTIAL CONFLICT — " + adsbTraffic.filter(a => a.alt <= 400).length + " aircraft in your layer (0–400ft)"
+      )
+    ),
+
+    /* Scope orientation toggle */
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8 } },
+      ["north", "track"].map(m => /*#__PURE__*/React.createElement("button", {
+        key: m,
+        onClick: () => setScopeMode(m),
+        style: {
+          flex: 1, padding: "7px 0", borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
+          fontSize: 9, letterSpacing: 1, textAlign: "center",
+          background: scopeMode === m ? (m === "north" ? "rgba(74,144,217,0.15)" : "rgba(52,199,89,0.15)") : "rgba(255,255,255,0.04)",
+          border: scopeMode === m ? (m === "north" ? "1px solid rgba(74,144,217,0.4)" : "1px solid rgba(52,199,89,0.4)") : "1px solid rgba(255,255,255,0.08)",
+          color: scopeMode === m ? (m === "north" ? "#4A90D9" : "#34C759") : "#64748B"
+        }
+      }, m === "north" ? "NORTH-UP" : "TRACK-UP"))
+    ),
+
+    /* Radar scope SVG */
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "#060E1A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden", marginBottom: 8 }
+    },
+      /*#__PURE__*/React.createElement("svg", { viewBox: "0 0 320 280", width: "100%", style: { display: "block" } },
+        /*#__PURE__*/React.createElement("g", { transform: scopeMode === "track" ? "rotate(" + (-heading) + ", 160, 150)" : undefined },
+          /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 60, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 120, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("line", { x1: 160, y1: 10, x2: 160, y2: 290, stroke: "rgba(255,255,255,0.04)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("line", { x1: 20, y1: 150, x2: 300, y2: 150, stroke: "rgba(255,255,255,0.04)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("text", { x: 164, y: 97, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "1nm"),
+          /*#__PURE__*/React.createElement("text", { x: 164, y: 37, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "2nm"),
+          /*#__PURE__*/React.createElement("text", { x: 153, y: 22, fill: "rgba(255,255,255,0.3)", fontSize: 11, fontFamily: "monospace", fontWeight: "bold" }, "N"),
+          adsbTraffic.map(ac => {
+            const color = ac.alt <= 400 ? "#FF3B30" : "#FF9F0A";
+            const rad = (ac.brg - 90) * Math.PI / 180;
+            const r = (ac.dist / 2) * 120;
+            const x = 160 + r * Math.cos(rad);
+            const y = 150 + r * Math.sin(rad);
+            return /*#__PURE__*/React.createElement("g", { key: ac.call, transform: "translate(" + x + "," + y + ") rotate(" + ac.hdg + ")" },
+              /*#__PURE__*/React.createElement("polygon", { points: "0,-7 -4,6 0,3 4,6", fill: color })
+            );
+          }),
+          adsbTraffic.map(ac => {
+            const color = ac.alt <= 400 ? "#FF3B30" : "#FF9F0A";
+            const rad = (ac.brg - 90) * Math.PI / 180;
+            const r = (ac.dist / 2) * 120;
+            const x = 160 + r * Math.cos(rad);
+            const y = 150 + r * Math.sin(rad);
+            return /*#__PURE__*/React.createElement("g", { key: ac.call + "_lbl" },
+              /*#__PURE__*/React.createElement("text", { x: x + 8, y: y - 2, fill: color, fontSize: 9, fontFamily: "monospace" }, ac.call),
+              /*#__PURE__*/React.createElement("text", { x: x + 8, y: y + 9, fill: color, fontSize: 7, fontFamily: "monospace", opacity: 0.6 }, ac.alt + "ft")
+            );
+          })
+        ),
+        /* Ownship — always fixed to center, not rotated */
+        /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 6, fill: "none", stroke: "#94A3B8", strokeWidth: 1.5 }),
+        scopeMode === "north"
+          ? /*#__PURE__*/React.createElement("line", { x1: 160, y1: 150, x2: 160 + 14 * Math.sin(heading * Math.PI / 180), y2: 150 - 14 * Math.cos(heading * Math.PI / 180), stroke: "#94A3B8", strokeWidth: 1.5, strokeLinecap: "round" })
+          : /*#__PURE__*/React.createElement("polygon", { points: "160,138 155,153 165,153", fill: "#94A3B8" }),
+        scopeMode === "track" && /*#__PURE__*/React.createElement("text", { x: 145, y: 22, fill: "rgba(255,255,255,0.3)", fontSize: 9, fontFamily: "monospace" }, "AHEAD")
+      )
+    ),
+
+    /* Traffic list */
+    adsbTraffic.length === 0
+      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#64748B", textAlign: "center", padding: "12px 0", fontStyle: "italic" } }, adsbLoading ? "Scanning for traffic..." : "No traffic below 1,000ft within 2nm")
+      : /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
+        adsbTraffic.map(ac => {
+          const isConflict = ac.alt <= 400;
+          const color = isConflict ? "#FF3B30" : "#FF9F0A";
+          const bg = isConflict ? "rgba(255,59,48,0.07)" : "rgba(255,159,10,0.05)";
+          const border = isConflict ? "rgba(255,59,48,0.3)" : "rgba(255,159,10,0.2)";
+          return /*#__PURE__*/React.createElement("div", {
+            key: ac.call,
+            style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: bg, border: "1px solid " + border, borderLeft: "3px solid " + color, borderRadius: 8, padding: "8px 10px" }
+          },
+            /*#__PURE__*/React.createElement("div", null,
+              /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color, fontWeight: 700 } }, ac.call),
+                /*#__PURE__*/React.createElement("span", { style: { background: isConflict ? "rgba(255,59,48,0.15)" : "rgba(255,159,10,0.1)", border: "1px solid " + border, borderRadius: 4, fontSize: 7, color, padding: "1px 5px", letterSpacing: 1 } },
+                  isConflict ? "CONFLICT LAYER" : "NEARBY"
+                )
+              ),
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", marginTop: 2 } },
+                ac.dir + " · " + ac.dist.toFixed(1) + "nm"
+              )
+            ),
+            /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } },
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color, fontWeight: 700 } }, ac.alt.toLocaleString() + " ft"),
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } }, ac.spd + " kt · hdg " + ac.hdg + "°")
+            )
+          );
+        })
+      ),
+
+    /* Legend + refresh */
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 12, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, alignItems: "center", marginBottom: 8 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#94A3B8" } }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "OWNSHIP")
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#FF3B30" } }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "CONFLICT 0–400ft")
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#FF9F0A" } }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "NEARBY 400–1,000ft")
+      )
+    ),
+
+    /* Airspace tools buttons */
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 3, marginBottom: 8 } }, "AIRSPACE TOOLS"),
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(52,199,89,0.08)", border: "1px solid rgba(52,199,89,0.2)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column" }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#34C759", letterSpacing: 1, marginBottom: 2 } }, "WINDY"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", flex: 1 } }, "surface winds at your position"),
+        /*#__PURE__*/React.createElement("a", {
+          href: posCoords ? "https://www.windy.com/?wind,surface," + posCoords.lat.toFixed(4) + "," + posCoords.lon.toFixed(4) + ",12" : "https://www.windy.com",
+          target: "_blank", rel: "noopener noreferrer",
+          style: { marginTop: 10, background: "rgba(52,199,89,0.15)", border: "1px solid rgba(52,199,89,0.3)", borderRadius: 7, color: "#34C759", fontSize: 9, padding: 7, textAlign: "center", textDecoration: "none", letterSpacing: 1, display: "block" }
+        }, "OPEN ↗")
+      ),
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(74,144,217,0.08)", border: "1px solid rgba(74,144,217,0.2)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column" }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#4A90D9", letterSpacing: 1, marginBottom: 2 } }, "ADS-B EXCHANGE"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", flex: 1 } }, "full map view"),
+        /*#__PURE__*/React.createElement("a", {
+          href: posCoords ? "https://globe.adsbexchange.com/?lat=" + posCoords.lat.toFixed(4) + "&lon=" + posCoords.lon.toFixed(4) + "&zoom=13" : "https://globe.adsbexchange.com",
+          target: "_blank", rel: "noopener noreferrer",
+          style: { marginTop: 10, background: "rgba(74,144,217,0.15)", border: "1px solid rgba(74,144,217,0.3)", borderRadius: 7, color: "#4A90D9", fontSize: 9, padding: 7, textAlign: "center", textDecoration: "none", letterSpacing: 1, display: "block" }
+        }, "OPEN ↗")
+      )
+    )
+  )), status === "loaded" && tab === "airports" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -5413,7 +5776,7 @@ const MISSIONS = [{
       high: 1000,
       unit: "°F"
     },
-    isothermsReason: "300–1000°F captures active fire and hot spots through smoke. Ash caps sit around 600°F, solar-loaded materials run 150–200°F — narrow range misses critical data. Expand to 1000°F to capture full fire signature (Reed)",
+    isothermsReason: "300–1000°F captures active fire and hot spots through smoke. Ash caps sit around 600°F, solar-loaded materials run 150–200°F — narrow range misses critical data. Expand to 1000°F to capture full fire signature",
     zoom: "1–3x",
     altitude: "150–250ft AGL",
     tips: ["Use isotherm to cut through smoke — hot spots appear as highlighted zones", "Attic space is critical — thermal shows fire spread and rafter/truss type (truss fails faster). Don't just watch exterior walls", "Open windows show convection currents and flow paths — can identify victim room isolation in multi-victim structures (apartments, mid-rise)", "Thermal won't penetrate load-bearing walls — focus on roof, attic vents, and open penetrations", "Roof surface temp asymmetry indicates hottest fire compartment — helps guide interior crew positioning", "Coordinate aerial view with IC — call out open windows with thermal signatures, active vent flow, and roof deformation"]
@@ -5436,10 +5799,10 @@ const MISSIONS = [{
       high: 1000,
       unit: "°F"
     },
-    isothermsReason: "300–1000°F range captures active fire while filtering solar-loaded dirt and ash caps. Ash caps sit around 600°F, solar-loaded dark granite can run 150–200°F — narrow range misses critical data (Reed)",
+    isothermsReason: "300–1000°F range captures active fire while filtering solar-loaded dirt and ash caps. Ash caps sit around 600°F, solar-loaded dark granite can run 150–200°F — narrow range misses critical data",
     zoom: "1x wide",
     altitude: "300–400ft AGL",
-    tips: ["Stay at the perimeter — zoom gives you everything you need without putting equipment in atmospheric instability. Only cross into brush if area exceeds 20–30 acres (Reed)", "Monitor outward from perimeter for spot fires 75% of the time — this is where the next threat comes from", "Fly the perimeter first at 300ft to map active fire edge before going overhead", "Use isotherm to distinguish active fire from smoldering ash — they read differently", "Spot fires appear as isolated bright signatures — report bearing and distance from main fire", "Wind direction affects thermal plume — stay upwind for clearest imaging"]
+    tips: ["Stay at the perimeter — zoom gives you everything you need without putting equipment in atmospheric instability. Only cross into brush if area exceeds 20–30 acres", "Monitor outward from perimeter for spot fires 75% of the time — this is where the next threat comes from", "Fly the perimeter first at 300ft to map active fire edge before going overhead", "Use isotherm to distinguish active fire from smoldering ash — they read differently", "Spot fires appear as isolated bright signatures — report bearing and distance from main fire", "Wind direction affects thermal plume — stay upwind for clearest imaging"]
   }
 }, {
   id: "sar",
@@ -5452,7 +5815,7 @@ const MISSIONS = [{
     gain: "LOW",
     gainReason: "Day SAR requires low gain — solar loading heats the ground above body temp (120–150°F+). High gain saturates on the hot ground and loses the subject. Low gain spreads the range wide enough to distinguish a 98°F person against a 130°F solar-loaded background",
     palette: "Black Hot",
-    paletteReason: "Black Hot is preferred for daytime SAR — solar-loaded environment goes black, people and animals appear white and are more distinguishable (Reed, field-validated)",
+    paletteReason: "Black Hot is preferred for daytime SAR — solar-loaded environment goes black, people and animals appear white and are more distinguishable",
     isotherm: {
       enabled: false,
       low: null,
@@ -5500,20 +5863,20 @@ const MISSIONS = [{
       unit: "\xB0F"
     },
     isothermsReason: "Consider enabling Isotherm overlay on Rainbow or Iron Bow — sharpens water surface temperature differentials and ripple detection. Off by default.",
-    zoom: "High zoom from low altitude — stay below 200ft AGL",
-    altitude: "Below 200ft AGL (Reed: subjects do not show on thermal above 200ft)",
-    tips: ["CRITICAL: Stay below 200ft AGL for thermal water SAR — Reed confirmed subjects do not register on thermal above this altitude", "Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to optical (RGB) for submerged search", "Rainbow and ISO palettes show water surface agitation from a struggling subject — look for color differentials in the water surface, not just a heat signature", "For submerged victims: use optical with high altitude + high zoom — gives better perpendicular viewing angles and optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust based on sun glare angle", "Partially exposed victims are detectable on thermal — look for any bright signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection — surface victims visible from much farther", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Debris, foam, and turbulence create false positives on optical — confirm with zoom before directing assets", "M30T SBS confirmed: same search path as Avata2 at recommended AGL and camera angle per white paper (Reed)"]
+    zoom: "High zoom, low altitude",
+    altitude: "Below 200ft AGL",
+    tips: ["CRITICAL: Stay below 200ft AGL — subjects do not register on thermal above this altitude", "Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to optical (RGB) for submerged search", "Rainbow and ISO palettes show water surface agitation from a struggling subject — look for color differentials in the water surface, not just a heat signature", "For submerged victims: use optical with high altitude + high zoom — gives better perpendicular viewing angles and optical water penetration", "Gimbal angle perpendicular to water surface gives optimal visual penetration — adjust based on sun glare angle", "Partially exposed victims are detectable on thermal — look for any bright signature at the waterline", "Spotlight in conjunction with thermal at night greatly increases detection — surface victims visible from much farther", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Debris, foam, and turbulence create false positives on optical — confirm with zoom before directing assets", "M30T SBS confirmed: same search path as Avata2 at recommended AGL and camera angle per white paper"]
   },
   configNight: {
     gain: "LOW",
     gainReason: "Low gain is best for ripple detection — reading subtle water surface temperature differentials, not a heat source.",
-    palette: "Rainbow / Iron Bow",
-    paletteReason: "Rainbow and Iron Bow reveal water surface agitation from a struggling subject — color differentials show disturbance even when the victim is not directly visible. Confirmed by Reed field testing on M30T and Avata2.",
+    palette: "Rainbow",
+    paletteReason: "Rainbow maps water surface temperature differentials and agitation from a struggling subject — color variation shows disturbance even when the victim is not directly visible.",
     isotherm: { enabled: false, low: null, high: null, unit: "°F" },
     isothermsReason: "Consider enabling Isotherm overlay — sharpens water surface temperature differentials and ripple patterns.",
     zoom: "High zoom, low altitude",
     altitude: "Below 200ft AGL",
-    tips: ["CRITICAL: Stay below 200ft AGL — subjects and ripple patterns not visible on thermal above this altitude", "Look for color differentials in the water surface, not a heat signature — the subject creates agitation that shows as temperature variation", "Rainbow shows the full ripple gradient; Iron Bow provides contrast for heat signatures at the waterline", "M30T SBS confirmed: same search path as Avata2 at recommended AGL per white paper (Reed)", "Debris and turbulence create false positives — confirm with zoom before directing assets"]
+    tips: ["CRITICAL: Stay below 200ft AGL — subjects and ripple patterns not visible on thermal above this altitude", "Look for color differentials in the water surface, not a heat signature — the subject creates agitation that shows as temperature variation", "Rainbow shows the full ripple gradient; Iron Bow provides contrast for heat signatures at the waterline", "M30T SBS confirmed: same search path as Avata2 at recommended AGL per white paper", "Debris and turbulence create false positives — confirm with zoom before directing assets"]
   }}, {
   id: "hazmat",
   icon: "☣️",
@@ -5535,7 +5898,7 @@ const MISSIONS = [{
     isothermsReason: "Isolates dangerously hot containers or exothermic reactions from ambient environment",
     zoom: "3–5x",
     altitude: "200–300ft AGL",
-    tips: ["Container load detection: empty containers appear DARK on thermal, containers carrying gas or liquid appear BRIGHTER — key indicator without ground contact (Reed)", "Thermal convection flows show chemical release direction and extent — stay upwind and read the plume", "BLEVE awareness: water applied to a superheated container can accelerate BLEVE risk — thermal shows tank temp and water effectiveness. Report to IC immediately", "Confined space hazmat: Avata 2 is ideal for rapid primary search while entry teams gear up — ID victim location, chemical source, and battery/thermal runaway indicators before entry", "Decon reality: not as complex as it sounds. If the drone contacts truly bad material — land it in a heavy trash bag and write it off to insurance (Reed)", "Document with thermal + visible split-screen — convection currents, hot containers, and plume direction all for incident record", "Coordinate with HazMat IC — provide real-time thermal feed; they will direct priorities"]
+    tips: ["Container load detection: empty containers appear DARK on thermal, containers carrying gas or liquid appear BRIGHTER — key indicator without ground contact", "Thermal convection flows show chemical release direction and extent — stay upwind and read the plume", "BLEVE awareness: water applied to a superheated container can accelerate BLEVE risk — thermal shows tank temp and water effectiveness. Report to IC immediately", "Confined space hazmat: Avata 2 is ideal for rapid primary search while entry teams gear up — ID victim location, chemical source, and battery/thermal runaway indicators before entry", "Decon reality: not as complex as it sounds. If the drone contacts truly bad material — land it in a heavy trash bag and write it off to insurance", "Document with thermal + visible split-screen — convection currents, hot containers, and plume direction all for incident record", "Coordinate with HazMat IC — provide real-time thermal feed; they will direct priorities"]
   }
 }, {
   id: "damage_assessment",
@@ -5705,7 +6068,7 @@ const MISSIONS = [{
     isothermsReason: "Off — wide area search benefits from full gradient; animal signatures are large enough to spot without isotherm",
     zoom: "1x search, 2x confirm",
     altitude: "150–250ft AGL",
-    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — but prioritize bodies of water, trails, and last known area from the owner (Reed)", "Check water sources FIRST — animals seek water in Texas heat, especially distressed animals", "Solar-loaded rocks can look similar to animal signatures at night — zoom to confirm shape and check for movement", "Animals in distress separate from herd — scan perimeter areas and dense brush after clearing open fields", "Coordinate with property owner before search — fencing, pen locations, and known watering holes focus the search area significantly"]
+    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — but prioritize bodies of water, trails, and last known area from the owner", "Check water sources FIRST — animals seek water in Texas heat, especially distressed animals", "Solar-loaded rocks can look similar to animal signatures at night — zoom to confirm shape and check for movement", "Animals in distress separate from herd — scan perimeter areas and dense brush after clearing open fields", "Coordinate with property owner before search — fencing, pen locations, and known watering holes focus the search area significantly"]
   },
   configNight: {
     gain: "HIGH",
@@ -5721,7 +6084,7 @@ const MISSIONS = [{
     isothermsReason: "Off — large animals are very visible at night without isotherm, full scene view helps avoid missing subjects",
     zoom: "1x wide search, zoom to ID species",
     altitude: "100–200ft AGL",
-    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — prioritize bodies of water, trails, and last known area from owner (Reed)", "Large animals are extremely visible at night — cattle and horses appear as large bright signatures. Reed found a horse in 10–15 min from takeoff at night", "KEY: solar-loaded rocks from daytime heat can look like animals — zoom and check for breathing movement or limb shape to confirm", "Single isolated signature away from herd may indicate injured or trapped animal — prioritize", "Wildlife may flee from aircraft — approach slowly from altitude to avoid scattering before location is confirmed"]
+    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — prioritize bodies of water, trails, and last known area from owner", "Large animals are extremely visible at night — cattle and horses appear as large bright signatures and can typically be located within 10–15 min of takeoff", "KEY: solar-loaded rocks from daytime heat can look like animals — zoom and check for breathing movement or limb shape to confirm", "Single isolated signature away from herd may indicate injured or trapped animal — prioritize", "Wildlife may flee from aircraft — approach slowly from altitude to avoid scattering before location is confirmed"]
   }
 }, {
   id: "pursuit",
