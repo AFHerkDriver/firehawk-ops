@@ -4544,7 +4544,7 @@ const [showComms, setShowComms] = useState(false);
       setPosErr(false);
       setPosMGRS(latLonToMGRS(lat, lon));
       // What3Words via their free API
-      fetch("https://api.what3words.com/v3/convert-to-3wa?coordinates=" + lat + "%2C" + lon + "&key=38EG0MIO")
+      fetch("https://api.what3words.com/v3/convert-to-3wa?coordinates=" + lat + "%2C" + lon + "&key=J4FL5TE7")
         .then(r => r.json()).then(d => { if(d.words) setPosW3W("///" + d.words); else setPosW3W("///key.not.active"); }).catch(()=>{ setPosW3W("///key.not.active"); });
       // Nearest airfields
       const af = [
