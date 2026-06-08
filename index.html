@@ -4553,31 +4553,33 @@ function NIFOGPanel() {
   const [open, setOpen] = React.useState(false);
   const [openGroup, setOpenGroup] = React.useState(null);
   return React.createElement("div", {style:{
-    background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)",
-    borderRadius:10, overflow:"hidden", marginBottom:10
+    background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.09)",
+    borderRadius:12, overflow:"hidden", marginBottom:10
   }},
     React.createElement("div", {
       onClick: () => setOpen(o => !o),
       style:{
-        display:"flex", alignItems:"center", justifyContent:"space-between",
-        padding:"12px 14px", cursor:"pointer",
-        background: open ? "rgba(255,255,255,0.06)" : "transparent"
+        display:"flex", alignItems:"center", gap:14,
+        padding:"14px 16px", cursor:"pointer"
       }
     },
-      React.createElement("div", null,
-        React.createElement("div", {style:{fontSize:11,color:"#E2E8F0",fontWeight:600,letterSpacing:1}},
-          "NATIONAL INTEROP CHANNELS"),
-        React.createElement("div", {style:{fontSize:9,color:"#64748B",marginTop:2}},
-          "NIFOG · VFIRE · VTAC · VMED · VLAW · SAR · Reference only")
+      React.createElement("div", {style:{
+        width:44, height:44, borderRadius:10, flexShrink:0,
+        background:"rgba(74,144,217,0.15)", border:"1px solid rgba(74,144,217,0.25)",
+        display:"flex", alignItems:"center", justifyContent:"center", fontSize:22
+      }}, "\uD83D\uDCE1"),
+      React.createElement("div", {style:{flex:1}},
+        React.createElement("div", {style:{fontSize:14,color:"#E2E8F0",fontWeight:700}},
+          "National Interop Channels"),
+        React.createElement("div", {style:{fontSize:11,color:"#64748B",marginTop:2}},
+          "NIFOG \u00B7 VFIRE \u00B7 VTAC \u00B7 VMED \u00B7 VLAW \u00B7 SAR")
       ),
-      React.createElement("span", {style:{color:"#64748B",fontSize:12}}, open ? "▲" : "▼")
+      React.createElement("span", {style:{color:"#4A90D9",fontSize:14}}, open ? "\u25B2" : "\u2197")
     ),
     open && React.createElement("div", {style:{padding:"0 14px 14px"}},
       React.createElement("div", {style:{
-        fontSize:9, color:"#FF3B30", background:"rgba(255,59,48,0.08)",
-        border:"1px solid rgba(255,59,48,0.2)", borderRadius:6,
-        padding:"6px 10px", marginBottom:10, lineHeight:1.5
-      }}, "Confirm assignments on incident ICS-205. CTCSS 156.7 Hz unless noted."),
+        fontSize:9, color:"#64748B", marginBottom:8, letterSpacing:1
+      }}, "CTCSS 156.7 Hz unless noted \u00B7 Confirm on ICS-205"),
       NIFOG_GROUPS.map(group => React.createElement("div", {key:group.id, style:{marginBottom:6}},
         React.createElement("div", {
           onClick: () => setOpenGroup(openGroup === group.id ? null : group.id),
@@ -4589,7 +4591,7 @@ function NIFOGPanel() {
           }
         },
           React.createElement("span", {style:{fontSize:11,color:group.color,fontWeight:700,letterSpacing:1}}, group.label),
-          React.createElement("span", {style:{color:"#64748B",fontSize:11}}, openGroup === group.id ? "▲" : "▼")
+          React.createElement("span", {style:{color:"#64748B",fontSize:11}}, openGroup === group.id ? "\u25B2" : "\u25BC")
         ),
         openGroup === group.id && React.createElement("div", {style:{
           background:"rgba(0,0,0,0.2)", borderRadius:"0 0 7px 7px",
@@ -5728,14 +5730,7 @@ const [showComms, setShowComms] = useState(false);
       letterSpacing: 2,
       marginBottom: 4
     }
-  }, "EMERGENCY OPS NOTE"), /*#__PURE__*/React.createElement(NIFOGPanel, null),
-/*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      color: "#334155",
-      lineHeight: 1.7
-    }
-  }, "BC2FD operates under a Part 107 COA for emergency response. LAANC is required for non-emergency ops in controlled airspace. Contact UAS PM for current COA scope and limitations."))))));
+  }, "EMERGENCY OPS NOTE"), /*#__PURE__*/React.createElement(NIFOGPanel, null))))));
 }
 
 // ── Thermal Config Modal ─────────────────────────────────────────────────────
