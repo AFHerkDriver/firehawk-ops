@@ -4554,9 +4554,16 @@ function AirspaceModal({
       setPosStatus("live");
       setPosErr(false);
       setPosMGRS(latLonToMGRS(lat, lon));
-      // What3Words via their free API
-      fetch("https://api.what3words.com/v3/convert-to-3wa?coordinates=" + lat + "%2C" + lon + "&key=38EG0MIO")
-        .then(r => r.json()).then(d => { if(d.words) setPosW3W("///" + d.words); }).catch(()=>{});
+      // What3Words — only fetch if we don't already have it or position changed significantly
+      if (!posW3W || Math.abs(lat - (posCoords?.lat || 0)) > 0.0005 || Math.abs(lon - (posCoords?.lon || 0)) > 0.0005) {
+        fetch("https://api.what3words.com/v3/convert-to-3wa?coordinates=" + lat.toFixed(6) + "," + lon.toFixed(6) + "&language=en&format=json&key=38EG0MIO")
+          .then(r => r.json())
+          .then(d => {
+            if (d.words) setPosW3W("///" + d.words);
+            else if (d.error) setPosW3W("---");
+          })
+          .catch(() => setPosW3W("---"));
+      }
       // Nearest airfields
       const af = [
         { id:"KSAT", name:"San Antonio Intl", cls:"C", ctaf:"Tower 119.8", lat:29.5337, lon:-98.4698 },
