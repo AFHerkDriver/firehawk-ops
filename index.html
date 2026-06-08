@@ -5460,7 +5460,7 @@ const MISSIONS = [{
 }, {
   id: "sar",
   icon: "🔦",
-  label: "Search & Rescue",
+  label: "SAR",
   sub: "Missing person, lost hiker, water search",
   color: "#34C759",
   dayNight: true,
@@ -5568,7 +5568,7 @@ const MISSIONS = [{
 }, {
   id: "storm_damage",
   icon: "🌪",
-  label: "Storm / Severe Weather",
+  label: "Storm / Severe Wx",
   sub: "Post-tornado survey, hail damage, gas leak detection",
   color: "#64B5F6",
   dayNight: false,
@@ -5591,7 +5591,7 @@ const MISSIONS = [{
 }, {
   id: "mci",
   icon: "🚑",
-  label: "Mass Casualty / MCI",
+  label: "MCI",
   sub: "Triage support, locating unresponsive victims",
   color: "#E91E63",
   dayNight: true,
@@ -5630,7 +5630,7 @@ const MISSIONS = [{
 }, {
   id: "power_infra",
   icon: "🔌",
-  label: "Power / Infrastructure",
+  label: "Power / Infra",
   sub: "Electrical fault, transformer hot spots, utility inspection",
   color: "#FFB300",
   dayNight: false,
@@ -5653,7 +5653,7 @@ const MISSIONS = [{
 }, {
   id: "overwatch",
   icon: "👁",
-  label: "General Overwatch",
+  label: "Overwatch",
   sub: "LE support, crowd monitoring, perimeter security",
   color: "#C8A84B",
   dayNight: true,
@@ -5692,7 +5692,7 @@ const MISSIONS = [{
 }, {
   id: "large_animal",
   icon: "🐄",
-  label: "Large Animal / Wildlife",
+  label: "Large Animal",
   sub: "Livestock rescue, wildlife SAR, rural operations",
   color: "#8D6E63",
   dayNight: true,
@@ -5865,16 +5865,7 @@ function ThermalModal({
       cursor: "pointer",
       fontFamily: "inherit"
     }
-  }, "\u2715 Close")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      overflowY: "auto",
-      WebkitOverflowScrolling: "touch",
-      maxWidth: 480,
-      margin: "0 auto",
-      width: "100%"
-    }
-  }, !mission ? /*#__PURE__*/React.createElement("div", {
+  }, "\u2715 Close")), !mission ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "14px"
     }
@@ -6361,7 +6352,7 @@ function ThermalModal({
       color: "#64748B",
       lineHeight: 1.7
     }
-  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)")))))));
+  }, "Camera \u2192 Thermal \u2192 Gain Mode \xB7 Color Palette \xB7 Isotherm (toggle + set range)"))))));
 }
 
 // ── Weather Modal ────────────────────────────────────────────────────────────
@@ -7689,8 +7680,7 @@ function FirehawkOps() {
       minHeight: "100vh",
       background: "#0D1117",
       fontFamily: "'DM Mono','Courier New',monospace",
-      color: "#CBD5E1",
-      overflowX: "hidden"
+      color: "#CBD5E1"
     }
   }, /*#__PURE__*/React.createElement("style", null, `
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap');
