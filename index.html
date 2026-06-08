@@ -5230,7 +5230,7 @@ const [showComms, setShowComms] = useState(false);
 
     /* Traffic list */
     adsbTraffic.length === 0
-      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#64748B", textAlign: "center", padding: "12px 0", fontStyle: "italic" } }, adsbLoading ? "Scanning for traffic..." : "No traffic SFC\u2013" + altMax.toLocaleString() + "ft within 2nm")
+      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#64748B", textAlign: "center", padding: "12px 0", fontStyle: "italic" } }, adsbLoading ? "Scanning for traffic..." : "No traffic SFC\u2013" + altMax.toLocaleString() + "ft within 3NM")
       : /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
         adsbTraffic.map(ac => {
           const isConflict = ac.alt <= 400;
