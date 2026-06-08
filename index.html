@@ -8044,7 +8044,7 @@ function FirehawkOps() {
     return s === "warning" || s === "expired";
   });
   const allCurrent = activeCrew.every(c => certStatus(c.part107) === "current");
-  const TABS_MANAGER = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["currency", "Crew Mgmt"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
+  const TABS_MANAGER = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["currency", "Crew Mgmt"], ["bulletin", "Bulletin Board"]];
   const TABS_STAFF = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
   const tabs = isManager ? TABS_MANAGER : TABS_STAFF;
   const SHIFT_PATTERN = ["A", "A", "B", "B", "C", "C"];
