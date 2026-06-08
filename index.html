@@ -4293,6 +4293,20 @@ function AirspaceModal({
   const [status, setStatus] = useState("loading");
   const [tab, setTab] = useState("status");
   const [selectedAirport, setSelectedAirport] = useState(null);
+const [showComms, setShowComms] = useState(false);
+  const [posCoords, setPosCoords] = useState(null);
+  const [posStatus, setPosStatus] = useState("acquiring");
+  const [posErr, setPosErr] = useState(false);
+  const [posMGRS, setPosMGRS] = useState(null);
+  const [posW3W, setPosW3W] = useState(null);
+  const [copyLabel, setCopyLabel] = useState(null);
+  const [nearestAirfields, setNearestAirfields] = useState([]);
+  const [adsbTraffic, setAdsbTraffic] = useState([]);
+  const [adsbLoading, setAdsbLoading] = useState(true);
+  const [scopeMode, setScopeMode] = useState("north");
+  const [heading, setHeading] = useState(0);
+  const [altMin, setAltMin] = useState(0);
+  const [altMax, setAltMax] = useState(1000);
 
   // Fixed airport data — airspace class and LAANC status never change
   const AIRPORTS = [{
@@ -4472,13 +4486,128 @@ function AirspaceModal({
   useEffect(() => {
     fetchData();
   }, []);
+
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const copyPos = (text) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+    const key = text.includes("///") ? "w3w" : text.includes("RMU") || text.match(/\d{2}[A-Z]/) ? "mgrs" : "coords";
+    setCopyLabel(key);
+    setTimeout(() => setCopyLabel(null), 1500);
+  };
+  const toRad = d => d * Math.PI / 180;
+  const bearingTo = (lat1, lon1, lat2, lon2) => {
+    const dLon = toRad(lon2 - lon1);
+    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  };
+  const distNm = (lat1, lon1, lat2, lon2) => {
+    const R = 3440.065;
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+  const dirLabel = brg => { const dirs = ["N","NE","E","SE","S","SW","W","NW"]; return dirs[Math.round(brg/45)%8]; };
+  // Minimal lat/lon → MGRS (accurate for zone 14R covering San Antonio)
+  const latLonToMGRS = (lat, lon) => {
+    try {
+      const a = 6378137, f = 1/298.257223563, b = a*(1-f);
+      const e2 = (a**2-b**2)/a**2, e = Math.sqrt(e2);
+      const latR = toRad(lat), lonR = toRad(lon);
+      const zone = Math.floor((lon+180)/6)+1;
+      const lon0 = toRad((zone-1)*6-180+3);
+      const N = a/Math.sqrt(1-e2*Math.sin(latR)**2);
+      const T = Math.tan(latR)**2, C = e2/(1-e2)*Math.cos(latR)**2, A = Math.cos(latR)*(lonR-lon0);
+      const M = a*((1-e2/4-3*e2**2/64-5*e2**3/256)*latR-(3*e2/8+3*e2**2/32+45*e2**3/1024)*Math.sin(2*latR)+(15*e2**2/256+45*e2**3/1024)*Math.sin(4*latR)-(35*e2**3/3072)*Math.sin(6*latR));
+      const x = 0.9996*(N*(A+(1-T+C)*A**3/6+(5-18*T+T**2+72*C-58*e2/(1-e2))*A**5/120))+500000;
+      const y = 0.9996*(M+N*Math.tan(latR)*(A**2/2+(5-T+9*C+4*C**2)*A**4/24+(61-58*T+T**2+600*C-330*e2/(1-e2))*A**6/720))+(lat<0?10000000:0);
+      const bandLetters = "CDEFGHJKLMNPQRSTUVWX";
+      const latBand = bandLetters[Math.floor((lat+80)/8)];
+      const colIdx = ((zone-1)%3)*8 + Math.floor((x-100000)/100000);
+      const rowIdx = (Math.floor(y/100000) + (zone%2===0?5:0)) % 20;
+      const cols = "ABCDEFGHJKLMNPQRSTUVWXYZ"; const rows = "ABCDEFGHJKLMNPQRSTUV";
+      const col = cols[colIdx]; const row = rows[rowIdx];
+      const easting = Math.floor(x%100000).toString().padStart(5,"0");
+      const northing = Math.floor(y%100000).toString().padStart(5,"0");
+      return zone + latBand + col + row + " " + easting.slice(0,5) + " " + northing.slice(0,5);
+    } catch(e) { return null; }
+  };
+
+  // ── Geolocation ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!navigator.geolocation) { setPosErr(true); return; }
+    const watchId = navigator.geolocation.watchPosition(pos => {
+      const { latitude: lat, longitude: lon } = pos.coords;
+      setPosCoords({ lat, lon });
+      setPosStatus("live");
+      setPosErr(false);
+      setPosMGRS(latLonToMGRS(lat, lon));
+      // What3Words via their free API
+      fetch("https://api.what3words.com/v3/convert-to-3wa?coordinates=" + lat + "%2C" + lon + "&key=38EG0MIO")
+        .then(r => r.json()).then(d => { if(d.words) setPosW3W("///" + d.words); else setPosW3W("///key.not.active"); }).catch(()=>{ setPosW3W("///key.not.active"); });
+      // Nearest airfields
+      const af = [
+        { id:"KSAT", name:"San Antonio Intl", cls:"C", ctaf:"Tower 119.8", lat:29.5337, lon:-98.4698 },
+        { id:"KSSF", name:"Stinson Municipal", cls:"D", ctaf:"CTAF 118.2", lat:29.3369, lon:-98.4711 },
+        { id:"KSKF", name:"Kelly Field", cls:"D", ctaf:"Tower 124.3", lat:29.3842, lon:-98.5811 },
+        { id:"KRND", name:"Randolph AFB", cls:"D", ctaf:"Tower 128.25", lat:29.5297, lon:-98.2789 }
+      ].map(a => ({ ...a, dist: distNm(lat,lon,a.lat,a.lon), brg: Math.round(bearingTo(lat,lon,a.lat,a.lon)) }))
+       .sort((a,b) => a.dist-b.dist).slice(0,2);
+      setNearestAirfields(af);
+    }, () => setPosErr(true), { enableHighAccuracy: true, maximumAge: 5000 });
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // ── ADS-B fetch (airplanes.live, free, no key) ───────────────────────────
+  useEffect(() => {
+    if (!posCoords) return;
+    const fetchADSB = () => {
+      fetch("https://api.airplanes.live/v2/point/" + posCoords.lat.toFixed(4) + "/" + posCoords.lon.toFixed(4) + "/2")
+        .then(r => r.json()).then(data => {
+          const ac = (data.ac || [])
+            .filter(a => a.alt_baro && a.alt_baro !== "ground" && a.alt_baro <= 1000 && a.lat && a.lon)
+            .map(a => ({
+              call: (a.flight || a.hex || "UNKN").trim(),
+              alt: Math.round(a.alt_baro),
+              spd: Math.round(a.gs || 0),
+              hdg: Math.round(a.track || 0),
+              dist: distNm(posCoords.lat, posCoords.lon, a.lat, a.lon),
+              brg: Math.round(bearingTo(posCoords.lat, posCoords.lon, a.lat, a.lon)),
+              dir: dirLabel(bearingTo(posCoords.lat, posCoords.lon, a.lat, a.lon))
+            }))
+            .sort((a,b) => a.alt - b.alt);
+          setAdsbTraffic(ac);
+          setAdsbLoading(false);
+        }).catch(() => setAdsbLoading(false));
+    };
+    fetchADSB();
+    const interval = setInterval(fetchADSB, 10000);
+    return () => clearInterval(interval);
+  }, [posCoords]);
+
+  // ── Compass heading ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = e => {
+      if (e.webkitCompassHeading !== undefined) setHeading(Math.round(e.webkitCompassHeading));
+      else if (e.alpha !== null) setHeading(Math.round(360 - e.alpha));
+    };
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      DeviceOrientationEvent.requestPermission().then(p => { if(p==="granted") window.addEventListener("deviceorientation", handler); }).catch(()=>{});
+    } else {
+      window.addEventListener("deviceorientation", handler);
+    }
+    return () => window.removeEventListener("deviceorientation", handler);
+  }, []);
+
   return /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
       background: "#0D1117",
       zIndex: 999,
-      overflowY: "auto",
+      display: "flex",
+      flexDirection: "column",
       fontFamily: "'DM Mono','Courier New',monospace",
       color: "#CBD5E1"
     }
@@ -4490,10 +4619,7 @@ function AirspaceModal({
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      position: "sticky",
-      top: 0,
-      backdropFilter: "blur(10px)",
-      zIndex: 10
+      flexShrink: 0
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4543,11 +4669,8 @@ function AirspaceModal({
       padding: "10px 14px",
       borderBottom: "1px solid rgba(255,255,255,0.05)",
       overflowX: "auto",
-      position: "sticky",
-      top: 53,
-      background: "#0D1117",
-      zIndex: 9,
-      backdropFilter: "blur(10px)"
+      flexShrink: 0,
+      background: "#0D1117"
     }
   }, [["status", "Status"], ["airports", "Airports"], ["links", "Quick Links"]].map(([id, label]) => /*#__PURE__*/React.createElement("button", {
     key: id,
@@ -4569,6 +4692,12 @@ function AirspaceModal({
     }
   }, label))), /*#__PURE__*/React.createElement("div", {
     style: {
+      flex: 1,
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
       padding: "14px",
       paddingBottom: 40
     }
@@ -4586,12 +4715,246 @@ function AirspaceModal({
       marginBottom: 12
     }
   }, "\u2708\uFE0F"), "FETCHING AIRSPACE DATA..."), status === "loaded" && tab === "status" && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 12
-    }
-  })), status === "loaded" && tab === "airports" && /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", flexDirection: "column", gap: 10 }
+  }, /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 8, color: "#64748B", letterSpacing: 3, marginBottom: 8 }
+    }, "POSITION \u2014 CURRENT LOCATION"),
+
+    /* Coordinates */
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12, marginBottom: 8 }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }
+      },
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2 } }, "COORDINATES"),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: posErr ? "#FF3B30" : posStatus === "live" ? "#34C759" : "#FF9F0A", letterSpacing: 1 } },
+            posErr ? "\u26A0 ERROR" : posStatus === "live" ? "\u25CF LIVE" : "\u25CF ACQUIRING..."
+          ),
+          posCoords && /*#__PURE__*/React.createElement("button", {
+            onClick: () => copyPos(posCoords.lat.toFixed(4) + "\xb0 N, " + Math.abs(posCoords.lon.toFixed(4)) + "\xb0 W"),
+            style: { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 5, color: "#94A3B8", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
+          }, copyLabel === "coords" ? "\u2713" : "COPY")
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: "#E2E8F0" } },
+        posCoords ? posCoords.lat.toFixed(4) + "\xb0 N, " + Math.abs(posCoords.lon).toFixed(4) + "\xb0 W" : "Requesting location..."
+      )
+    ),
+
+    /* MGRS + W3W row */
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } },
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(74,144,217,0.08)", border: "1px solid rgba(74,144,217,0.2)", borderRadius: 12, padding: 12 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#4A90D9", letterSpacing: 2 } }, "MGRS"),
+          posMGRS && /*#__PURE__*/React.createElement("button", {
+            onClick: () => copyPos(posMGRS),
+            style: { background: "rgba(74,144,217,0.15)", border: "1px solid rgba(74,144,217,0.3)", borderRadius: 5, color: "#4A90D9", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
+          }, copyLabel === "mgrs" ? "\u2713" : "COPY")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "#E2E8F0", letterSpacing: 1, fontWeight: 700, lineHeight: 1.4 } },
+          posMGRS || "---"
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#475569", marginTop: 3 } }, "TAK \xb7 TDEM \xb7 TXTF1")
+      ),
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(255,107,53,0.08)", border: "1px solid rgba(255,107,53,0.2)", borderRadius: 12, padding: 12 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#FF6B35", letterSpacing: 2 } }, "W3W"),
+          posW3W && /*#__PURE__*/React.createElement("button", {
+            onClick: () => copyPos(posW3W),
+            style: { background: "rgba(255,107,53,0.15)", border: "1px solid rgba(255,107,53,0.3)", borderRadius: 5, color: "#FF6B35", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
+          }, copyLabel === "w3w" ? "\u2713" : "COPY")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#E2E8F0", lineHeight: 1.5 } },
+          posW3W || "---"
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#475569", marginTop: 3 } }, "dispatcher-ready")
+      )
+    ),
+
+    /* Nearest airspace */
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 12, marginBottom: 8 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2, marginBottom: 8 } }, "NEAREST CONTROLLED AIRSPACE"),
+      nearestAirfields.map((af, i) => /*#__PURE__*/React.createElement("div", { key: af.id },
+        i > 0 && /*#__PURE__*/React.createElement("div", { style: { height: 1, background: "rgba(255,255,255,0.05)", margin: "7px 0" } }),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#E2E8F0" } }, af.id + " " + af.name),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } }, "Class " + af.cls + " \xb7 " + af.ctaf)
+          ),
+          /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } },
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: i === 0 ? "#FF6B35" : "#D4AF37", fontWeight: 700 } },
+              af.dist !== null ? af.dist.toFixed(1) + " nm" : "---"
+            ),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } },
+              af.brg !== null ? "hdg " + af.brg + "\xb0" : ""
+            )
+          )
+        )
+      ))
+    )
+  ),
+
+  /* \u2500\u2500 ADS-B SCOPE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 3 } }, "ADS-B TRAFFIC \u2014 2nm"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 1 } }, "BELOW 1,000ft AGL")
+    ),
+
+    /* Conflict banner \u2014 only shown when red traffic present */
+    adsbTraffic.filter(a => a.alt <= 400).length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: { background: "rgba(255,59,48,0.1)", border: "1px solid rgba(255,59,48,0.35)", borderRadius: 8, padding: "8px 12px", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#FF3B30", flexShrink: 0 } }),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#FF3B30", letterSpacing: 1 } },
+        "POTENTIAL CONFLICT \u2014 " + adsbTraffic.filter(a => a.alt <= 400).length + " aircraft in your layer (0\u2013400ft)"
+      )
+    ),
+
+    /* Scope orientation toggle */
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8 } },
+      ["north", "track"].map(m => /*#__PURE__*/React.createElement("button", {
+        key: m,
+        onClick: () => setScopeMode(m),
+        style: {
+          flex: 1, padding: "7px 0", borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
+          fontSize: 9, letterSpacing: 1, textAlign: "center",
+          background: scopeMode === m ? (m === "north" ? "rgba(74,144,217,0.15)" : "rgba(52,199,89,0.15)") : "rgba(255,255,255,0.04)",
+          border: scopeMode === m ? (m === "north" ? "1px solid rgba(74,144,217,0.4)" : "1px solid rgba(52,199,89,0.4)") : "1px solid rgba(255,255,255,0.08)",
+          color: scopeMode === m ? (m === "north" ? "#4A90D9" : "#34C759") : "#64748B"
+        }
+      }, m === "north" ? "NORTH-UP" : "TRACK-UP"))
+    ),
+
+    /* Radar scope SVG */
+    /*#__PURE__*/React.createElement("div", {
+      style: { background: "#060E1A", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden", marginBottom: 8 }
+    },
+      /*#__PURE__*/React.createElement("svg", { viewBox: "0 0 320 280", width: "100%", style: { display: "block" } },
+        /*#__PURE__*/React.createElement("g", { transform: scopeMode === "track" ? "rotate(" + (-heading) + ", 160, 150)" : undefined },
+          /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 60, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 120, fill: "none", stroke: "rgba(255,255,255,0.06)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("line", { x1: 160, y1: 10, x2: 160, y2: 290, stroke: "rgba(255,255,255,0.04)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("line", { x1: 20, y1: 150, x2: 300, y2: 150, stroke: "rgba(255,255,255,0.04)", strokeWidth: 1 }),
+          /*#__PURE__*/React.createElement("text", { x: 164, y: 97, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "1nm"),
+          /*#__PURE__*/React.createElement("text", { x: 164, y: 37, fill: "rgba(255,255,255,0.15)", fontSize: 8, fontFamily: "monospace" }, "2nm"),
+          /*#__PURE__*/React.createElement("text", { x: 153, y: 22, fill: "rgba(255,255,255,0.3)", fontSize: 11, fontFamily: "monospace", fontWeight: "bold" }, "N"),
+          adsbTraffic.map(ac => {
+            const color = ac.alt <= 400 ? "#FF3B30" : "#FF9F0A";
+            const rad = (ac.brg - 90) * Math.PI / 180;
+            const r = (ac.dist / 2) * 120;
+            const x = 160 + r * Math.cos(rad);
+            const y = 150 + r * Math.sin(rad);
+            return /*#__PURE__*/React.createElement("g", { key: ac.call, transform: "translate(" + x + "," + y + ") rotate(" + ac.hdg + ")" },
+              /*#__PURE__*/React.createElement("polygon", { points: "0,-7 -4,6 0,3 4,6", fill: color })
+            );
+          }),
+          adsbTraffic.map(ac => {
+            const color = ac.alt <= 400 ? "#FF3B30" : "#FF9F0A";
+            const rad = (ac.brg - 90) * Math.PI / 180;
+            const r = (ac.dist / 2) * 120;
+            const x = 160 + r * Math.cos(rad);
+            const y = 150 + r * Math.sin(rad);
+            return /*#__PURE__*/React.createElement("g", { key: ac.call + "_lbl" },
+              /*#__PURE__*/React.createElement("text", { x: x + 8, y: y - 2, fill: color, fontSize: 9, fontFamily: "monospace" }, ac.call),
+              /*#__PURE__*/React.createElement("text", { x: x + 8, y: y + 9, fill: color, fontSize: 7, fontFamily: "monospace", opacity: 0.6 }, ac.alt + "ft")
+            );
+          })
+        ),
+        /* Ownship \u2014 always fixed to center, not rotated */
+        /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 150, r: 6, fill: "none", stroke: "#94A3B8", strokeWidth: 1.5 }),
+        scopeMode === "north"
+          ? /*#__PURE__*/React.createElement("line", { x1: 160, y1: 150, x2: 160 + 14 * Math.sin(heading * Math.PI / 180), y2: 150 - 14 * Math.cos(heading * Math.PI / 180), stroke: "#94A3B8", strokeWidth: 1.5, strokeLinecap: "round" })
+          : /*#__PURE__*/React.createElement("polygon", { points: "160,138 155,153 165,153", fill: "#94A3B8" }),
+        scopeMode === "track" && /*#__PURE__*/React.createElement("text", { x: 145, y: 22, fill: "rgba(255,255,255,0.3)", fontSize: 9, fontFamily: "monospace" }, "AHEAD")
+      )
+    ),
+
+    /* Traffic list */
+    adsbTraffic.length === 0
+      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#64748B", textAlign: "center", padding: "12px 0", fontStyle: "italic" } }, adsbLoading ? "Scanning for traffic..." : "No traffic below 1,000ft within 2nm")
+      : /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
+        adsbTraffic.map(ac => {
+          const isConflict = ac.alt <= 400;
+          const color = isConflict ? "#FF3B30" : "#FF9F0A";
+          const bg = isConflict ? "rgba(255,59,48,0.07)" : "rgba(255,159,10,0.05)";
+          const border = isConflict ? "rgba(255,59,48,0.3)" : "rgba(255,159,10,0.2)";
+          return /*#__PURE__*/React.createElement("div", {
+            key: ac.call,
+            style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: bg, border: "1px solid " + border, borderLeft: "3px solid " + color, borderRadius: 8, padding: "8px 10px" }
+          },
+            /*#__PURE__*/React.createElement("div", null,
+              /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color, fontWeight: 700 } }, ac.call),
+                /*#__PURE__*/React.createElement("span", { style: { background: isConflict ? "rgba(255,59,48,0.15)" : "rgba(255,159,10,0.1)", border: "1px solid " + border, borderRadius: 4, fontSize: 7, color, padding: "1px 5px", letterSpacing: 1 } },
+                  isConflict ? "CONFLICT LAYER" : "NEARBY"
+                )
+              ),
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", marginTop: 2 } },
+                ac.dir + " \xb7 " + ac.dist.toFixed(1) + "nm"
+              )
+            ),
+            /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } },
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color, fontWeight: 700 } }, ac.alt.toLocaleString() + " ft"),
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } }, ac.spd + " kt \xb7 hdg " + ac.hdg + "\xb0")
+            )
+          );
+        })
+      ),
+
+    /* Legend + refresh */
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 12, padding: "8px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, alignItems: "center", marginBottom: 8 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#94A3B8" } }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "OWNSHIP")
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#FF3B30" } }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "CONFLICT 0\u2013400ft")
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#FF9F0A" } }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "NEARBY 400\u20131,000ft")
+      )
+    ),
+
+    /* Airspace tools buttons */
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 3, marginBottom: 8 } }, "AIRSPACE TOOLS"),
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(52,199,89,0.08)", border: "1px solid rgba(52,199,89,0.2)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column" }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#34C759", letterSpacing: 1, marginBottom: 2 } }, "UAV FORECAST"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", flex: 1 } }, "go/no-go at your position"),
+        /*#__PURE__*/React.createElement("a", {
+          href: posCoords ? "https://www.uavforecast.com/?lat=" + posCoords.lat.toFixed(4) + "&lng=" + posCoords.lon.toFixed(4) : "https://www.uavforecast.com",
+          target: "_blank", rel: "noopener noreferrer",
+          style: { marginTop: 10, background: "rgba(52,199,89,0.15)", border: "1px solid rgba(52,199,89,0.3)", borderRadius: 7, color: "#34C759", fontSize: 9, padding: 7, textAlign: "center", textDecoration: "none", letterSpacing: 1, display: "block" }
+        }, "OPEN \u2197")
+      ),
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(74,144,217,0.08)", border: "1px solid rgba(74,144,217,0.2)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column" }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#4A90D9", letterSpacing: 1, marginBottom: 2 } }, "ADS-B EXCHANGE"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", flex: 1 } }, "full map view"),
+        /*#__PURE__*/React.createElement("a", {
+          href: posCoords ? "https://globe.adsbexchange.com/?lat=" + posCoords.lat.toFixed(4) + "&lon=" + posCoords.lon.toFixed(4) + "&zoom=13" : "https://globe.adsbexchange.com",
+          target: "_blank", rel: "noopener noreferrer",
+          style: { marginTop: 10, background: "rgba(74,144,217,0.15)", border: "1px solid rgba(74,144,217,0.3)", borderRadius: 7, color: "#4A90D9", fontSize: 9, padding: 7, textAlign: "center", textDecoration: "none", letterSpacing: 1, display: "block" }
+        }, "OPEN \u2197")
+      )
+    )
+  
+  ), status === "loaded" && tab === "airports" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -4952,7 +5315,7 @@ function AirspaceModal({
       color: "#334155",
       lineHeight: 1.7
     }
-  }, "BC2FD operates under a Part 107 COA for emergency response. LAANC is required for non-emergency ops in controlled airspace. Contact UAS PM for current COA scope and limitations."))));
+  }, "BC2FD operates under a Part 107 COA for emergency response. LAANC is required for non-emergency ops in controlled airspace. Contact UAS PM for current COA scope and limitations.")))))));
 }
 
 // ── Thermal Config Modal ─────────────────────────────────────────────────────
@@ -5335,7 +5698,8 @@ function ThermalModal({
       inset: 0,
       background: "#0D1117",
       zIndex: 999,
-      overflowY: "auto",
+      display: "flex",
+      flexDirection: "column",
       fontFamily: "'DM Mono','Courier New',monospace",
       color: "#CBD5E1"
     }
