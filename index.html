@@ -5672,15 +5672,8 @@ const [showComms, setShowComms] = useState(false);
   }, "BC2FD operates under a Part 107 COA for emergency response. LAANC is required for non-emergency ops in controlled airspace. Contact UAS PM for current COA scope and limitations."))))));
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// THERMAL MODAL — complete drop-in rebuild
-// Instructions:
-//   1. Place MISSIONS and PALETTES at module level (outside any function)
-//   2. Place ThermalModal function at module level before WeatherModal
-//   3. No compilation needed — plain React.createElement calls
-// ══════════════════════════════════════════════════════════════════════
+// ── Thermal Config Modal ─────────────────────────────────────────────────────
 
-// ── MISSIONS ─────────────────────────────────────────────────────────────
 const MISSIONS = [{
   id: "structure_fire",
   icon: "🏠",
@@ -6040,8 +6033,6 @@ const MISSIONS = [{
     tips: ["Engine and exhaust read extremely hot — stay in low gain to prevent image saturation", "Foot bail: suspect on foot appears bright white against dark pavement — switch scan mode immediately", "Call direction of travel and cross streets continuously for IC awareness", "Note: Current capability limited. DFR integration planned for future deployment."]
   }
 }];
-// ── PALETTES ─────────────────────────────────────────────────────────────
-
 const PALETTES = {
   "White Hot": {
     colors: ["#0d1117", "#1e3a5f", "#2d6a9f", "#5ba3d0", "#96cfe8", "#c8e8f5", "#ffffff"],
@@ -6060,8 +6051,6 @@ const PALETTES = {
     desc: "Full spectrum gradient"
   }
 };
-// ── THERMAL MODAL ────────────────────────────────────────────────────────
-
 function ThermalModal({onClose}) {
   const [selected, setSelected] = React.useState(null);
   const [dayNight, setDayNight] = React.useState("night");
@@ -6325,9 +6314,6 @@ function ThermalModal({onClose}) {
     )
   );
 }
-
-
-
 
 
 function WeatherModal({
