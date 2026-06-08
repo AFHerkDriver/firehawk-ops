@@ -4409,23 +4409,11 @@ function AirspaceModal({
     }]
   }];
   const QUICK_LINKS = [{
-    label: "TAK State of Texas",
-    sub: "BCESD2 TAK Operations",
-    url: "https://afherkdriver.github.io/bcesd2-tak-ops/",
-    icon: "tak",
-    color: "#C0392B"
-  }, {
     label: "Aloft LAANC",
     sub: "Instant LAANC authorization",
     url: "https://www.aloft.ai/",
     icon: "✈️",
     color: "#4A90D9"
-  }, {
-    label: "B4UFLY",
-    sub: "FAA mobile airspace check",
-    url: "https://b4ufly.faa.gov/",
-    icon: "📱",
-    color: "#34C759"
   }, {
     label: "FAA DroneZone",
     sub: "COA & waiver applications",
@@ -4554,7 +4542,12 @@ function AirspaceModal({
       gap: 6,
       padding: "10px 14px",
       borderBottom: "1px solid rgba(255,255,255,0.05)",
-      overflowX: "auto"
+      overflowX: "auto",
+      position: "sticky",
+      top: 53,
+      background: "#0D1117",
+      zIndex: 9,
+      backdropFilter: "blur(10px)"
     }
   }, [["status", "Status"], ["airports", "Airports"], ["links", "Quick Links"]].map(([id, label]) => /*#__PURE__*/React.createElement("button", {
     key: id,

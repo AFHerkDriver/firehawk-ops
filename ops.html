@@ -259,16 +259,7 @@ body { background: #080D14; font-family: 'Courier New', monospace; color: #CBD5E
           <!-- Ownship -->
           <circle cx="250" cy="170" r="7" fill="none" stroke="#94A3B8" stroke-width="2"/>
           <polygon points="250,157 244,172 256,172" fill="#94A3B8"/>
-          <!-- Traffic -->
-          <g transform="translate(313,107) rotate(225)"><polygon points="0,-8 -4,6 0,3 4,6" fill="#FF3B30"/></g>
-          <text x="320" y="104" fill="#FF3B30" font-size="10" font-family="monospace" font-weight="700">AIRLIFE</text>
-          <text x="320" y="115" fill="rgba(255,59,48,0.6)" font-size="8" font-family="monospace">320ft · 65kt</text>
-          <g transform="translate(187,107) rotate(135)"><polygon points="0,-8 -4,6 0,3 4,6" fill="#FF9F0A"/></g>
-          <text x="88" y="104" fill="#FF9F0A" font-size="10" font-family="monospace" font-weight="700">N8842P</text>
-          <text x="88" y="115" fill="rgba(255,159,10,0.6)" font-size="8" font-family="monospace">750ft · 90kt</text>
-          <g transform="translate(258,300) rotate(5)"><polygon points="0,-8 -4,6 0,3 4,6" fill="#34C759"/></g>
-          <text x="266" y="298" fill="#34C759" font-size="10" font-family="monospace" font-weight="700">UAL412</text>
-          <text x="266" y="309" fill="rgba(52,199,89,0.6)" font-size="8" font-family="monospace">3,200ft · 180kt</text>
+
         </svg>
         <div id="trafficList" style="border-top:1px solid rgba(255,255,255,0.05);margin-top:6px;padding-top:8px;display:flex;flex-direction:column;gap:4px;">
           <div style="font-size:9px;color:#475569;text-align:center;padding:8px 0;">Waiting for position…</div>
@@ -655,9 +646,9 @@ function renderADSBScope(ac) {
   // SVG center = 250,170; 3nm = 150px radius; 1nm = 50px
   const CX=250, CY=170, SCALE=50;
   g.innerHTML = ac.map(a => {
-    const brgR = (a.brg - 90) * Math.PI / 180; // convert bearing to SVG angle
-    const px = CX + Math.cos(brgR) * a.dist * SCALE;
-    const py = CY + Math.sin(brgR) * a.dist * SCALE;
+    const brgR = a.brg * Math.PI / 180; // compass bearing to radians
+    const px = CX + Math.sin(brgR) * a.dist * SCALE;  // East = +x
+    const py = CY - Math.cos(brgR) * a.dist * SCALE;  // North = -y (SVG y flipped)
     const c = acColor(a.alt);
     const callTrunc = a.call.length > 7 ? a.call.slice(0,7) : a.call;
     const tx = px > 350 ? px - 5 : px + 12;
