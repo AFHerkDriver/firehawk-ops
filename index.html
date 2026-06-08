@@ -945,22 +945,36 @@ const HISTORY = {
 };
 function groupAssignmentByUnit(a, crewList) {
   if (!a) return { uav121: null, uav124: null };
-  const rpicM  = a.rpic ? crewList.find(c => c.id === a.rpic) : null;
-  const voM    = a.vo   ? crewList.find(c => c.id === a.vo)   : null;
-  const vo2M   = a.vo2  ? crewList.find(c => c.id === a.vo2)  : null;
-  const extraM = (a.extra || []).map(id => crewList.find(c => c.id === id)).filter(Boolean);
+  // Coerce IDs to int — Firebase may return strings
+  const rpicM  = a.rpic != null ? crewList.find(c => c.id === parseInt(a.rpic)) : null;
+  const voM    = a.vo   != null ? crewList.find(c => c.id === parseInt(a.vo))   : null;
+  const vo2M   = a.vo2  != null ? crewList.find(c => c.id === parseInt(a.vo2))  : null;
+  const extraM = (a.extra || []).map(id => crewList.find(c => c.id === parseInt(id))).filter(Boolean);
 
-  // UAV121 = Sanchez (LEAD_PILOT_ID). UAV124 = everyone else.
-  // Two-unit days: Sanchez is rpic (UAV121), another RPIC in extra[] leads UAV124.
-  const uav121rpic = rpicM && rpicM.id === LEAD_PILOT_ID ? rpicM : null;
-  const uav124rpic = rpicM && rpicM.id !== LEAD_PILOT_ID
+  // Sanchez (LEAD_PILOT_ID) always flies UAV121, regardless of whether he is
+  // in rpic, vo, or extra[]. Everyone else flies UAV124.
+  const sanchez = crewList.find(c => c.id === LEAD_PILOT_ID);
+  const allAssigned = [rpicM, voM, vo2M, ...extraM].filter(Boolean);
+  const sanchezPresent = allAssigned.some(c => c && c.id === LEAD_PILOT_ID);
+
+  // UAV121: Sanchez as RPIC if he is the rpic, otherwise as crew if present
+  const uav121rpic = sanchezPresent ? sanchez : null;
+
+  // UAV124: the primary RPIC if it isn't Sanchez, or first non-Sanchez RPIC in extra[]
+  const uav124rpic = (rpicM && rpicM.id !== LEAD_PILOT_ID)
     ? rpicM
-    : extraM.find(c => c.role === "RPIC") || null;
-  // VO pairs: if two units active, voM pairs to UAV121, vo2M to UAV124
-  const uav121vo = uav121rpic ? voM : null;
-  const uav124vo = uav124rpic ? (uav121rpic ? vo2M : voM) : null;
-  // remaining extra (non-RPIC or after RPIC assigned)
-  const uav124extra = extraM.filter(c => c !== uav124rpic);
+    : extraM.find(c => c.role === "RPIC" && c.id !== LEAD_PILOT_ID) || null;
+
+  // VO pairing depends on whether both units are active
+  // Single-unit day: voM goes with whichever unit is active
+  // Two-unit day: VO2 (vo2) → UAV121 (Sanchez), VO1 (vo) → UAV124
+  const bothUnits = uav121rpic && uav124rpic;
+  const uav121vo = uav121rpic ? (bothUnits ? vo2M : (uav124rpic ? null : voM)) : null;
+  const uav124vo = uav124rpic ? voM : null;
+
+  // remaining extra crew go to UAV124
+  const uav124extra = extraM.filter(c => c.id !== LEAD_PILOT_ID && c !== uav124rpic);
+
   return {
     uav121: uav121rpic ? { rpic: uav121rpic, vo: uav121vo } : null,
     uav124: uav124rpic ? { rpic: uav124rpic, vo: uav124vo, extra: uav124extra } : null
