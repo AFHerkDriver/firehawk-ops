@@ -5153,7 +5153,7 @@ function AirspaceModal({
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } }, "Class " + af.cls + " · " + af.ctaf)
           ),
           /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } },
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: i === 0 ? "#FF6B35" : "#D4AF37", fontWeight: 700 } },
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: af.dist < 1 ? "#FF3B30" : af.dist < 3 ? "#FF9F0A" : "#34C759", fontWeight: 700 } },
               af.dist !== null ? af.dist.toFixed(1) + " nm" : "---"
             ),
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B" } },
