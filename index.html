@@ -5789,8 +5789,7 @@ function ThermalModal({
       inset: 0,
       background: "#0D1117",
       zIndex: 999,
-      display: "flex",
-      flexDirection: "column",
+      overflowY: "auto",
       fontFamily: "'DM Mono','Courier New',monospace",
       color: "#CBD5E1"
     }
@@ -5802,7 +5801,10 @@ function ThermalModal({
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      flexShrink: 0
+      position: "sticky",
+      top: 0,
+      zIndex: 10,
+      backdropFilter: "blur(10px)"
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8142,7 +8144,7 @@ function FirehawkOps() {
       opacity: 0.6
     }
   }, "\u2192")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setShowThermal(true),
+    onClick: () => { setShowThermal(true); setShowAirspace(false); },
     style: {
       width: "100%",
       background: "linear-gradient(135deg,rgba(255,107,53,0.15),rgba(255,107,53,0.08))",
