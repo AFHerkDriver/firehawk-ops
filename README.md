@@ -6,6 +6,7 @@ Crew scheduling and operational-status web app for the **Bexar County ESD No. 2 
 
 - **Scheduler / operational app:** <https://afherkdriver.github.io/firehawk-ops/>
 - **Chief’s daily-status board:** <https://afherkdriver.github.io/firehawk-ops/chief.html>
+- **Operational display (ops.html):** <https://afherkdriver.github.io/firehawk-ops/ops.html>
 
 Staff see a read-only view by default. Manager tools unlock with a PIN (held by the Program Manager). There are two manager levels — a full admin and a standard manager without admin panels.
 
@@ -17,8 +18,9 @@ The deployment is two standalone HTML files that share the same live data:
 
 - **`index.html`** — the full operational app (scheduling, crew management, availability, airspace/comms, bulletin board). Manager and staff views are gated by PIN.
 - **`chief.html`** — a separate read-only “Daily Status” board for command staff. Auto-refreshes and shows today’s crew grouped by unit (UAV121 / UAV124), including any temporary out-of-service flags. It derives units from the same schedule data the scheduler writes.
+- **`ops.html`** — a laptop-optimized operational display intended for use at the field operations position. Shows live weather (decoded METAR), ADS-B radar with altitude-tiered traffic, aircraft readiness status, nearest airfield distances, quick thermal configuration reference, and external ops links. Does not display schedule data. See [Operational Display](#operational-display) below.
 
-Because both pages read the same schedule records, **any change to the assignment data format in `index.html` must stay compatible with `chief.html`’s reader.**
+Because `index.html` and `chief.html` read the same schedule records, **any change to the assignment data format in `index.html` must stay compatible with `chief.html`’s reader.**
 
 -----
 
@@ -86,15 +88,54 @@ Schedule and crew records are stored as documents in a shared collection:
 
 -----
 
+## Operational Display
+
+**`ops.html`** is a self-contained, laptop-optimized tactical screen designed for the field operations position. It is a **separate static page** — no schedule data, no authentication, no Firebase dependency.
+
+Live at: <https://afherkdriver.github.io/firehawk-ops/ops.html>
+
+### Layout
+
+Three-column layout optimized for a 13–15” laptop screen:
+
+|Left                                   |Center                  |Right               |
+|---------------------------------------|------------------------|--------------------|
+|External ops links                     |Decoded METAR weather   |Quick Thermal Config|
+|GPS position panel (lat/lon, MGRS, W3W)|Aircraft readiness pills|—                   |
+|Nearest airfields with distance/heading|ADS-B radar scope       |—                   |
+|—                                      |Traffic list            |—                   |
+
+### Features
+
+- **Weather** — decoded METAR for the primary ops airfield (KSKF). Displays wind direction and speed, gust (amber when present), visibility, ceiling, temperature, and altimeter.
+- **ADS-B radar** — 3nm scope (rings at 1/2/3nm), 30° tick marks, North-up orientation, 10-second auto-refresh. Altitude filter buttons (1,000 / 5,000 / 10,000 ft AGL). Traffic color-tiered by altitude: red (0–400ft, CONFLICT), amber (400–1,000ft, NEARBY), green (1,000ft+). Traffic list below radar sorted closest-to-farthest with callsign, bearing, distance, altitude, speed, and heading. Data from `api.airplanes.live` (free, no key required).
+- **Aircraft readiness** — compact color pill per platform (M30T, M4TD, M4T). Tap a pill to see per-platform limit checks (wind, temperature, precipitation, visibility).
+- **Position panel** — coordinates with copy button, MGRS, and What3Words address.
+- **Nearest airfields** — KSAT, KSSF, KSKF with class, distance, magnetic heading, and CTAF frequency. Distance and heading color-coded by proximity.
+- **Thermal config reference** — quick-reference cards organized by mission category (FIRE, SAR, HAZ, OPS, MCI, LE) with palette, gain, and flight parameter notes. Reed Curl’s field-validated thermal settings incorporated.
+- **Burn Ban / Red Flag banners** — same Cloudflare Worker cache as `index.html`. Red alert banners appear at the top when active.
+
+### What it does not do
+
+- No schedule data, crew assignments, or login.
+- No write operations — read-only display.
+- No mobile layout — designed for laptop/desktop at the ops position.
+
+### Cross-links
+
+- Footer of `ops.html` includes a subtle link back to the Firehawk Scheduler (`index.html`).
+
+-----
+
 ## Deploying
 
 The app is static — deploying means publishing the current `index.html` (and `chief.html`) to the GitHub Pages repo that backs the live site.
 
-1. Replace `index.html` (and `chief.html` if it changed) in the Pages repo.
+1. Replace `index.html`, `chief.html`, and/or `ops.html` (whichever changed) in the Pages repo.
 1. Commit and push to the published branch.
 1. GitHub Pages rebuilds; hard-refresh the live URL to clear cache.
 
-**Edits are not live until the updated file is the one published to the repo** — testing the live site before pushing will show the old version. Features that touch both files (e.g. temporary OOS) require **both** `index.html` and `chief.html` to be deployed together.
+**Edits are not live until the updated file is the one published to the repo** — testing the live site before pushing will show the old version. Features that touch both files (e.g. temporary OOS) require **both** `index.html` and `chief.html` to be deployed together. `ops.html` is independent and can be deployed on its own.
 
 -----
 
