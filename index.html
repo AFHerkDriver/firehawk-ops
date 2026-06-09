@@ -4124,9 +4124,14 @@ function SARModal({
     note: "Body heat stands out strongly against cool dark ground"
   }, {
     condition: "Water — surface victim",
-    thermal: "White Hot / Iron Bow",
+    thermal: "Iron Bow",
     optical: "RGB perpendicular",
-    note: "Thermal for surface, optical for submerged. High altitude + zoom preferred over low + wide angle"
+    note: "Iron Bow for surface victim detection. Thermal does NOT penetrate water — switch to optical for submerged. High altitude + zoom preferred over low + wide angle"
+  }, {
+    condition: "Water — submerged / ripple detection",
+    thermal: "Rainbow",
+    optical: "RGB perpendicular, high altitude + zoom",
+    note: "Rainbow maps surface temp gradients — water disturbance from a submerged or flailing subject appears as color variation even when the body is not visible. Switch to optical once ripple location is confirmed"
   }, {
     condition: "Dense canopy — under cover",
     thermal: "White Hot",
@@ -4134,9 +4139,9 @@ function SARModal({
     note: "75° gimbal + multi-pass PS2/PS4 covers canopy gaps from multiple angles"
   }, {
     condition: "Warm night / rocky terrain",
-    thermal: "White Hot low gain",
+    thermal: "White Hot high gain",
     optical: "RGB",
-    note: "Rocks release heat after sunset — creates clutter first 2 hours of darkness"
+    note: "Rocks release stored heat after sunset — creates thermal clutter for first 1-2 hours of darkness. High gain needed for body temp contrast against warm rock background. Be patient or reposition"
   }];
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5898,7 +5903,7 @@ const MISSIONS = [{
       high: 1000,
       unit: "°F"
     },
-    isothermsReason: "300–1000°F captures active fire and hot spots through smoke. Ash caps sit around 600°F, solar-loaded materials run 150–200°F — narrow range misses critical data. Expand to 1000°F to capture full fire signature (Reed)",
+    isothermsReason: "300–1000°F captures active fire and hot spots through smoke. A narrow range misses critical data — expand to 1000°F to capture the full fire signature",
     zoom: "1–3x",
     altitude: "150–250ft AGL",
     tips: ["Use isotherm to cut through smoke — hot spots appear as highlighted zones", "Attic space is critical — thermal shows fire spread and rafter/truss type (truss fails faster). Don't just watch exterior walls", "Open windows show convection currents and flow paths — can identify victim room isolation in multi-victim structures (apartments, mid-rise)", "Thermal won't penetrate load-bearing walls — focus on roof, attic vents, and open penetrations", "Roof surface temp asymmetry indicates hottest fire compartment — helps guide interior crew positioning", "Coordinate aerial view with IC — call out open windows with thermal signatures, active vent flow, and roof deformation"]
@@ -5921,10 +5926,10 @@ const MISSIONS = [{
       high: 1000,
       unit: "°F"
     },
-    isothermsReason: "300–1000°F range captures active fire while filtering solar-loaded dirt and ash caps. Ash caps sit around 600°F, solar-loaded dark granite can run 150–200°F — narrow range misses critical data (Reed)",
+    isothermsReason: "300–1000°F range captures active fire while filtering solar-loaded dirt and ash caps. Ash caps sit around 600°F, solar-loaded dark granite can run 150–200°F — narrow range misses critical data",
     zoom: "1x wide",
     altitude: "300–400ft AGL",
-    tips: ["Stay at the perimeter — zoom gives you everything you need without putting equipment in atmospheric instability. Only cross into brush if area exceeds 20–30 acres (Reed)", "Monitor outward from perimeter for spot fires 75% of the time — this is where the next threat comes from", "Fly the perimeter first at 300ft to map active fire edge before going overhead", "Use isotherm to distinguish active fire from smoldering ash — they read differently", "Spot fires appear as isolated bright signatures — report bearing and distance from main fire", "Wind direction affects thermal plume — stay upwind for clearest imaging"]
+    tips: ["Stay at the perimeter — zoom gives you everything you need without putting equipment in atmospheric instability. Only cross into brush if area exceeds 20–30 acres", "Monitor outward from perimeter for spot fires 75% of the time — this is where the next threat comes from", "Fly the perimeter first at 300ft to map active fire edge before going overhead", "Use isotherm to distinguish active fire from smoldering ash — they read differently", "Spot fires appear as isolated bright signatures — report bearing and distance from main fire", "Wind direction affects thermal plume — stay upwind for clearest imaging"]
   }
 }, {
   id: "sar",
@@ -5937,7 +5942,7 @@ const MISSIONS = [{
     gain: "LOW",
     gainReason: "Day SAR requires low gain — solar loading heats the ground above body temp (120–150°F+). High gain saturates on the hot ground and loses the subject. Low gain spreads the range wide enough to distinguish a 98°F person against a 130°F solar-loaded background",
     palette: "Black Hot",
-    paletteReason: "Black Hot is preferred for daytime SAR — solar-loaded environment goes black, people and animals appear white and are more distinguishable (Reed, field-validated)",
+    paletteReason: "Black Hot is preferred for daytime SAR — solar-loaded environment goes black, people and animals appear white and are more distinguishable",
     isotherm: {
       enabled: false,
       low: null,
@@ -5988,13 +5993,13 @@ const MISSIONS = [{
     isothermsReason: "Off — surface victim signatures are strong enough without isotherm. Full gradient gives better situational awareness at the waterline",
     zoom: "High zoom from altitude preferred",
     altitude: "200ft AGL minimum with zoom",
-    tips: ["Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to Ripple mode or optical (RGB) for submerged search", "Partially exposed victims are detectable — look for any bright signature at the waterline or on debris", "Below 200ft AGL is the critical threshold — closer gives better resolution on surface victims (Reed)", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Spotlight in conjunction with thermal at night greatly increases detection range"]
+    tips: ["Thermal does NOT penetrate water — a fully submerged victim is invisible on thermal. Switch to Ripple mode or optical (RGB) for submerged search", "Partially exposed victims are detectable — look for any bright signature at the waterline or on debris", "Below 200ft AGL is the critical threshold — closer gives better resolution on surface victims", "Hypothermia weakens thermal signature rapidly — speed is critical. Do not wait to confirm before directing rescue", "Spotlight in conjunction with thermal at night greatly increases detection range"]
   },
   configNight: {
     gain: "LOW",
     gainReason: "Ripple detection mode — Rainbow palette shows water surface disturbance from a flailing or submerged subject. Low gain keeps water surface in full range",
     palette: "Rainbow",
-    paletteReason: "Rainbow maps temperature gradients across the water surface — ripples and disturbance from a submerged or flailing subject appear as color variation even when the body itself is not visible (Reed, DroneSense)",
+    paletteReason: "Rainbow maps temperature gradients across the water surface — ripples and disturbance from a submerged or flailing subject appear as color variation even when the body itself is not visible",
     isotherm: {
       enabled: false,
       low: null,
@@ -6027,7 +6032,7 @@ const MISSIONS = [{
     isothermsReason: "Isolates dangerously hot containers or exothermic reactions from ambient environment",
     zoom: "3–5x",
     altitude: "200–300ft AGL",
-    tips: ["Container load detection: empty containers appear DARK on thermal, containers carrying gas or liquid appear BRIGHTER — key indicator without ground contact (Reed)", "Thermal convection flows show chemical release direction and extent — stay upwind and read the plume", "BLEVE awareness: water applied to a superheated container can accelerate BLEVE risk — thermal shows tank temp and water effectiveness. Report to IC immediately", "Confined space hazmat: Avata 2 is ideal for rapid primary search while entry teams gear up — ID victim location, chemical source, and battery/thermal runaway indicators before entry", "Decon reality: not as complex as it sounds. If the drone contacts truly bad material — land it in a heavy trash bag and write it off to insurance (Reed)", "Document with thermal + visible split-screen — convection currents, hot containers, and plume direction all for incident record", "Coordinate with HazMat IC — provide real-time thermal feed; they will direct priorities"]
+    tips: ["Container load detection: empty containers appear DARK on thermal, containers carrying gas or liquid appear BRIGHTER — key indicator without ground contact", "Thermal convection flows show chemical release direction and extent — stay upwind and read the plume", "BLEVE awareness: water applied to a superheated container can accelerate BLEVE risk — thermal shows tank temp and water effectiveness. Report to IC immediately", "Confined space hazmat: Avata 2 is ideal for rapid primary search while entry teams gear up — ID victim location, chemical source, and battery/thermal runaway indicators before entry", "Decon reality: not as complex as it sounds. If the drone contacts truly bad material — land it in a heavy trash bag and write it off to insurance", "Document with thermal + visible split-screen — convection currents, hot containers, and plume direction all for incident record", "Coordinate with HazMat IC — provide real-time thermal feed; they will direct priorities"]
   }
 }, {
   id: "damage_assessment",
@@ -6197,7 +6202,7 @@ const MISSIONS = [{
     isothermsReason: "Off — wide area search benefits from full gradient; animal signatures are large enough to spot without isotherm",
     zoom: "1x search, 2x confirm",
     altitude: "150–250ft AGL",
-    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — but prioritize bodies of water, trails, and last known area from the owner (Reed)", "Check water sources FIRST — animals seek water in Texas heat, especially distressed animals", "Solar-loaded rocks can look similar to animal signatures at night — zoom to confirm shape and check for movement", "Animals in distress separate from herd — scan perimeter areas and dense brush after clearing open fields", "Coordinate with property owner before search — fencing, pen locations, and known watering holes focus the search area significantly"]
+    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — but prioritize bodies of water, trails, and last known area from the owner", "Check water sources FIRST — animals seek water in Texas heat, especially distressed animals", "Solar-loaded rocks can look similar to animal signatures at night — zoom to confirm shape and check for movement", "Animals in distress separate from herd — scan perimeter areas and dense brush after clearing open fields", "Coordinate with property owner before search — fencing, pen locations, and known watering holes focus the search area significantly"]
   },
   configNight: {
     gain: "HIGH",
@@ -6213,7 +6218,7 @@ const MISSIONS = [{
     isothermsReason: "Off — large animals are very visible at night without isotherm, full scene view helps avoid missing subjects",
     zoom: "1x wide search, zoom to ID species",
     altitude: "100–200ft AGL",
-    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — prioritize bodies of water, trails, and last known area from owner (Reed)", "Large animals are extremely visible at night — cattle and horses appear as large bright signatures. Reed found a horse in 10–15 min from takeoff at night", "KEY: solar-loaded rocks from daytime heat can look like animals — zoom and check for breathing movement or limb shape to confirm", "Single isolated signature away from herd may indicate injured or trapped animal — prioritize", "Wildlife may flee from aircraft — approach slowly from altitude to avoid scattering before location is confirmed"]
+    tips: ["Same search methodology as human SAR — preliminary scan, 75° gimbal, GLS/PS patterns — prioritize bodies of water, trails, and last known area from owner", "Large animals are extremely visible at night — cattle and horses appear as large bright signatures. Reed found a horse in 10–15 min from takeoff at night", "KEY: solar-loaded rocks from daytime heat can look like animals — zoom and check for breathing movement or limb shape to confirm", "Single isolated signature away from herd may indicate injured or trapped animal — prioritize", "Wildlife may flee from aircraft — approach slowly from altitude to avoid scattering before location is confirmed"]
   }
 }, {
   id: "pursuit",
