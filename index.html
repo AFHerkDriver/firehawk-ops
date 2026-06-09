@@ -4635,8 +4635,6 @@ const [showComms, setShowComms] = useState(false);
   const [nearestAirfields, setNearestAirfields] = useState([]);
   const [adsbTraffic, setAdsbTraffic] = useState([]);
   const [adsbLoading, setAdsbLoading] = useState(true);
-  const [testTarget, setTestTarget] = React.useState(null);
-  const testAnimRef = React.useRef(null);
   const [scopeMode, setScopeMode] = useState("north");
   const [heading, setHeading] = useState(0);
   const [altMin, setAltMin] = useState(0);
@@ -4972,33 +4970,6 @@ const [showComms, setShowComms] = useState(false);
     return diff < 60 && ac.spd > 30;
   };
 
-  // ── Collision test ────────────────────────────────────────────────────────
-  const runCollisionTest = () => {
-    if (testAnimRef.current) clearInterval(testAnimRef.current);
-    let dist = 2.8;
-    const brg = 045;
-    const toRad = Math.PI / 180;
-    const step = 0.15;
-    const getPos = (d) => ({
-      x: 160 + (d / 3) * 120 * Math.sin(brg * toRad),
-      y: 155 - (d / 3) * 120 * Math.cos(brg * toRad),
-      dist: d
-    });
-    playInboundTone();
-    setTestTarget({ ...getPos(dist), call: "TEST01", alt: 350, hdg: 225 });
-    testAnimRef.current = setInterval(() => {
-      dist -= step;
-      if (dist <= 0.05) {
-        clearInterval(testAnimRef.current);
-        testAnimRef.current = null;
-        setTestTarget(null);
-        return;
-      }
-      setTestTarget({ ...getPos(dist), call: "TEST01", alt: 350, hdg: 225 });
-      if (dist <= 1.0 && dist > 1.0 - step) playInboundTone();
-    }, 400);
-  };
-
   // ── ADS-B fetch (airplanes.live, free, no key) ───────────────────────────
   useEffect(() => {
     if (!posCoords) return;
@@ -5258,16 +5229,6 @@ const [showComms, setShowComms] = useState(false);
           }, label)
         )
       ),
-        /*#__PURE__*/React.createElement("button", {
-          onClick: runCollisionTest,
-          style: {
-            padding: "5px 10px", borderRadius: 6, cursor: "pointer",
-            fontFamily: "monospace", fontSize: 9, letterSpacing: 1,
-            border: "1px solid rgba(255,59,48,0.5)",
-            background: "rgba(255,59,48,0.12)",
-            color: "#FF3B30", marginLeft: 4
-          }
-        }, "\u26A0 TEST")
     ),
 
     /* Conflict banner \u2014 only shown when red traffic present */
@@ -5355,28 +5316,6 @@ const [showComms, setShowComms] = useState(false);
             })
           ),
 
-          /* Test target overlay */
-            testTarget && (() => {
-              return /*#__PURE__*/React.createElement(React.Fragment, null,
-                /*#__PURE__*/React.createElement("circle", {
-                  cx: testTarget.x, cy: testTarget.y, r: 14,
-                  fill: "none", stroke: "rgba(255,59,48,0.45)", strokeWidth: 1.5,
-                  style: { animation: "pulse 0.7s ease-in-out infinite" }
-                }),
-                /*#__PURE__*/React.createElement("circle", {
-                  cx: testTarget.x, cy: testTarget.y, r: 5,
-                  fill: "#FF3B30"
-                }),
-                /*#__PURE__*/React.createElement("text", {
-                  x: testTarget.x + 8, y: testTarget.y - 5,
-                  fill: "#FF3B30", fontSize: 8, fontFamily: "monospace"
-                }, testTarget.call),
-                /*#__PURE__*/React.createElement("text", {
-                  x: testTarget.x + 8, y: testTarget.y + 5,
-                  fill: "#FF3B30", fontSize: 7, fontFamily: "monospace"
-                }, testTarget.alt + "ft")
-              );
-            })(),
             adsbTraffic.map(function(ac) {
             var color = ac.alt <= 400 ? "#FF3B30" : ac.alt <= 1000 ? "#FF9F0A" : "#34C759";
             var rad = (ac.brg - 90) * Math.PI / 180;
