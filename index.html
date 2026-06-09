@@ -4929,6 +4929,24 @@ const [showComms, setShowComms] = useState(false);
             .sort((a,b) => a.alt - b.alt);
           setAdsbTraffic(ac);
           setAdsbLoading(false);
+          // ── Conflict alerting ──────────────────────────────────────────────
+          const conflictAc = ac.filter(a => a.alt <= 400);
+          const currentIds = new Set(conflictAc.map(a => a.call));
+          const newConflicts = conflictAc.filter(a => !prevConflictIds.current.has(a.call));
+          if (newConflicts.length > 0) {
+            const hasInbound = newConflicts.some(a => isInbound(a));
+            if (hasInbound) {
+              playInboundTone();
+              clearTimeout(inboundTimer.current);
+              inboundTimer.current = setTimeout(() => {
+                const stillInbound = ac.some(a => a.alt <= 400 && isInbound(a));
+                if (stillInbound) playInboundTone();
+              }, 2000);
+            } else {
+              playConflictTone();
+            }
+          }
+          prevConflictIds.current = currentIds;
         }).catch(() => setAdsbLoading(false));
     };
     fetchADSB();
