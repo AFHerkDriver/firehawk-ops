@@ -2748,7 +2748,10 @@ function SchedulerPanel({
         color: "#94A3B8"
       }
     }, "\u2014 None \u2014"), voCrew.map(c => {
-      const ok = c.id !== (a.vo ? parseInt(a.vo) : null);
+      const avail = c.availability;
+      const availOk = !avail || !avail.length || avail.includes(selectedDay);
+      const notDupe = c.id !== (a.vo ? parseInt(a.vo) : null);
+      const ok = availOk && notDupe;
       return /*#__PURE__*/React.createElement("option", {
         key: c.id,
         value: c.id,
@@ -2757,7 +2760,7 @@ function SchedulerPanel({
           background: "#334155",
           color: ok ? "#E2E8F0" : "#64748B"
         }
-      }, c.name, !ok ? " (already assigned)" : "");
+      }, c.name, !availOk ? " (unavail)" : !notDupe ? " (assigned)" : "");
     }))), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 14
@@ -2901,10 +2904,10 @@ function SchedulerPanel({
         background: "rgba(255,193,7,0.15)",
         border: "1px solid rgba(255,193,7,0.4)",
         borderRadius: 7,
-        padding: "9px 20px",
+        padding: "6px 14px",
         color: "#FFC107",
         cursor: "pointer",
-        fontSize: 12,
+        fontSize: 11,
         fontFamily: "inherit",
         letterSpacing: 1
       }
@@ -2923,10 +2926,10 @@ function SchedulerPanel({
         background: "rgba(255,59,48,0.1)",
         border: "1px solid rgba(255,59,48,0.35)",
         borderRadius: 7,
-        padding: "9px 20px",
+        padding: "6px 14px",
         color: "#FF3B30",
         cursor: "pointer",
-        fontSize: 12,
+        fontSize: 11,
         fontFamily: "inherit",
         letterSpacing: 1
       }
@@ -4110,17 +4113,17 @@ function SARModal({
     style: {
       position: "fixed",
       inset: 0,
-      background: "rgba(0,0,0,0.85)",
+      background: "#0D1117",
       display: "flex",
       flexDirection: "column",
-      zIndex: 200,
+      zIndex: 999,
       overflowY: "auto"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      maxWidth: 700,
+      maxWidth: "100%",
       width: "100%",
-      margin: "0 auto",
+      margin: 0,
       padding: "0 0 40px"
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -4553,36 +4556,27 @@ const NIFOG_GROUPS = [
 function NIFOGPanel() {
   const [open, setOpen] = React.useState(false);
   const [openGroup, setOpenGroup] = React.useState(null);
-  return React.createElement("div", {style:{
-    background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.09)",
-    borderRadius:12, overflow:"hidden", marginBottom:10
-  }},
-    React.createElement("div", {
-      onClick: () => setOpen(o => !o),
-      style:{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",cursor:"pointer"}
-    },
+  return React.createElement("div", {style:{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:12,overflow:"hidden",marginBottom:10}},
+    React.createElement("div", {onClick:()=>setOpen(o=>!o),style:{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",cursor:"pointer"}},
       React.createElement("div", {style:{width:44,height:44,borderRadius:10,flexShrink:0,background:"rgba(74,144,217,0.15)",border:"1px solid rgba(74,144,217,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}, "\uD83D\uDCE1"),
       React.createElement("div", {style:{flex:1}},
         React.createElement("div", {style:{fontSize:14,color:"#E2E8F0",fontWeight:700}}, "National Interop Channels"),
         React.createElement("div", {style:{fontSize:11,color:"#64748B",marginTop:2}}, "NIFOG \u00B7 VFIRE \u00B7 VTAC \u00B7 VMED \u00B7 VLAW \u00B7 SAR")
       ),
-      React.createElement("span", {style:{color:"#4A90D9",fontSize:14}}, open ? "\u25B2" : "\u2197")
+      React.createElement("span", {style:{color:"#4A90D9",fontSize:14}}, open?"\u25B2":"\u2197")
     ),
     open && React.createElement("div", {style:{padding:"0 14px 14px"}},
-      NIFOG_GROUPS.map(group => React.createElement("div", {key:group.id, style:{marginBottom:6}},
-        React.createElement("div", {
-          onClick: () => setOpenGroup(openGroup === group.id ? null : group.id),
-          style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",borderRadius:7,cursor:"pointer",background:openGroup===group.id?group.color+"18":"rgba(255,255,255,0.04)",border:"1px solid "+(openGroup===group.id?group.color+"44":"rgba(255,255,255,0.07)")}
-        },
+      NIFOG_GROUPS.map(group => React.createElement("div", {key:group.id,style:{marginBottom:6}},
+        React.createElement("div", {onClick:()=>setOpenGroup(openGroup===group.id?null:group.id),style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",borderRadius:7,cursor:"pointer",background:openGroup===group.id?group.color+"18":"rgba(255,255,255,0.04)",border:"1px solid "+(openGroup===group.id?group.color+"44":"rgba(255,255,255,0.07)")}},
           React.createElement("span", {style:{fontSize:11,color:group.color,fontWeight:700,letterSpacing:1}}, group.label),
           React.createElement("span", {style:{color:"#64748B",fontSize:11}}, openGroup===group.id?"\u25B2":"\u25BC")
         ),
         openGroup===group.id && React.createElement("div", {style:{background:"rgba(0,0,0,0.2)",borderRadius:"0 0 7px 7px",border:"1px solid "+group.color+"22",borderTop:"none"}},
-          group.channels.map((ch,i) => React.createElement("div", {key:i,style:{display:"grid",gridTemplateColumns:"90px 90px 55px 1fr",gap:6,padding:"7px 10px",alignItems:"center",borderBottom:i<group.channels.length-1?"1px solid rgba(255,255,255,0.04)":"none"}},
-            React.createElement("span", {style:{fontSize:11,color:group.color,fontWeight:700}}, ch.name),
-            React.createElement("span", {style:{fontSize:11,color:"#E2E8F0",fontFamily:"monospace"}}, ch.freq),
-            React.createElement("span", {style:{fontSize:10,color:"#64748B"}}, ch.ctcss),
-            React.createElement("span", {style:{fontSize:10,color:"#94A3B8",lineHeight:1.4}}, ch.desc)
+          group.channels.map((ch,i)=>React.createElement("div", {key:i,style:{display:"grid",gridTemplateColumns:"90px 90px 55px 1fr",gap:6,padding:"7px 10px",alignItems:"center",borderBottom:i<group.channels.length-1?"1px solid rgba(255,255,255,0.04)":"none"}},
+            React.createElement("span",{style:{fontSize:11,color:group.color,fontWeight:700}},ch.name),
+            React.createElement("span",{style:{fontSize:11,color:"#E2E8F0",fontFamily:"monospace"}},ch.freq),
+            React.createElement("span",{style:{fontSize:10,color:"#64748B"}},ch.ctcss),
+            React.createElement("span",{style:{fontSize:10,color:"#94A3B8",lineHeight:1.4}},ch.desc)
           ))
         )
       ))
@@ -4617,9 +4611,9 @@ const [showComms, setShowComms] = useState(false);
     id: "KSAT",
     name: "San Antonio Intl",
     cls: "C",
-    classColor: "#34C759",
-    classBg: "rgba(52,199,89,0.12)",
-    classBorder: "rgba(52,199,89,0.35)",
+    classColor: "#4A90D9",
+    classBg: "rgba(74,144,217,0.12)",
+    classBorder: "rgba(74,144,217,0.35)",
     lat: 29.534,
     lon: -98.469,
     laanc: true,
@@ -4647,9 +4641,9 @@ const [showComms, setShowComms] = useState(false);
     id: "KSKF",
     name: "Kelly Field / Lackland",
     cls: "D",
-    classColor: "#FFC107",
-    classBg: "rgba(255,193,7,0.12)",
-    classBorder: "rgba(255,193,7,0.35)",
+    classColor: "#4A90D9",
+    classBg: "rgba(74,144,217,0.12)",
+    classBorder: "rgba(74,144,217,0.35)",
     lat: 29.384,
     lon: -98.581,
     laanc: true,
@@ -4677,9 +4671,9 @@ const [showComms, setShowComms] = useState(false);
     id: "KSSF",
     name: "Stinson Municipal",
     cls: "D",
-    classColor: "#34C759",
-    classBg: "rgba(52,199,89,0.12)",
-    classBorder: "rgba(52,199,89,0.35)",
+    classColor: "#4A90D9",
+    classBg: "rgba(74,144,217,0.12)",
+    classBorder: "rgba(74,144,217,0.35)",
     lat: 29.337,
     lon: -98.471,
     laanc: true,
@@ -4707,9 +4701,9 @@ const [showComms, setShowComms] = useState(false);
     id: "KRND",
     name: "Randolph AFB",
     cls: "D",
-    classColor: "#FF3B30",
-    classBg: "rgba(255,59,48,0.12)",
-    classBorder: "rgba(255,59,48,0.35)",
+    classColor: "#4A90D9",
+    classBg: "rgba(74,144,217,0.12)",
+    classBorder: "rgba(74,144,217,0.35)",
     lat: 29.530,
     lon: -98.279,
     laanc: false,
@@ -5357,7 +5351,6 @@ const [showComms, setShowComms] = useState(false);
         }, "OPEN \u2197")
       )
     )
-  
   ), status === "loaded" && tab === "airports" && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -5368,8 +5361,8 @@ const [showComms, setShowComms] = useState(false);
     style: {background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"12px 14px",marginBottom:4}
   },
     /*#__PURE__*/React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:3,marginBottom:8}}, "LIVE DISTANCE FROM POSITION"),
-    nearestAirfields.map((af, i) => {
-      const dc = af.dist < 2 ? "#FF3B30" : af.dist < 5 ? "#FFC107" : "#34C759";
+    nearestAirfields.map((af,i) => {
+      const dc = af.dist<2?"#FF3B30":af.dist<5?"#FFC107":"#34C759";
       return /*#__PURE__*/React.createElement("div", {key:af.id,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<nearestAirfields.length-1?"1px solid rgba(255,255,255,0.05)":"none"}},
         /*#__PURE__*/React.createElement("div", null,
           /*#__PURE__*/React.createElement("span", {style:{fontSize:12,color:"#E2E8F0",fontWeight:600}}, af.id, " "),
@@ -5382,9 +5375,7 @@ const [showComms, setShowComms] = useState(false);
         )
       );
     })
-  ), !selectedAirport ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}
-  },
+  ), !selectedAirport ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap",alignItems:"center"}},
     /*#__PURE__*/React.createElement("span", {style:{fontSize:8,color:"#64748B",letterSpacing:2}}, "LAANC:"),
     /*#__PURE__*/React.createElement("span", {style:{fontSize:8,color:"#34C759"}}, "■ AVAILABLE"),
     /*#__PURE__*/React.createElement("span", {style:{fontSize:8,color:"#FFC107"}}, "■ RESTRICTED"),
@@ -5478,11 +5469,11 @@ const [showComms, setShowComms] = useState(false);
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 8,
-      background: ap.laanc ? "rgba(52,199,89,0.1)" : "rgba(255,59,48,0.1)",
-      border: `1px solid ${ap.laanc ? "rgba(52,199,89,0.3)" : "rgba(255,59,48,0.3)"}`,
+      background: !ap.laanc ? "rgba(255,59,48,0.1)" : ap.military ? "rgba(255,193,7,0.1)" : "rgba(52,199,89,0.1)",
+      border: "1px solid " + (!ap.laanc ? "rgba(255,59,48,0.3)" : ap.military ? "rgba(255,193,7,0.3)" : "rgba(52,199,89,0.3)"),
       borderRadius: 4,
       padding: "2px 6px",
-      color: ap.laanc ? "#34C759" : "#FF3B30"
+      color: !ap.laanc ? "#FF3B30" : ap.military ? "#FFC107" : "#34C759"
     }
   }, ap.laanc ? "LAANC ✓" : "NO LAANC"),
   ap.twr && /*#__PURE__*/React.createElement("span", {style:{fontSize:8,background:"rgba(74,144,217,0.1)",border:"1px solid rgba(74,144,217,0.25)",borderRadius:4,padding:"2px 6px",color:"#4A90D9"}}, ap.twr),
@@ -5677,7 +5668,7 @@ const [showComms, setShowComms] = useState(false);
       letterSpacing: 3,
       marginBottom: 4
     }
-  }, "AIRSPACE RESOURCES"), QUICK_LINKS.map(link => /*#__PURE__*/React.createElement("a", {
+  }, "AIRSPACE RESOURCES"), /*#__PURE__*/React.createElement(NIFOGPanel, null), QUICK_LINKS.map(link => /*#__PURE__*/React.createElement("a", {
     key: link.label,
     href: link.url,
     target: "_blank",
@@ -5726,15 +5717,7 @@ const [showComms, setShowComms] = useState(false);
       fontSize: 12,
       color: "#64748B"
     }
-  }, "\u2197"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,255,255,0.01)",
-      border: "1px solid rgba(255,255,255,0.04)",
-      borderRadius: 10,
-      padding: "10px 14px",
-      marginTop: 4
-    }
-  }, /*#__PURE__*/React.createElement(NIFOGPanel, null))))));
+  }, "\u2197")))))));
 }
 
 // ── Thermal Config Modal ─────────────────────────────────────────────────────
@@ -6813,8 +6796,9 @@ function WeatherModal({
       display: "flex",
       flexDirection: "column",
       gap: 12,
-      maxWidth: 520,
+      maxWidth: 900,
       margin: "0 auto",
+      width: "100%",
       paddingBottom: 40
     }
   }, status === "loading" && /*#__PURE__*/React.createElement("div", {
@@ -7683,7 +7667,7 @@ function FirehawkOps() {
     return s === "warning" || s === "expired";
   });
   const allCurrent = activeCrew.every(c => certStatus(c.part107) === "current");
-  const TABS_MANAGER = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["currency", "Crew Mgmt"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
+  const TABS_MANAGER = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["currency", "Crew Mgmt"], ["bulletin", "Bulletin Board"]];
   const TABS_STAFF = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["bulletin", "Bulletin Board"], ["links", "Links"]];
   const tabs = isManager ? TABS_MANAGER : TABS_STAFF;
   const SHIFT_PATTERN = ["A", "A", "B", "B", "C", "C"];
