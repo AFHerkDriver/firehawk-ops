@@ -4818,6 +4818,26 @@ const [showComms, setShowComms] = useState(false);
     fetchData();
   }, []);
 
+  // ── Screen Wake Lock — keep screen on while Airspace is open ────────────
+  useEffect(() => {
+    let wakeLock = null;
+    const requestWakeLock = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await navigator.wakeLock.request("screen");
+        }
+      } catch(e) { /* not supported or denied */ }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") requestWakeLock();
+    };
+    requestWakeLock();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (wakeLock) wakeLock.release().catch(() => {});
+    };
+  }, []);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const copyPos = (text) => {
