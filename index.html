@@ -3037,13 +3037,38 @@ function SchedulerPanel({
     const sc = SHIFT_COLORS[shift];
     const groups = groupAssignmentByUnit(a, crew);
     const renderUnit = (unitName, unitData) => {
-      if (!unitData || !unitData.rpic) return null;
+      const oosData = (a.oos && a.oos[unitName]) || {};
+      const isOos = !!oosData.active;
+      if (!unitData || !unitData.rpic) {
+        // Show OOS banner even if no crew assigned
+        if (!isOos) return null;
+        return /*#__PURE__*/React.createElement("div", {
+          style:{
+            background:"rgba(255,193,7,0.08)", border:"1px solid rgba(255,193,7,0.35)",
+            borderRadius:8, padding:"10px 12px", marginBottom:8
+          }
+        },
+          /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",gap:8,marginBottom: oosData.remark ? 4 : 0}},
+            /*#__PURE__*/React.createElement("span", {style:{fontSize:9,color:"#FFC107",letterSpacing:2,fontWeight:700}}, unitName),
+            /*#__PURE__*/React.createElement("span", {style:{fontSize:9,color:"#FFC107",background:"rgba(255,193,7,0.15)",border:"1px solid rgba(255,193,7,0.4)",borderRadius:4,padding:"1px 7px"}}, "OOS"),
+            oosData.reason && /*#__PURE__*/React.createElement("span", {style:{fontSize:9,color:"#94A3B8"}}, oosData.reason),
+            oosData.start && /*#__PURE__*/React.createElement("span", {style:{fontSize:9,color:"#64748B"}}, oosData.start + (oosData.end ? " \u2013 " + oosData.end : "") + " CST")
+          ),
+          oosData.remark && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:"#94A3B8",marginTop:2}}, oosData.remark)
+        );
+      }
       return /*#__PURE__*/React.createElement("div", {
         style:{
-          background:"rgba(255,255,255,0.055)", border:"1px solid rgba(255,255,255,0.08)",
+          background: isOos ? "rgba(255,193,7,0.06)" : "rgba(255,255,255,0.055)",
+          border: isOos ? "1px solid rgba(255,193,7,0.35)" : "1px solid rgba(255,255,255,0.08)",
           borderRadius:8, padding:"10px 12px", marginBottom:8
         }
       },
+        isOos && /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",gap:8,marginBottom:6}},
+          /*#__PURE__*/React.createElement("span", {style:{fontSize:8,color:"#FFC107",background:"rgba(255,193,7,0.15)",border:"1px solid rgba(255,193,7,0.4)",borderRadius:4,padding:"1px 7px",letterSpacing:1}}, "OOS · " + (oosData.reason||"")),
+          oosData.start && /*#__PURE__*/React.createElement("span", {style:{fontSize:8,color:"#64748B"}}, oosData.start + (oosData.end ? " \u2013 " + oosData.end : "") + " CST"),
+          oosData.remark && /*#__PURE__*/React.createElement("span", {style:{fontSize:8,color:"#94A3B8"}}, oosData.remark)
+        ),
         /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:"#4A90D9",letterSpacing:2,marginBottom:6}}, unitName),
         /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},
           /*#__PURE__*/React.createElement("div", {style:{width:24,height:24,borderRadius:"50%",background:unitData.rpic.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"white",fontWeight:700}}, unitData.rpic.initials),
@@ -6364,1087 +6389,583 @@ function ThermalModal({onClose}) {
 }
 
 
-function WeatherModal({
-  onClose
-}) {
-  const [wx, setWx] = useState(null);
-  const [alerts, setAlerts] = useState([]);
-  const [status, setStatus] = useState("loading");
-  const [errMsg, setErrMsg] = useState("");
-  const [alertsExpanded, setAlertsExpanded] = useState(true);
-  const AIRCRAFT = [{
-    id: "M30T",
-    label: "M30T",
-    maxWind: 33.6,
-    maxGust: 33.6,
-    precip: true,
-    minTemp: -4,
-    maxTemp: 122,
-    ip: "IP55"
-  }, {
-    id: "M4TD",
-    label: "M4TD",
-    maxWind: 26.8,
-    maxGust: 30,
-    precip: true,
-    minTemp: -22,
-    maxTemp: 122,
-    ip: "IP55"
-  }, {
-    id: "M4T",
-    label: "M4T",
-    maxWind: 26.8,
-    maxGust: 26.8,
-    precip: false,
-    minTemp: -4,
-    maxTemp: 122,
-    ip: "No IP"
-  }];
+function parseMetar(raw) {
+  if (!raw) return null;
+  var r = {};
+  var wm = raw.match(/\b(\d{3}|VRB)(\d{2,3})(G(\d{2,3}))?KT\b/);
+  if (wm) {
+    r.windDir = wm[1] === "VRB" ? null : parseInt(wm[1]);
+    r.windSpd = parseInt(wm[2]);
+    r.windGust = wm[4] ? parseInt(wm[4]) : null;
+    r.windVrb = wm[1] === "VRB";
+  }
+  var vm = raw.match(/\bM?(\d+(?:\/\d+)?)SM\b/);
+  if (vm) r.vis = vm[1].includes("/") ? 0.5 : parseFloat(vm[1]);
+  var cm = raw.match(/\b(BKN|OVC)(\d{3})\b/);
+  if (cm) r.ceiling = parseInt(cm[2]) * 100;
+  var tm = raw.match(/\b(M?)(\d{2})\/(M?)(\d{2})\b/);
+  if (tm) {
+    r.tempC = tm[1] === "M" ? -parseInt(tm[2]) : parseInt(tm[2]);
+    r.dewC  = tm[3] === "M" ? -parseInt(tm[4]) : parseInt(tm[4]);
+  }
+  var am = raw.match(/\bA(\d{4})\b/);
+  if (am) r.altim = parseInt(am[1]) / 100;
+  var vis = r.vis != null ? r.vis : 10;
+  var ceil = r.ceiling != null ? r.ceiling : 99999;
+  if      (ceil < 500  || vis < 1) r.cat = "LIFR";
+  else if (ceil < 1000 || vis < 3) r.cat = "IFR";
+  else if (ceil <= 3000 || vis <= 5) r.cat = "MVFR";
+  else r.cat = "VFR";
+  return r;
+}
 
-  // Wind values are stored in mph (Open-Meteo native unit), so this is a passthrough.
-  function ktToMph(v) {
-    return v;
+function catCol(cat) {
+  return cat === "VFR" ? "#34C759" : cat === "MVFR" ? "#4A90D9" : "#FF3B30";
+}
+
+function dirLbl(d) {
+  if (d == null) return "VRB";
+  var dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return dirs[Math.round(d/22.5) % 16];
+}
+
+function pad3(n) {
+  return n == null ? "VRB" : String(n).padStart(3, "0");
+}
+
+function MetarCard({ id, rawOb }) {
+  var open = React.useState(false);
+  var setOpen = open[1]; open = open[0];
+  var p = parseMetar(rawOb);
+  return React.createElement("div", { style:{
+    background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)",
+    borderRadius:10, overflow:"hidden", marginBottom:6
+  }},
+    React.createElement("div", {
+      onClick: function() { setOpen(function(o) { return !o; }); },
+      style:{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", cursor:"pointer" }
+    },
+      React.createElement("span", {style:{fontSize:11,color:"#4A90D9",fontWeight:700,minWidth:36}}, id),
+      p && React.createElement("span", {style:{
+        fontSize:9, fontWeight:700, color:catCol(p.cat),
+        background:catCol(p.cat)+"18", border:"1px solid "+catCol(p.cat)+"44",
+        borderRadius:4, padding:"1px 6px", letterSpacing:1
+      }}, p.cat),
+      p && p.windSpd != null && React.createElement("span", {style:{fontSize:10,color:"#94A3B8"}},
+        pad3(p.windDir) + "° " + p.windSpd + "kt" + (p.windGust ? " G"+p.windGust : "")
+      ),
+      p && p.vis != null && React.createElement("span", {style:{fontSize:10,color:"#94A3B8"}},
+        p.vis + "SM"
+      ),
+      p && p.ceiling && React.createElement("span", {style:{fontSize:10,color:"#94A3B8"}},
+        "Ceil " + p.ceiling.toLocaleString() + "ft"
+      ),
+      React.createElement("span", {style:{marginLeft:"auto",color:"#64748B",fontSize:11}},
+        open ? "▲" : "▼"
+      )
+    ),
+    open && React.createElement("div", {style:{borderTop:"1px solid rgba(255,255,255,0.06)",padding:"10px 12px"}},
+      p && React.createElement("div", {style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}},
+        p.windSpd != null && React.createElement("div", {style:{background:"rgba(255,255,255,0.04)",borderRadius:7,padding:"8px 10px"}},
+          React.createElement("div", {style:{fontSize:7,color:"#64748B",letterSpacing:2,marginBottom:4}}, "WIND"),
+          React.createElement("div", {style:{fontSize:13,fontWeight:700,color:"#E2E8F0"}},
+            p.windSpd + "kt" + (p.windGust ? " G"+p.windGust : "")
+          ),
+          React.createElement("div", {style:{fontSize:9,color:"#94A3B8"}},
+            (p.windVrb ? "Variable" : dirLbl(p.windDir) + " " + pad3(p.windDir) + "°")
+          )
+        ),
+        p.vis != null && React.createElement("div", {style:{background:"rgba(255,255,255,0.04)",borderRadius:7,padding:"8px 10px"}},
+          React.createElement("div", {style:{fontSize:7,color:"#64748B",letterSpacing:2,marginBottom:4}}, "VIS"),
+          React.createElement("div", {style:{fontSize:13,fontWeight:700,color:"#E2E8F0"}}, p.vis + "SM"),
+          p.ceiling
+            ? React.createElement("div", {style:{fontSize:9,color:"#94A3B8"}}, "Ceil " + p.ceiling.toLocaleString() + "ft")
+            : React.createElement("div", {style:{fontSize:9,color:"#94A3B8"}}, "Clear")
+        ),
+        p.tempC != null && React.createElement("div", {style:{background:"rgba(255,255,255,0.04)",borderRadius:7,padding:"8px 10px"}},
+          React.createElement("div", {style:{fontSize:7,color:"#64748B",letterSpacing:2,marginBottom:4}}, "TEMP/DEW"),
+          React.createElement("div", {style:{fontSize:13,fontWeight:700,color:"#E2E8F0"}},
+            Math.round(p.tempC*9/5+32) + "°F"
+          ),
+          React.createElement("div", {style:{fontSize:9,color:"#94A3B8"}},
+            "Dew " + Math.round(p.dewC*9/5+32) + "°F"
+          )
+        ),
+        p.altim && React.createElement("div", {style:{background:"rgba(255,255,255,0.04)",borderRadius:7,padding:"8px 10px"}},
+          React.createElement("div", {style:{fontSize:7,color:"#64748B",letterSpacing:2,marginBottom:4}}, "ALTIM"),
+          React.createElement("div", {style:{fontSize:13,fontWeight:700,color:"#E2E8F0"}}, p.altim.toFixed(2) + " inHg")
+        )
+      ),
+      React.createElement("div", {style:{fontSize:9,color:"#64748B",letterSpacing:1,marginBottom:4}}, "RAW"),
+      React.createElement("div", {style:{fontSize:9,color:"#94A3B8",fontFamily:"monospace",wordBreak:"break-all",lineHeight:1.6}}, rawOb)
+    )
+  );
+}
+
+
+function WeatherModal({ onClose }) {
+  const [wx, setWx] = React.useState(null);
+  const [alerts, setAlerts] = React.useState([]);
+  const [status, setStatus] = React.useState("loading");
+  const [errMsg, setErrMsg] = React.useState("");
+  const [usingGPS, setUsingGPS] = React.useState(false);
+  const [gpsCoords, setGpsCoords] = React.useState(null);
+
+  const KSKF_LAT = 29.384, KSKF_LON = -98.581;
+
+  const AIRCRAFT = [
+    { id:"M30T",  label:"M30T",  maxWind:33.6, maxGust:33.6, precip:true,  minTemp:-4,  maxTemp:122, ip:"IP55" },
+    { id:"M4TD",  label:"M4TD",  maxWind:26.8, maxGust:30,   precip:true,  minTemp:-22, maxTemp:122, ip:"IP55" },
+    { id:"M4T",   label:"M4T",   maxWind:26.8, maxGust:26.8, precip:false, minTemp:-4,  maxTemp:122, ip:"No IP" }
+  ];
+
+  function tempF(c) { return c * 9/5 + 32; }
+
+  function getAircraftStatus(ac, w) {
+    const wind = w.wind.speed;
+    const gust = w.wind.gust || null;
+    const temp = tempF(w.temp);
+    const reasons = [];
+    if (wind > ac.maxWind) reasons.push("Wind " + wind.toFixed(0) + "mph > " + ac.maxWind + "mph limit");
+    else if (wind > ac.maxWind * 0.8) reasons.push("Wind " + wind.toFixed(0) + "mph near limit");
+    if (gust && gust > ac.maxGust) reasons.push("Gust " + gust.toFixed(0) + "mph > " + ac.maxGust + "mph limit");
+    else if (gust && gust > ac.maxGust * 0.85) reasons.push("Gust " + gust.toFixed(0) + "mph near limit");
+    if (!ac.precip && w.precip) reasons.push("Precip \u2014 not rated");
+    if (w.thunderstorm) reasons.push("Thunderstorm active");
+    if (temp < ac.minTemp) reasons.push("Temp " + temp.toFixed(0) + "\u00B0F below limit");
+    if (temp > ac.maxTemp) reasons.push("Temp " + temp.toFixed(0) + "\u00B0F above limit");
+    if (w.visibility < 3) reasons.push("Vis " + w.visibility + "SM < 3SM");
+    if (w.ceiling < 300) reasons.push("Ceiling " + w.ceiling + "ft < 300ft");
+    const hardStop = wind > ac.maxWind || (gust && gust > ac.maxGust) || (!ac.precip && w.precip) ||
+      w.thunderstorm || temp < ac.minTemp || temp > ac.maxTemp ||
+      w.visibility < 2 || w.ceiling < 300 || w.category === "IFR" || w.category === "LIFR";
+    if (hardStop) return { status:"GROUND", color:"#FF3B30", bg:"rgba(255,59,48,0.1)",  border:"rgba(255,59,48,0.3)",  reasons };
+    if (reasons.length > 0) return { status:"CAUTION", color:"#FFC107", bg:"rgba(255,193,7,0.1)", border:"rgba(255,193,7,0.3)", reasons };
+    return { status:"GO", color:"#34C759", bg:"rgba(52,199,89,0.1)", border:"rgba(52,199,89,0.3)", reasons:[] };
   }
-  function tempF(c) {
-    return c * 9 / 5 + 32;
+
+  function getOverallStatus(w) {
+    const s = AIRCRAFT.map(ac => getAircraftStatus(ac, w));
+    if (s.every(x => x.status === "GO"))     return { label:"FLIGHT OPS \u2014 GO",    color:"#34C759", bg:"rgba(52,199,89,0.08)",  border:"rgba(52,199,89,0.3)",  icon:"\uD83D\uDFE2" };
+    if (s.every(x => x.status === "GROUND")) return { label:"DO NOT FLY",             color:"#FF3B30", bg:"rgba(255,59,48,0.08)", border:"rgba(255,59,48,0.3)", icon:"\uD83D\uDD34" };
+    if (s.some(x => x.status === "GROUND"))  return { label:"PARTIAL OPERATIONS",     color:"#FFC107", bg:"rgba(255,193,7,0.08)", border:"rgba(255,193,7,0.3)", icon:"\uD83D\uDFE1" };
+    return { label:"USE CAUTION", color:"#FFC107", bg:"rgba(255,193,7,0.08)", border:"rgba(255,193,7,0.3)", icon:"\uD83D\uDFE1" };
   }
+
   async function fetchWeather() {
     setStatus("loading");
     setErrMsg("");
+
+    // Step 1: Try GPS — completely isolated, never blocks weather
+    let opLat = KSKF_LAT, opLon = KSKF_LON, gotGPS = false;
     try {
-      // PRIMARY: Open-Meteo — supports CORS directly, no proxy, no key. This carries
-      // all the operational go/no-go data and never depends on a flaky proxy.
-      const KSKF_LAT = 29.384,
-        KSKF_LON = -98.581;
-      const omUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + KSKF_LAT + "&longitude=" + KSKF_LON + "&current=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,weather_code,cloud_cover,cloud_cover_low,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility" + "&hourly=wind_speed_80m,wind_direction_80m,cloud_cover_low" + "&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=America/Chicago&forecast_days=1";
+      const pos = await new Promise(function(res, rej) {
+        navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000, maximumAge: 60000 });
+      });
+      opLat = pos.coords.latitude;
+      opLon = pos.coords.longitude;
+      gotGPS = true;
+    } catch(e) { /* fall back to KSKF silently */ }
+    setUsingGPS(gotGPS);
+    if (gotGPS) setGpsCoords({ lat: opLat, lon: opLon });
 
-      // Timeout so it fails fast instead of hanging forever
-      const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
-      let omRes;
-      try {
-        omRes = await withTimeout(fetch(omUrl), 8000);
-      } catch (e) {
-        throw new Error("Open-Meteo unreachable (" + e.message + ")");
-      }
-      if (!omRes.ok) throw new Error("Open-Meteo HTTP " + omRes.status);
-      const om = await omRes.json();
-      const cur = om.current;
-      if (!cur) throw new Error("Open-Meteo returned no current data");
+    // Step 2: Open-Meteo at operator location (or KSKF fallback)
+    try {
+      var omUrl = "https://api.open-meteo.com/v1/forecast?latitude=" + opLat + "&longitude=" + opLon +
+        "&current=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,weather_code,cloud_cover,cloud_cover_low,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility" +
+        "&hourly=wind_speed_80m,wind_direction_80m,cloud_cover_low" +
+        "&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=America/Chicago&forecast_days=1";
 
-      // Wind (already mph from Open-Meteo)
-      const windDir = Math.round(cur.wind_direction_10m);
-      const windMph = cur.wind_speed_10m;
-      const gustMph = cur.wind_gusts_10m || null;
-
-      // Temp/dewpoint already in °F
-      const tempFval = cur.temperature_2m;
-      const dewpFval = cur.dew_point_2m;
-      // Convert back to C for storage (downstream tempF() expects C)
-      const tempC = (tempFval - 32) * 5 / 9;
-      const dewpC = (dewpFval - 32) * 5 / 9;
-
-      // Visibility: Open-Meteo gives meters → statute miles
-      const visM = cur.visibility != null ? cur.visibility : 16000;
-      const visSM = Math.round(visM / 1609.34 * 10) / 10;
-
-      // Pressure msl (hPa) → inHg
-      const altim = cur.pressure_msl ? Math.round(cur.pressure_msl * 0.02953 * 100) / 100 : 29.92;
-
-      // Precipitation & weather code (WMO codes)
-      const wc = cur.weather_code;
-      const precip = cur.precipitation > 0 || wc >= 51 && wc <= 67 || wc >= 80 && wc <= 82 || wc >= 71 && wc <= 77;
-      const thunderstorm = wc >= 95 && wc <= 99;
-
-      // Ceiling estimate from low cloud cover (Open-Meteo has no direct ceiling).
-      // If low cloud cover is high, treat cloud base as a ceiling; otherwise unlimited.
-      const lowCloud = cur.cloud_cover_low != null ? cur.cloud_cover_low : cur.cloud_cover;
-      let ceiling = 99999;
-      if (lowCloud >= 88) ceiling = 1500; // OVC-ish low
-      else if (lowCloud >= 63) ceiling = 3500; // BKN-ish
-      else if (lowCloud >= 40) ceiling = 6000; // SCT
-      // else few/clear → unlimited
-
-      // Flight category — computed from ceiling + visibility (standard FAA thresholds)
-      let flightCat;
-      if (ceiling < 500 || visSM < 1) flightCat = "LIFR";else if (ceiling < 1000 || visSM < 3) flightCat = "IFR";else if (ceiling <= 3000 || visSM <= 5) flightCat = "MVFR";else flightCat = "VFR";
-
-      // Wind at ~260ft (80m) — closest Open-Meteo level to UAS operating altitude
-      let windAloft3k = {
-        dir: windDir,
-        speed: windMph
+      var withTimeout = function(p, ms) {
+        return Promise.race([p, new Promise(function(_, rej) { setTimeout(function() { rej(new Error("timeout")); }, ms); })]);
       };
+
+      var omRes = await withTimeout(fetch(omUrl), 8000);
+      if (!omRes.ok) throw new Error("Open-Meteo HTTP " + omRes.status);
+      var om = await omRes.json();
+      var cur = om.current;
+      if (!cur) throw new Error("No current data");
+
+      var windDir  = Math.round(cur.wind_direction_10m);
+      var windMph  = cur.wind_speed_10m;
+      var gustMph  = cur.wind_gusts_10m || null;
+      var tempFval = cur.temperature_2m;
+      var dewpFval = cur.dew_point_2m;
+      var tempC    = (tempFval - 32) * 5/9;
+      var dewpC    = (dewpFval - 32) * 5/9;
+      var visM     = cur.visibility != null ? cur.visibility : 16000;
+      var visSM    = Math.round(visM / 1609.34 * 10) / 10;
+      var altim    = cur.pressure_msl ? Math.round(cur.pressure_msl * 0.02953 * 100) / 100 : 29.92;
+      var wc       = cur.weather_code;
+      var precip   = cur.precipitation > 0 || (wc >= 51 && wc <= 67) || (wc >= 80 && wc <= 82) || (wc >= 71 && wc <= 77);
+      var thunder  = wc >= 95 && wc <= 99;
+      var lowCloud = cur.cloud_cover_low != null ? cur.cloud_cover_low : cur.cloud_cover;
+      var ceiling  = 99999;
+      if      (lowCloud >= 88) ceiling = 1500;
+      else if (lowCloud >= 63) ceiling = 3500;
+      else if (lowCloud >= 40) ceiling = 6000;
+      var flightCat;
+      if      (ceiling < 500  || visSM < 1) flightCat = "LIFR";
+      else if (ceiling < 1000 || visSM < 3) flightCat = "IFR";
+      else if (ceiling <= 3000 || visSM <= 5) flightCat = "MVFR";
+      else flightCat = "VFR";
+      var windAloft = { dir: windDir, speed: windMph };
       try {
         if (om.hourly && om.hourly.wind_speed_80m) {
-          // Find the current hour index
-          const nowIso = new Date().toISOString().substring(0, 13);
-          let idx = om.hourly.time.findIndex(t => t.substring(0, 13) === nowIso);
+          var nowIso = new Date().toISOString().substring(0, 13);
+          var idx = om.hourly.time.findIndex(function(t) { return t.substring(0,13) === nowIso; });
           if (idx < 0) idx = 0;
-          const spd80 = om.hourly.wind_speed_80m[idx];
-          const dir80 = om.hourly.wind_direction_80m[idx];
-          if (spd80 != null) windAloft3k = {
-            dir: Math.round(dir80),
-            speed: spd80
-          };
+          var spd80 = om.hourly.wind_speed_80m[idx];
+          var dir80 = om.hourly.wind_direction_80m[idx];
+          if (spd80 != null) windAloft = { dir: Math.round(dir80), speed: spd80 };
         }
-      } catch (e) {}
+      } catch(e) {}
 
-      // SECONDARY (non-critical): NWS alerts + FAA raw METAR via proxy. If these fail,
-      // weather still shows — they're bonuses, not load-bearing.
-      // Your own Cloudflare Worker — reliable, no rate limits, no flaky public proxies
-      const makeProxies = target => ["https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(target)];
-
-      // NWS alerts
-      let activeAlerts = [];
+      // Step 3: Secondary fetches — NWS alerts + KSKF METAR for ceiling ref
+      var makeProxies = function(target) {
+        return ["https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(target)];
+      };
+      var activeAlerts = [];
       try {
-        const ALERT_URL = "https://api.weather.gov/alerts/active?zone=TXZ205";
-        for (const purl of makeProxies(ALERT_URL)) {
+        var ALERT_URL = "https://api.weather.gov/alerts/active?zone=TXZ205";
+        for (var purl of makeProxies(ALERT_URL)) {
           try {
-            const r = await fetch(purl);
+            var r = await fetch(purl);
             if (!r.ok) continue;
-            const alertData = JSON.parse(await r.text());
-            activeAlerts = (alertData.features || []).map(f => ({
-              event: f.properties.event,
-              severity: f.properties.severity,
-              description: f.properties.description?.split("\n")[0] || "",
-              ends: f.properties.ends ? new Date(f.properties.ends).toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                timeZoneName: 'short'
-              }) : "Until further notice"
-            }));
+            var alertData = JSON.parse(await r.text());
+            activeAlerts = (alertData.features || []).map(function(f) {
+              return {
+                event: f.properties.event,
+                severity: f.properties.severity,
+                description: (f.properties.description || "").split("\n")[0] || "",
+                ends: f.properties.ends
+                  ? new Date(f.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", timeZoneName:"short" })
+                  : "Until further notice"
+              };
+            });
             break;
-          } catch (e) {
-            continue;
-          }
+          } catch(e) { continue; }
         }
-      } catch (e) {
-        activeAlerts = [];
-      }
+      } catch(e) {}
       setAlerts(activeAlerts);
 
-      // FAA raw METAR — KSKF for pilots line
-      let rawText = "";
+      var rawText = "";
       try {
-        const METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false";
-        for (const purl of makeProxies(METAR_URL)) {
+        var METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false";
+        for (var purl of makeProxies(METAR_URL)) {
           try {
-            const r = await fetch(purl);
+            var r = await fetch(purl);
             if (!r.ok) continue;
-            const parsed = JSON.parse(await r.text());
+            var parsed = JSON.parse(await r.text());
             if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].rawOb) {
               rawText = parsed[0].rawOb;
               break;
             }
-          } catch (e) {
-            continue;
-          }
+          } catch(e) { continue; }
         }
-      } catch (e) {}
+      } catch(e) {}
 
-      // Regional METARs — KCVB (west) and KSSF (south)
-      let regionalMETARs = {};
+      // Pick closest 2 airfields to operator position
+      var AIRFIELDS = [
+        {id:"KSAT", lat:29.5337, lon:-98.4698},
+        {id:"KSKF", lat:29.3842, lon:-98.5811},
+        {id:"KSSF", lat:29.3369, lon:-98.4711},
+        {id:"KRND", lat:29.5297, lon:-98.2789}
+      ];
+      var dist2 = function(a, b) {
+        var dlat = a.lat - b.lat, dlon = a.lon - b.lon;
+        return dlat*dlat + dlon*dlon;
+      };
+      var opPos = {lat: opLat, lon: opLon};
+      var sorted = AIRFIELDS.slice().sort(function(a,b) { return dist2(a,opPos) - dist2(b,opPos); });
+      var closestTwo = sorted.slice(0,2).map(function(a){return a.id;}).join(",");
+      var regionalMETARs = {};
       try {
-        const REGIONAL_URL = "https://aviationweather.gov/api/data/metar?ids=KCVB,KSSF&format=json&taf=false";
-        for (const purl of makeProxies(REGIONAL_URL)) {
+        var REGIONAL_URL = "https://aviationweather.gov/api/data/metar?ids=" + closestTwo + "&format=json&taf=false";
+        for (var purl of makeProxies(REGIONAL_URL)) {
           try {
-            const r = await fetch(purl);
+            var r = await fetch(purl);
             if (!r.ok) continue;
-            const parsed = JSON.parse(await r.text());
+            var parsed = JSON.parse(await r.text());
             if (Array.isArray(parsed)) {
-              parsed.forEach(m => {
-                if (m.icaoId && m.rawOb) regionalMETARs[m.icaoId] = m;
-              });
+              parsed.forEach(function(m) { if (m.icaoId && m.rawOb) regionalMETARs[m.icaoId] = m; });
               if (Object.keys(regionalMETARs).length > 0) break;
             }
-          } catch (e) {
-            continue;
-          }
+          } catch(e) { continue; }
         }
-      } catch (e) {}
+      } catch(e) {}
+
       setWx({
-        station: "KSKF",
-        name: "Kelly Field",
-        time: new Date().toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit'
-        }) + " local",
-        raw: rawText,
-        regional: regionalMETARs,
-        wind: {
-          dir: windDir,
-          speed: windMph,
-          gust: gustMph
-        },
-        visibility: visSM,
-        ceiling,
-        temp: tempC,
-        dewpoint: dewpC,
-        altimeter: altim,
-        category: flightCat,
-        precip,
-        thunderstorm,
-        airmet: {
-          sierra: false,
-          tango: false,
-          zulu: false
-        },
-        windAloft3k,
-        source: "Open-Meteo + FAA"
+        station:     gotGPS ? "GPS" : "KSKF",
+        name:        gotGPS ? "Operator Position" : "Kelly Field",
+        time:        new Date().toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) + " local",
+        raw:         rawText,
+        regional:    regionalMETARs,
+        wind:        { dir: windDir, speed: windMph, gust: gustMph },
+        visibility:  visSM,
+        ceiling:     ceiling,
+        temp:        tempC,
+        dewpoint:    dewpC,
+        altimeter:   altim,
+        category:    flightCat,
+        precip:      precip,
+        thunderstorm: thunder,
+        airmet:      { sierra: false, tango: false, zulu: false },
+        windAloft3k: windAloft,
+        source:      "Open-Meteo + FAA"
       });
       setStatus("loaded");
-    } catch (e) {
+    } catch(e) {
       setErrMsg(e.message || "Unknown error");
       setStatus("error");
     }
   }
-  useEffect(() => {
-    fetchWeather();
-  }, []);
-  function getAircraftStatus(ac, w) {
-    const wind = ktToMph(w.wind.speed);
-    const gust = w.wind.gust ? ktToMph(w.wind.gust) : null;
-    const temp = tempF(w.temp);
-    const reasons = [];
-    if (wind > ac.maxWind) reasons.push(`Wind ${wind.toFixed(0)}mph > ${ac.maxWind}mph limit`);else if (wind > ac.maxWind * 0.8) reasons.push(`Wind ${wind.toFixed(0)}mph near limit`);
-    if (gust && gust > ac.maxGust) reasons.push(`Gust ${gust.toFixed(0)}mph > ${ac.maxGust}mph limit`);else if (gust && gust > ac.maxGust * 0.85) reasons.push(`Gust ${gust.toFixed(0)}mph near limit`);
-    if (!ac.precip && w.precip) reasons.push("Precip — not rated");
-    if (w.thunderstorm) reasons.push("Thunderstorm active");
-    if (temp < ac.minTemp) reasons.push(`Temp ${temp.toFixed(0)}°F below limit`);
-    if (temp > ac.maxTemp) reasons.push(`Temp ${temp.toFixed(0)}°F above limit`);
-    if (w.visibility < 3) reasons.push(`Vis ${w.visibility}SM < 3SM`);
-    if (w.ceiling < 300) reasons.push(`Ceiling ${w.ceiling}ft < 300ft`);
-    const hardStop = wind > ac.maxWind || gust && gust > ac.maxGust || !ac.precip && w.precip || w.thunderstorm || temp < ac.minTemp || temp > ac.maxTemp || w.visibility < 2 || w.ceiling < 300 || w.category === "IFR" || w.category === "LIFR";
-    if (hardStop) return {
-      status: "GROUND",
-      color: "#FF3B30",
-      bg: "rgba(255,59,48,0.1)",
-      border: "rgba(255,59,48,0.3)",
-      reasons
-    };
-    if (!hardStop && reasons.length > 0) return {
-      status: "CAUTION",
-      color: "#FFC107",
-      bg: "rgba(255,193,7,0.1)",
-      border: "rgba(255,193,7,0.3)",
-      reasons
-    };
-    return {
-      status: "GO",
-      color: "#34C759",
-      bg: "rgba(52,199,89,0.1)",
-      border: "rgba(52,199,89,0.3)",
-      reasons: []
-    };
+
+  React.useEffect(function() { fetchWeather(); }, []);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function dirLabel(d) {
+    var dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+    return dirs[Math.round(d/22.5) % 16];
   }
-  function getOverallStatus(w) {
-    const s = AIRCRAFT.map(ac => getAircraftStatus(ac, w));
-    if (s.every(x => x.status === "GO")) return {
-      label: "FLIGHT OPS — GO",
-      color: "#34C759",
-      bg: "rgba(52,199,89,0.08)",
-      border: "rgba(52,199,89,0.3)",
-      icon: "🟢"
-    };
-    if (s.every(x => x.status === "GROUND")) return {
-      label: "DO NOT FLY",
-      color: "#FF3B30",
-      bg: "rgba(255,59,48,0.08)",
-      border: "rgba(255,59,48,0.3)",
-      icon: "🔴"
-    };
-    if (s.some(x => x.status === "GROUND")) return {
-      label: "PARTIAL OPERATIONS",
-      color: "#FFC107",
-      bg: "rgba(255,193,7,0.08)",
-      border: "rgba(255,193,7,0.3)",
-      icon: "🟡"
-    };
-    return {
-      label: "USE CAUTION",
-      color: "#FFC107",
-      bg: "rgba(255,193,7,0.08)",
-      border: "rgba(255,193,7,0.3)",
-      icon: "🟡"
-    };
+  function catColor(cat) {
+    return cat === "VFR" ? "#34C759" : cat === "MVFR" ? "#4A90D9" : cat === "IFR" ? "#FF3B30" : "#FF3B30";
   }
-  function getCatStyle(cat) {
-    const map = {
-      VFR: {
-        color: "#34C759",
-        bg: "rgba(52,199,89,0.15)",
-        border: "rgba(52,199,89,0.4)"
-      },
-      MVFR: {
-        color: "#4A90D9",
-        bg: "rgba(74,144,217,0.15)",
-        border: "rgba(74,144,217,0.4)"
-      },
-      IFR: {
-        color: "#FF3B30",
-        bg: "rgba(255,59,48,0.15)",
-        border: "rgba(255,59,48,0.4)"
-      },
-      LIFR: {
-        color: "#FF2D55",
-        bg: "rgba(255,45,85,0.15)",
-        border: "rgba(255,45,85,0.4)"
-      }
-    };
-    return map[cat] || {
-      color: "#94A3B8",
-      bg: "rgba(148,163,184,0.15)",
-      border: "rgba(148,163,184,0.4)"
-    };
-  }
-  function getAlertStyle(severity) {
-    if (severity === "Extreme") return {
-      color: "#FF2D55",
-      bg: "rgba(255,45,85,0.1)",
-      border: "rgba(255,45,85,0.35)",
-      dot: "#FF2D55"
-    };
-    if (severity === "Severe") return {
-      color: "#FF3B30",
-      bg: "rgba(255,59,48,0.1)",
-      border: "rgba(255,59,48,0.3)",
-      dot: "#FF3B30"
-    };
-    if (severity === "Moderate") return {
-      color: "#FFC107",
-      bg: "rgba(255,193,7,0.08)",
-      border: "rgba(255,193,7,0.25)",
-      dot: "#FFC107"
-    };
-    return {
-      color: "#94A3B8",
-      bg: "rgba(148,163,184,0.08)",
-      border: "rgba(148,163,184,0.2)",
-      dot: "#94A3B8"
-    };
-  }
-  const DIRS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
-  function compassDir(deg) {
-    return DIRS[Math.round(deg / 22.5) % 16];
-  }
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "fixed",
-      inset: 0,
-      background: "#0D1117",
-      zIndex: 999,
-      overflowY: "auto",
-      fontFamily: "'DM Mono','Courier New',monospace",
-      color: "#CBD5E1"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "linear-gradient(135deg,rgba(74,144,217,0.15),transparent 60%)",
-      borderBottom: "1px solid rgba(255,255,255,0.06)",
-      padding: "14px 18px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      position: "sticky",
-      top: 0,
-      zIndex: 10,
-      backdropFilter: "blur(10px)"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 16,
-      letterSpacing: 3,
-      color: "#4A90D9",
-      fontWeight: 900
-    }
-  }, "PREFLIGHT WX"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 8,
-      color: "#64748B",
-      letterSpacing: 3,
-      marginTop: 2
-    }
-  }, "WEST BEXAR (KCVB) \xB7 SOUTH SA (KSSF) \xB7 NWS GRID")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: fetchWeather,
-    style: {
-      background: "none",
-      border: "none",
-      color: "#4A90D9",
-      fontSize: 16,
-      cursor: "pointer"
-    }
-  }, "\u21BB"), /*#__PURE__*/React.createElement("button", {
-    onClick: onClose,
-    style: {
-      background: "rgba(255,255,255,0.10)",
-      border: "1px solid rgba(255,255,255,0.1)",
-      borderRadius: 8,
-      padding: "6px 14px",
-      color: "#94A3B8",
-      fontSize: 11,
-      cursor: "pointer",
-      fontFamily: "inherit"
-    }
-  }, "\u2715 Close"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "14px 14px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 12,
-      maxWidth: 900,
-      margin: "0 auto",
-      width: "100%",
-      paddingBottom: 40
-    }
-  }, status === "loading" && /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: "center",
-      padding: "60px 0",
-      color: "#64748B",
-      fontSize: 11,
-      letterSpacing: 2
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 24,
-      marginBottom: 12
-    }
-  }, "\uD83C\uDF24"), "FETCHING LIVE WEATHER..."), status === "error" && /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "rgba(255,59,48,0.08)",
-      border: "1px solid rgba(255,59,48,0.2)",
-      borderRadius: 14,
-      padding: "24px",
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 14,
-      color: "#FF3B30",
-      letterSpacing: 2,
-      marginBottom: 8
-    }
-  }, "WEATHER UNAVAILABLE"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: "#64748B",
-      marginBottom: 8
-    }
-  }, "Could not load weather data."), errMsg && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      color: "#FFC107",
-      marginBottom: 16,
-      fontFamily: "monospace",
-      wordBreak: "break-word"
-    }
-  }, errMsg), /*#__PURE__*/React.createElement("button", {
-    onClick: fetchWeather,
-    style: {
-      background: "rgba(74,144,217,0.15)",
-      border: "1px solid rgba(74,144,217,0.3)",
-      borderRadius: 8,
-      padding: "8px 16px",
-      color: "#4A90D9",
-      fontSize: 10,
-      cursor: "pointer",
-      fontFamily: "inherit",
-      letterSpacing: 1
-    }
-  }, "Try Again")), status === "loaded" && wx && (() => {
-    const overall = getOverallStatus(wx);
-    const catStyle = getCatStyle(wx.category);
-    const wind = ktToMph(wx.wind.speed);
-    const gust = wx.wind.gust ? ktToMph(wx.wind.gust) : null;
-    const windShear = Math.abs(wx.windAloft3k.speed - wx.wind.speed);
-    const hasAlerts = alerts.length > 0;
-    const hasExtremeAlert = alerts.some(a => a.severity === "Extreme" || a.severity === "Severe");
-    return /*#__PURE__*/React.createElement(React.Fragment, null, hasAlerts && /*#__PURE__*/React.createElement("div", {
-      style: {
-        borderRadius: 14,
-        overflow: "hidden",
-        border: `1px solid ${hasExtremeAlert ? "rgba(255,45,85,0.4)" : "rgba(255,193,7,0.35)"}`,
-        boxShadow: `0 0 20px ${hasExtremeAlert ? "rgba(255,45,85,0.15)" : "rgba(255,193,7,0.1)"}`
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      onClick: () => setAlertsExpanded(!alertsExpanded),
-      style: {
-        background: hasExtremeAlert ? "rgba(255,45,85,0.12)" : "rgba(255,193,7,0.08)",
-        padding: "12px 16px",
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        cursor: "pointer"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 16
-      }
-    }, hasExtremeAlert ? "🚨" : "⚠️"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        fontWeight: 700,
-        color: hasExtremeAlert ? "#FF2D55" : "#FFC107",
-        letterSpacing: 2
-      }
-    }, alerts.length, " NWS ALERT", alerts.length > 1 ? "S" : "", " ACTIVE \xB7 BEXAR COUNTY"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 8,
-        color: "#64748B",
-        marginTop: 2
-      }
-    }, alerts.map(a => a.event).join(" · "))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#64748B"
-      }
-    }, alertsExpanded ? "▲" : "▼")), alertsExpanded && alerts.map((alert, i) => {
-      const as = getAlertStyle(alert.severity);
-      return /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: {
-          background: "rgba(0,0,0,0.3)",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          padding: "12px 16px"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 10
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: as.dot,
-          marginTop: 3,
-          flexShrink: 0,
-          boxShadow: `0 0 6px ${as.dot}`
-        }
-      }), /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 4,
-          flexWrap: "wrap"
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          fontWeight: 700,
-          color: as.color
-        }
-      }, alert.event), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 8,
-          background: as.bg,
-          border: `1px solid ${as.border}`,
-          borderRadius: 4,
-          padding: "1px 6px",
-          color: as.color,
-          letterSpacing: 1
-        }
-      }, alert.severity.toUpperCase())), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10,
-          color: "#94A3B8",
-          lineHeight: 1.6,
-          marginBottom: 4
-        }
-      }, alert.description), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 8,
-          color: "#64748B"
-        }
-      }, "Expires: ", alert.ends))));
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: overall.bg,
-        border: `1px solid ${overall.border}`,
-        borderRadius: 14,
-        padding: "16px 18px",
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        boxShadow: `0 0 24px ${overall.border}`
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 26
-      }
-    }, overall.icon), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 17,
-        fontWeight: 900,
-        color: overall.color,
-        letterSpacing: 2,
-        lineHeight: 1
-      }
-    }, overall.label), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 8,
-        color: "#64748B",
-        letterSpacing: 2,
-        marginTop: 4
-      }
-    }, wx.station, " \xB7 ", wx.time, " \xB7 ", new Date().toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    }))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: catStyle.bg,
-        border: `1px solid ${catStyle.border}`,
-        borderRadius: 8,
-        padding: "8px 12px",
-        textAlign: "center"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 14,
-        fontWeight: 900,
-        color: catStyle.color,
-        letterSpacing: 1
-      }
-    }, wx.category), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 7,
-        color: catStyle.color,
-        opacity: 0.7,
-        marginTop: 1,
-        letterSpacing: 1
-      }
-    }, "CATEGORY"))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "rgba(255,255,255,0.055)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 14,
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "rgba(255,255,255,0.12)",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
-        padding: "10px 16px",
-        fontSize: 8,
-        color: "#64748B",
-        letterSpacing: 3
-      }
-    }, "AIRCRAFT READINESS"), AIRCRAFT.map(ac => {
-      const s = getAircraftStatus(ac, wx);
-      return /*#__PURE__*/React.createElement("div", {
-        key: ac.id,
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "13px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.04)"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          background: s.bg,
-          border: `1px solid ${s.border}`,
-          borderRadius: 8,
-          padding: "6px 10px",
-          minWidth: 62,
-          textAlign: "center",
-          flexShrink: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 11,
-          fontWeight: 700,
-          color: s.color,
-          letterSpacing: 1
-        }
-      }, ac.label)), /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1
-        }
-      }, s.reasons.length > 0 ? s.reasons.map((r, i) => /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: {
-          fontSize: 9,
-          color: s.status === "GROUND" ? "#FF3B30" : "#FFC107",
-          marginBottom: 2
-        }
-      }, "\xB7 ", r)) : /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          color: "#34C759"
-        }
-      }, "All parameters within limits"), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 8,
-          color: "#64748B",
-          marginTop: 2
-        }
-      }, ac.ip, " \xB7 Max wind ", ac.maxWind, "mph", ac.id === "M4T" ? " · No IP rating — no precip ops" : ac.id === "M4TD" ? " · IP55 · Anti-ice props" : "")), /*#__PURE__*/React.createElement("div", {
-        style: {
-          background: s.bg,
-          border: `1px solid ${s.border}`,
-          borderRadius: 6,
-          padding: "4px 10px",
-          fontSize: 9,
-          fontWeight: 700,
-          color: s.color,
-          letterSpacing: 1,
-          flexShrink: 0
-        }
-      }, s.status));
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "rgba(255,255,255,0.055)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 14,
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "rgba(255,255,255,0.12)",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
-        padding: "10px 16px",
-        fontSize: 8,
-        color: "#64748B",
-        letterSpacing: 3
-      }
-    }, "PLAIN ENGLISH SUMMARY"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "14px 16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10
-      }
-    }, [{
-      icon: "💨",
-      label: "Wind",
-      value: `Out of the ${compassDir(wx.wind.dir)} at ${wind.toFixed(0)}mph${gust ? `, gusting to ${gust.toFixed(0)}mph` : ""}`
-    }, {
-      icon: "👁",
-      label: "Visibility",
-      value: wx.visibility >= 10 ? "Excellent — greater than 10 miles" : wx.visibility >= 5 ? `Good — ${wx.visibility} miles` : wx.visibility >= 3 ? `Reduced — ${wx.visibility} miles, Part 107 minimum` : `Poor — ${wx.visibility} miles, below Part 107 minimum`
-    }, {
-      icon: "☁️",
-      label: "Sky",
-      value: wx.ceiling >= 9999 ? "Clear skies, no ceiling" : wx.ceiling >= 3000 ? `Partly cloudy, ceiling ${wx.ceiling.toLocaleString()}ft — well above 400ft limit` : wx.ceiling >= 500 ? `Low ceiling at ${wx.ceiling.toLocaleString()}ft — monitor closely` : `Dangerously low ceiling at ${wx.ceiling}ft — below minimums`
-    }, {
-      icon: "🌡",
-      label: "Temperature",
-      value: `${tempF(wx.temp).toFixed(0)}°F, dewpoint ${tempF(wx.dewpoint).toFixed(0)}°F${wx.temp - wx.dewpoint <= 3 ? " · Low spread, fog possible" : ""}`
-    }, {
-      icon: "🔋",
-      label: "Battery Impact",
-      value: tempF(wx.temp) > 100 ? "High heat — expect reduced flight times, monitor battery temps" : tempF(wx.temp) > 85 ? "Warm — slight reduction in battery performance possible" : tempF(wx.temp) < 32 ? "Below freezing — pre-heat batteries, M4T restricted" : "Temperature within normal battery operating range"
-    }, {
-      icon: "🌬",
-      label: "Upper Wind",
-      value: `At 3,000ft: ${compassDir(wx.windAloft3k.dir)} @ ${ktToMph(wx.windAloft3k.speed).toFixed(0)}mph · ${ktToMph(windShear).toFixed(0)}mph shear${ktToMph(windShear) > 15 ? " — turbulence likely climbing" : ktToMph(windShear) > 8 ? " — moderate shear" : " — light shear"}`
-    }].map((item, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        display: "flex",
-        gap: 10,
-        alignItems: "flex-start"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 14,
-        flexShrink: 0
-      }
-    }, item.icon), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 9,
-        color: "#64748B",
-        letterSpacing: 1
-      }
-    }, item.label, ": "), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 10,
-        color: "#CBD5E1"
-      }
-    }, item.value)))))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "rgba(255,255,255,0.055)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 14,
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "rgba(255,255,255,0.12)",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
-        padding: "10px 16px",
-        fontSize: 8,
-        color: "#64748B",
-        letterSpacing: 3
-      }
-    }, "SURFACE CONDITIONS \xB7 KSKF"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr"
-      }
-    }, [{
-      label: "WIND",
-      value: `${wx.wind.dir}° @ ${wind.toFixed(0)}mph`,
-      sub: gust ? `Gusting ${gust.toFixed(0)}mph` : "No gusts",
-      alert: wind > 20 || gust && gust > 25
-    }, {
-      label: "VISIBILITY",
-      value: `${wx.visibility}SM`,
-      sub: wx.visibility >= 5 ? "Unrestricted" : wx.visibility >= 3 ? "Marginal" : "Below minimums",
-      alert: wx.visibility < 3
-    }, {
-      label: "CEILING",
-      value: wx.ceiling >= 9999 ? "Unlimited" : `${wx.ceiling.toLocaleString()}ft AGL`,
-      sub: wx.ceiling >= 3000 ? "Clear" : wx.ceiling >= 1000 ? "Low" : "Critical",
-      alert: wx.ceiling < 1000
-    }, {
-      label: "TEMP / DEW",
-      value: `${tempF(wx.temp).toFixed(0)}°F / ${tempF(wx.dewpoint).toFixed(0)}°F`,
-      sub: `${wx.altimeter}"Hg · Spread ${(wx.temp - wx.dewpoint).toFixed(0)}°C`,
-      alert: tempF(wx.temp) > 100
-    }, {
-      label: "WINDS 3,000FT",
-      value: `${wx.windAloft3k.dir}° @ ${ktToMph(wx.windAloft3k.speed).toFixed(0)}mph`,
-      sub: `Shear: ${ktToMph(windShear).toFixed(0)}mph`,
-      alert: ktToMph(windShear) > 15
-    }, {
-      label: "PRECIPITATION",
-      value: wx.thunderstorm ? "⛈ THUNDER" : wx.precip ? "🌧 PRECIP" : "None",
-      sub: wx.thunderstorm ? "Hard stop all aircraft" : wx.precip ? "M4T grounded — no IP rating" : "Clear",
-      alert: wx.precip || wx.thunderstorm
-    }].map((item, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        padding: "12px 16px",
-        borderBottom: "1px solid rgba(255,255,255,0.03)",
-        borderRight: i % 2 === 0 ? "1px solid rgba(255,255,255,0.03)" : "none"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 8,
-        color: "#64748B",
-        letterSpacing: 2,
-        marginBottom: 5
-      }
-    }, item.label), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 13,
-        color: item.alert ? "#FFC107" : "#E2E8F0",
-        fontWeight: 600,
-        lineHeight: 1
-      }
-    }, item.value), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: item.alert ? "#FFC107" : "#64748B",
-        marginTop: 4
-      }
-    }, item.sub))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 8,
-        color: "#64748B",
-        letterSpacing: 3,
-        marginBottom: 8
-      }
-    }, "REGIONAL STATIONS"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 8
-      }
-    }, [{
-      id: "KCVB",
-      name: "Castroville",
-      dir: "WEST",
-      dirColor: "#64B5F6"
-    }, {
-      id: "KSSF",
-      name: "Stinson Muni",
-      dir: "SOUTH",
-      dirColor: "#34C759"
-    }].map(st => {
-      const m = wx.regional && wx.regional[st.id];
-      return /*#__PURE__*/React.createElement("div", {
-        key: st.id,
-        style: {
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.09)",
-          borderRadius: 10,
-          padding: "10px 12px"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 6
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#E2E8F0",
-          letterSpacing: 1
-        }
-      }, st.id), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 7,
-          color: st.dirColor,
-          letterSpacing: 2,
-          background: `${st.dirColor}18`,
-          border: `1px solid ${st.dirColor}40`,
-          borderRadius: 3,
-          padding: "1px 5px"
-        }
-      }, st.dir)), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 8,
-          color: "#64748B",
-          marginBottom: 6
-        }
-      }, st.name), m ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          color: "#94A3B8",
-          marginBottom: 3
-        }
-      }, "Wind: ", /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: "#E2E8F0"
-        }
-      }, m.wdir && m.wdir !== 0 ? m.wdir + "°" : "VRB", " @ ", m.wspd ? Math.round(m.wspd * 1.15078) : "—", "mph", m.wgst ? ` G${Math.round(m.wgst * 1.15078)}mph` : "")), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          color: "#94A3B8",
-          marginBottom: 3
-        }
-      }, "Vis: ", /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: "#E2E8F0"
-        }
-      }, m.visib ? m.visib + "SM" : "—"), /*#__PURE__*/React.createElement("span", {
-        style: {
-          marginLeft: 8
-        }
-      }, "Temp: ", /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: "#E2E8F0"
-        }
-      }, m.temp ? Math.round(m.temp * 9 / 5 + 32) + "°F" : "—"))), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 8,
-          color: "#475569",
-          fontFamily: "monospace",
-          marginTop: 4,
-          lineHeight: 1.4,
-          wordBreak: "break-all"
-        }
-      }, m.rawOb)) : /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          color: "#475569"
-        }
-      }, "Unavailable"));
-    }))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "rgba(255,255,255,0.01)",
-        border: "1px solid rgba(255,255,255,0.04)",
-        borderRadius: 10,
-        padding: "10px 14px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 8,
-        color: "#64748B",
-        letterSpacing: 2,
-        marginBottom: 6
-      }
-    }, "RAW METAR \u2014 KSKF (for pilots)"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#64748B",
-        fontFamily: "monospace",
-        lineHeight: 1.6,
-        marginBottom: 10
-      }
-    }, wx.raw), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 8,
-        color: "#64748B",
-        letterSpacing: 2,
-        marginBottom: 6
-      }
-    }, "QUICK LINKS \u2014 AVIATIONWEATHER.GOV"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 6,
-        flexWrap: "wrap"
-      }
-    }, [{
-      id: "KSKF",
-      label: "KSKF Kelly Field"
-    }, {
-      id: "KSAT",
-      label: "KSAT San Antonio Intl"
-    }, {
-      id: "KSSF",
-      label: "KSSF Stinson"
-    }, {
-      id: "KCVB",
-      label: "KCVB Castroville"
-    }].map(s => /*#__PURE__*/React.createElement("a", {
-      key: s.id,
-      href: `https://aviationweather.gov/metar/data?ids=${s.id}&format=decoded&hours=0&taf=off&layout=on`,
-      target: "_blank",
-      rel: "noopener noreferrer",
-      style: {
-        fontSize: 8,
-        color: "#4A90D9",
-        background: "rgba(74,144,217,0.08)",
-        border: "1px solid rgba(74,144,217,0.2)",
-        borderRadius: 5,
-        padding: "3px 8px",
-        textDecoration: "none",
-        letterSpacing: 1
-      }
-    }, s.label, " \u2197")))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "rgba(255,255,255,0.01)",
-        border: "1px solid rgba(255,255,255,0.04)",
-        borderRadius: 10,
-        padding: "10px 14px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: "#334155",
-        lineHeight: 1.7
-      }
-    }, "Weather parameters are advisory. UAS Program Manager retains final authority on all flight operations. Emergency ops may proceed at PM discretion with documented justification.")));
-  })()));
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return React.createElement("div", { style:{
+    position:"fixed", inset:0, background:"#0D1117", zIndex:999,
+    display:"flex", flexDirection:"column",
+    fontFamily:"'DM Mono','Courier New',monospace", color:"#CBD5E1"
+  }},
+
+    // Header
+    React.createElement("div", { style:{
+      background:"linear-gradient(135deg,rgba(74,144,217,0.15),transparent 60%)",
+      borderBottom:"1px solid rgba(255,255,255,0.06)",
+      padding:"14px 18px", display:"flex", alignItems:"center",
+      justifyContent:"space-between", position:"sticky", top:0,
+      backdropFilter:"blur(10px)", flexShrink:0, zIndex:10
+    }},
+      React.createElement("div", null,
+        React.createElement("div", { style:{
+          fontFamily:"'Bebas Neue',sans-serif", fontSize:16,
+          letterSpacing:3, color:"#4A90D9", fontWeight:900
+        }}, "PREFLIGHT WX"),
+        React.createElement("div", { style:{fontSize:8, color:"#64748B", letterSpacing:2, marginTop:2}},
+          wx && wx.station === "GPS"
+            ? "Operator GPS Position \u00B7 Open-Meteo \u00B7 KSKF Ceiling"
+            : "KSKF Kelly Field \u00B7 Open-Meteo \u00B7 KSKF Ceiling"
+        )
+      ),
+      React.createElement("div", { style:{display:"flex", gap:8, alignItems:"center"}},
+        React.createElement("button", {
+          onClick: fetchWeather,
+          style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",
+            borderRadius:8,padding:"6px 12px",color:"#94A3B8",fontSize:11,cursor:"pointer",fontFamily:"inherit"}
+        }, "\u21BB Refresh"),
+        React.createElement("button", {
+          onClick: onClose,
+          style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",
+            borderRadius:8,padding:"6px 12px",color:"#94A3B8",fontSize:11,cursor:"pointer",fontFamily:"inherit"}
+        }, "\u00D7 Close")
+      )
+    ),
+
+    // Scrollable content
+    React.createElement("div", { style:{flex:1, minHeight:0, overflowY:"auto", WebkitOverflowScrolling:"touch"} },
+      React.createElement("div", { style:{padding:"14px", paddingBottom:40, maxWidth:900, margin:"0 auto", width:"100%"} },
+
+        // Loading
+        status === "loading" && React.createElement("div", { style:{textAlign:"center",padding:"60px 0",color:"#64748B",fontSize:11,letterSpacing:2}},
+          React.createElement("div", {style:{fontSize:24,marginBottom:12}}, "\u2708\uFE0F"),
+          "FETCHING WEATHER DATA..."
+        ),
+
+        // Error
+        status === "error" && React.createElement("div", { style:{
+          background:"rgba(255,59,48,0.1)",border:"1px solid rgba(255,59,48,0.3)",
+          borderRadius:10,padding:"16px",textAlign:"center"
+        }},
+          React.createElement("div", {style:{color:"#FF3B30",fontSize:13,marginBottom:8}}, "\u26A0 Weather Unavailable"),
+          React.createElement("div", {style:{color:"#64748B",fontSize:11}}, errMsg),
+          React.createElement("button", {
+            onClick:fetchWeather,
+            style:{marginTop:12,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",
+              borderRadius:7,padding:"8px 16px",color:"#E2E8F0",cursor:"pointer",fontFamily:"inherit",fontSize:11}
+          }, "Retry")
+        ),
+
+        // Loaded
+        status === "loaded" && wx && (function() {
+          var overall = getOverallStatus(wx);
+          var wind = wx.wind.speed;
+          var gust = wx.wind.gust;
+
+          return React.createElement(React.Fragment, null,
+
+            // GPS indicator
+            usingGPS && React.createElement("div", {style:{
+              display:"flex",alignItems:"center",gap:8,marginBottom:10,
+              background:"rgba(52,199,89,0.08)",border:"1px solid rgba(52,199,89,0.2)",
+              borderRadius:8,padding:"6px 12px"
+            }},
+              React.createElement("span", {style:{fontSize:10,color:"#34C759"}}, "\uD83D\uDCCD GPS ACTIVE"),
+              gpsCoords && React.createElement("span", {style:{fontSize:9,color:"#64748B"}},
+                gpsCoords.lat.toFixed(4) + "\u00B0 N, " + Math.abs(gpsCoords.lon).toFixed(4) + "\u00B0 W"
+              )
+            ),
+
+            // Overall go/no-go banner
+            React.createElement("div", {style:{
+              background:overall.bg, border:"1px solid "+overall.border,
+              borderRadius:12, padding:"16px 18px", marginBottom:10,
+              display:"flex", alignItems:"center", gap:14
+            }},
+              React.createElement("span", {style:{fontSize:28}}, overall.icon),
+              React.createElement("div", null,
+                React.createElement("div", {style:{fontSize:16,fontWeight:700,color:overall.color,letterSpacing:1}}, overall.label),
+                React.createElement("div", {style:{fontSize:9,color:"#64748B",marginTop:3,letterSpacing:1}},
+                  wx.time + " \u00B7 " + wx.station + " \u00B7 " + wx.category
+                )
+              ),
+              React.createElement("div", {style:{marginLeft:"auto",textAlign:"right"}},
+                React.createElement("div", {style:{fontSize:11,color:catColor(wx.category),fontWeight:700,letterSpacing:1}}, wx.category),
+                React.createElement("div", {style:{fontSize:9,color:"#64748B"}}, "Flight Cat")
+              )
+            ),
+
+            // Wind + Visibility row
+            React.createElement("div", {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+              React.createElement("div", {style:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+                React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "SURFACE WIND"),
+                React.createElement("div", {style:{fontSize:22,fontWeight:700,color:"#E2E8F0"}},
+                  wind.toFixed(0), React.createElement("span", {style:{fontSize:11,color:"#64748B"}}, " mph")
+                ),
+                React.createElement("div", {style:{fontSize:10,color:"#94A3B8",marginTop:2}},
+                  wx.wind.dir + "\u00B0 " + dirLabel(wx.wind.dir),
+                  gust ? React.createElement("span", {style:{color:"#FFC107"}}, " G" + gust.toFixed(0)) : null
+                )
+              ),
+              React.createElement("div", {style:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+                React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "VISIBILITY"),
+                React.createElement("div", {style:{fontSize:22,fontWeight:700,color: wx.visibility < 3 ? "#FF3B30" : "#E2E8F0"}},
+                  wx.visibility, React.createElement("span", {style:{fontSize:11,color:"#64748B"}}, " SM")
+                ),
+                React.createElement("div", {style:{fontSize:10,color:"#94A3B8",marginTop:2}},
+                  wx.ceiling < 99999 ? "Ceiling " + wx.ceiling.toLocaleString() + "ft" : "Ceiling unlimited"
+                )
+              )
+            ),
+
+            // Temp + Pressure row
+            React.createElement("div", {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+              React.createElement("div", {style:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+                React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "TEMPERATURE"),
+                React.createElement("div", {style:{fontSize:22,fontWeight:700,color:"#E2E8F0"}},
+                  tempF(wx.temp).toFixed(0), React.createElement("span", {style:{fontSize:11,color:"#64748B"}}, " \u00B0F")
+                ),
+                React.createElement("div", {style:{fontSize:10,color:"#94A3B8",marginTop:2}},
+                  "Dewpoint " + tempF(wx.dewpoint).toFixed(0) + "\u00B0F"
+                )
+              ),
+              React.createElement("div", {style:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px"}},
+                React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "ALTIMETER"),
+                React.createElement("div", {style:{fontSize:22,fontWeight:700,color:"#E2E8F0"}},
+                  wx.altimeter.toFixed(2), React.createElement("span", {style:{fontSize:11,color:"#64748B"}}, " inHg")
+                ),
+                React.createElement("div", {style:{fontSize:10,color:"#94A3B8",marginTop:2}},
+                  wx.precip ? "\u26C8 Precip active" : wx.thunderstorm ? "\u26A1 Thunderstorm" : "No precip"
+                )
+              )
+            ),
+
+            // Wind aloft
+            React.createElement("div", {style:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px",marginBottom:8}},
+              React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "WIND ALOFT \u2014 80m / 260ft"),
+              React.createElement("div", {style:{display:"flex",alignItems:"center",gap:12}},
+                React.createElement("div", {style:{fontSize:18,fontWeight:700,color:"#E2E8F0"}},
+                  wx.windAloft3k.speed.toFixed(0), React.createElement("span", {style:{fontSize:11,color:"#64748B"}}, " mph")
+                ),
+                React.createElement("div", {style:{fontSize:11,color:"#94A3B8"}},
+                  wx.windAloft3k.dir + "\u00B0 " + dirLabel(wx.windAloft3k.dir)
+                )
+              )
+            ),
+
+            // Per-aircraft status
+            React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6,marginTop:4}}, "AIRCRAFT STATUS"),
+            React.createElement("div", {style:{display:"flex",flexDirection:"column",gap:6,marginBottom:8}},
+              AIRCRAFT.map(function(ac) {
+                var s = getAircraftStatus(ac, wx);
+                return React.createElement("div", {
+                  key: ac.id,
+                  style:{background:s.bg,border:"1px solid "+s.border,borderRadius:10,padding:"10px 14px",
+                    display:"flex",alignItems:"center",gap:12}
+                },
+                  React.createElement("div", null,
+                    React.createElement("div", {style:{fontSize:12,fontWeight:700,color:s.color,letterSpacing:1}}, ac.id),
+                    React.createElement("div", {style:{fontSize:9,color:"#64748B"}}, ac.ip + " \u00B7 " + ac.maxWind + "mph max")
+                  ),
+                  React.createElement("div", {style:{flex:1}},
+                    s.reasons.length > 0
+                      ? s.reasons.map(function(r, i) {
+                          return React.createElement("div", {key:i, style:{fontSize:9,color:s.color,marginTop:i>0?2:0}}, "\u25B8 " + r);
+                        })
+                      : React.createElement("div", {style:{fontSize:9,color:"#34C759"}}, "All parameters within limits")
+                  ),
+                  React.createElement("div", {style:{fontSize:11,fontWeight:700,color:s.color,letterSpacing:1}}, s.status)
+                );
+              })
+            ),
+
+            // Alerts
+            alerts.length > 0 && React.createElement("div", {style:{marginBottom:8}},
+              React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "NWS ALERTS"),
+              alerts.map(function(a, i) {
+                return React.createElement("div", {key:i, style:{
+                  background:"rgba(255,59,48,0.08)",border:"1px solid rgba(255,59,48,0.25)",
+                  borderRadius:8,padding:"10px 12px",marginBottom:6
+                }},
+                  React.createElement("div", {style:{fontSize:11,color:"#FF3B30",fontWeight:700,marginBottom:4}}, a.event),
+                  React.createElement("div", {style:{fontSize:9,color:"#94A3B8",lineHeight:1.5}}, a.description),
+                  React.createElement("div", {style:{fontSize:9,color:"#64748B",marginTop:4}}, "Until: " + a.ends)
+                );
+              })
+            ),
+
+
+            // Regional METARs
+            wx.regional && Object.keys(wx.regional).length > 0 && React.createElement("div", {style:{marginBottom:8}},
+              React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:2,marginBottom:6}}, "CLOSEST AIRFIELD METAR \u2014 " + Object.keys(wx.regional).join(" \u00B7 ")),
+              Object.entries(wx.regional).map(function(entry) {
+                var id = entry[0], m = entry[1];
+                return React.createElement(MetarCard, {key:id, id:id, rawOb:m.rawOb});
+              })
+            ),
+
+            // Links
+            React.createElement("div", {style:{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}},
+              [
+                { label:"NWS San Antonio", url:"https://forecast.weather.gov/MapClick.php?CityName=San+Antonio&state=TX&site=EWX&textField1=29.4241&textField2=-98.4936" },
+                { label:"Windy", url:"https://www.windy.com/?29.384,-98.581,10" }
+              ].map(function(l) {
+                return React.createElement("a", {
+                  key:l.label, href:l.url, target:"_blank", rel:"noopener noreferrer",
+                  style:{fontSize:9,color:"#4A90D9",background:"rgba(74,144,217,0.1)",
+                    border:"1px solid rgba(74,144,217,0.25)",borderRadius:6,padding:"5px 10px",
+                    textDecoration:"none",letterSpacing:1}
+                }, l.label + " \u2197");
+              })
+            )
+          );
+        })()
+      )
+    )
+  );
 }
+
+
 function FirehawkOps() {
   const [tab, setTab] = useState("dashboard");
   const [crew, setCrew] = useState(CREW_DEFAULT);
