@@ -4638,7 +4638,6 @@ const [showComms, setShowComms] = useState(false);
   const [testTarget, setTestTarget] = React.useState(null);
   const testAnimRef = React.useRef(null);
   const [scopeMode, setScopeMode] = useState("north");
-  const [scopeNm, setScopeNm] = useState(3);
   const [heading, setHeading] = useState(0);
   const [altMin, setAltMin] = useState(0);
   const [altMax, setAltMax] = useState(1000);
@@ -5004,7 +5003,7 @@ const [showComms, setShowComms] = useState(false);
   useEffect(() => {
     if (!posCoords) return;
     const fetchADSB = () => {
-      fetch("https://api.airplanes.live/v2/point/" + posCoords.lat.toFixed(4) + "/" + posCoords.lon.toFixed(4) + "/" + scopeNm)
+      fetch("https://api.airplanes.live/v2/point/" + posCoords.lat.toFixed(4) + "/" + posCoords.lon.toFixed(4) + "/3")
         .then(r => r.json()).then(data => {
           const ac = (data.ac || [])
             .filter(a => a.alt_baro && a.alt_baro !== "ground" && a.alt_baro <= altMax && a.lat && a.lon)
@@ -5243,23 +5242,7 @@ const [showComms, setShowComms] = useState(false);
   /* \u2500\u2500 ADS-B SCOPE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
   /*#__PURE__*/React.createElement("div", null,
     /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
-      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" } },
-        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2, marginRight: 2 } }, "RANGE:"),
-        [["3NM", 3], ["5NM", 5]].map(function(pair) {
-          var label = pair[0], nm = pair[1];
-          return /*#__PURE__*/React.createElement("button", {
-            key: label,
-            onClick: function() { setScopeNm(nm); },
-            style: {
-              padding: "5px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace",
-              fontSize: 9, letterSpacing: 1,
-              border: "1px solid " + (scopeNm === nm ? "rgba(74,144,217,0.5)" : "rgba(255,255,255,0.12)"),
-              background: scopeNm === nm ? "rgba(74,144,217,0.2)" : "rgba(255,255,255,0.05)",
-              color: scopeNm === nm ? "#4A90D9" : "#94A3B8"
-            }
-          }, label);
-        }),
-        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#475569", letterSpacing: 2, margin: "0 4px" } }, "|"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", letterSpacing: 3 } }, "ADS-B TRAFFIC \u2014 3NM"),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 4, alignItems: "center" } },
         [["SFC\u20131k", 1000], ["SFC\u20135k", 5000], ["SFC\u201310k", 10000]].map(([label, val]) =>
           /*#__PURE__*/React.createElement("button", {
@@ -5340,14 +5323,9 @@ const [showComms, setShowComms] = useState(false);
           /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 155, r: 40,  fill: "none", stroke: "rgba(255,255,255,0.05)", strokeWidth: 1 }),
           /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 155, r: 80,  fill: "none", stroke: "rgba(255,255,255,0.05)", strokeWidth: 1 }),
           /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 155, r: 120, fill: "none", stroke: "rgba(255,255,255,0.08)", strokeWidth: 1 }),
-          ...Array.from({length: scopeNm}, function(_, i) {
-            var nm = i + 1;
-            var rr = (nm / scopeNm) * 120;
-            return /*#__PURE__*/React.createElement("text", {
-              key: "lbl"+nm, x: 163, y: 155 - rr + 4,
-              fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace"
-            }, nm + "NM");
-          }),
+          /*#__PURE__*/React.createElement("text", { x: 163, y: 119, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, "1NM"),
+          /*#__PURE__*/React.createElement("text", { x: 163, y:  79, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, "2NM"),
+          /*#__PURE__*/React.createElement("text", { x: 163, y:  39, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, "3NM"),
 
           ...Array.from({length: 12}, function(_, i) {
             var deg = i * 30;
@@ -5459,7 +5437,7 @@ const [showComms, setShowComms] = useState(false);
 
     /* Traffic list */
     adsbTraffic.length === 0
-      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#64748B", textAlign: "center", padding: "12px 0", fontStyle: "italic" } }, adsbLoading ? "Scanning for traffic..." : "No traffic SFC\u2013" + altMax.toLocaleString() + "ft within " + scopeNm + "NM")
+      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#64748B", textAlign: "center", padding: "12px 0", fontStyle: "italic" } }, adsbLoading ? "Scanning for traffic..." : "No traffic SFC\u2013" + altMax.toLocaleString() + "ft within 3NM")
       : /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
         adsbTraffic.map(ac => {
           const isConflict = ac.alt <= 400;
@@ -5902,7 +5880,7 @@ const [showComms, setShowComms] = useState(false);
       fontSize: 12,
       color: "#64748B"
     }
-  }, "\u2197"))))))));
+  }, "\u2197")))))));
 }
 
 // ── Thermal Config Modal ─────────────────────────────────────────────────────
