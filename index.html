@@ -4915,6 +4915,58 @@ const [showComms, setShowComms] = useState(false);
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  // ── Audio alert helpers ──────────────────────────────────────────────────
+  const audioCtxRef = React.useRef(null);
+  const getAudioCtx = () => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtxRef.current;
+  };
+
+  const playConflictTone = () => {
+    try {
+      const ctx = getAudioCtx();
+      [0, 0.2].forEach(function(offset) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "sine"; osc.frequency.value = 880;
+        const t = ctx.currentTime + offset;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.4, t + 0.02);
+        gain.gain.linearRampToValueAtTime(0, t + 0.13);
+        osc.start(t); osc.stop(t + 0.15);
+      });
+    } catch(e) {}
+  };
+
+  const playInboundTone = () => {
+    try {
+      const ctx = getAudioCtx();
+      [[0, 1200], [0.15, 1000], [0.30, 800]].forEach(function(pair) {
+        const offset = pair[0], freq = pair[1];
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "square"; osc.frequency.value = freq;
+        const t = ctx.currentTime + offset;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.35, t + 0.01);
+        gain.gain.linearRampToValueAtTime(0, t + 0.12);
+        osc.start(t); osc.stop(t + 0.15);
+      });
+    } catch(e) {}
+  };
+
+  // ── Inbound detection — aircraft heading within 60° of bearing TO operator
+  const isInbound = (ac) => {
+    if (!ac.hdg || !ac.brg) return false;
+    const bearingFromAc = (ac.brg + 180) % 360;
+    const diff = Math.abs(((ac.hdg - bearingFromAc) + 540) % 360 - 180);
+    return diff < 60 && ac.spd > 30;
+  };
+
   // ── Collision test ────────────────────────────────────────────────────────
   const runCollisionTest = () => {
     if (testAnimRef.current) clearInterval(testAnimRef.current);
