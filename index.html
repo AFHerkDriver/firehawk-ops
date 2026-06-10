@@ -4916,26 +4916,84 @@ const [showComms, setShowComms] = useState(false);
         { id:"KRND", name:"Randolph Field",     cls:"D", ctaf:"Tower 123.9",  lat:29.5297, lon:-98.2789 }
       ].map(a => ({ ...a, dist: distNm(lat,lon,a.lat,a.lon), brg: Math.round(bearingTo(lat,lon,a.lat,a.lon)) }));
       setNearestAirfields(af);
-      // ── LAANC facility map query ────────────────────────────────────────
+      // ── Airspace query stack ─────────────────────────────────────────────
       setLaancStatus("loading");
-      fetch("https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/UAS_FacilityMaps_Airports/FeatureServer/0/query?geometry=" + lon + "%2C" + lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=FACILITY_NAME,CEILING,AUTHORIZATION,APTID&f=json")
-        .then(r => r.json())
-        .then(d => {
-          if (d.features && d.features.length > 0) {
-            const f = d.features[0].attributes;
+      const geoParam = "geometry=" + lon + "%2C" + lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&f=json";
+      const BASE_SUA = "https://gis.nri.tamu.edu/arcgis/rest/services/SUA_MTR/SUA/MapServer/0/query?" + geoParam + "&outFields=NAME,TYPE,SUAS_IDENT,LOWER_ALT,UPPER_ALT,EFF_TIMES,CON_AGCY";
+      const BASE_LAANC = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/UAS_FacilityMaps_Airports/FeatureServer/0/query?" + geoParam + "&outFields=FACILITY_NAME,CEILING,AUTHORIZATION,APTID";
+      const BASE_NSR = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/NationalSecurityUAS_FlightRestrictions/FeatureServer/0/query?" + geoParam + "&outFields=NAME,TYPE,LOWER_ALT,UPPER_ALT";
+      const BASE_CLASS = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + geoParam + "&outFields=CLASS,NAME";
+      const safeFetch = url => fetch(url).then(r => r.json()).catch(() => ({ features: [] }));
+      Promise.all([safeFetch(BASE_LAANC), safeFetch(BASE_SUA), safeFetch(BASE_NSR), safeFetch(BASE_CLASS)])
+        .then(([laanc, sua, nsr, cls]) => {
+          // Layer 1: LAANC facility map
+          if (laanc.features && laanc.features.length > 0) {
+            const f = laanc.features[0].attributes;
             setLaancData({
+              source: "laanc",
               facility: f.APTID || f.FACILITY_NAME || "UNKNOWN",
               ceiling: f.CEILING != null ? parseInt(f.CEILING) : null,
               auth: f.AUTHORIZATION || "MANUAL",
-              raw: f
+              lower: null, upper: null, times: null, agency: null, suaType: null
             });
             setLaancStatus("loaded");
-          } else {
-            setLaancData(null);
-            setLaancStatus("uncontrolled");
+            return;
           }
-        })
-        .catch(() => setLaancStatus("error"));
+          // Layer 2: National Security UAS Restrictions (hard stop)
+          if (nsr.features && nsr.features.length > 0) {
+            const f = nsr.features[0].attributes;
+            setLaancData({
+              source: "nsr",
+              facility: f.NAME || "SECURITY RESTRICTION",
+              ceiling: 0,
+              auth: "PROHIBITED",
+              lower: f.LOWER_ALT || "SFC", upper: f.UPPER_ALT || "400 AGL",
+              times: "24/7", agency: "FAA/DOD", suaType: "P"
+            });
+            setLaancStatus("loaded");
+            return;
+          }
+          // Layer 3: Special Use Airspace
+          if (sua.features && sua.features.length > 0) {
+            const typeMap = { R: "RESTRICTED", P: "PROHIBITED", M: "MOA", W: "WARNING", A: "ALERT" };
+            // Sort by severity: P > R > W > M > A
+            const order = { P: 0, R: 1, W: 2, M: 3, A: 4 };
+            const sorted = [...sua.features].sort((a, b) => (order[a.attributes.TYPE] ?? 5) - (order[b.attributes.TYPE] ?? 5));
+            const f = sorted[0].attributes;
+            const suaType = f.TYPE || "R";
+            setLaancData({
+              source: "sua",
+              facility: (f.SUAS_IDENT || f.NAME || "SUA").trim(),
+              ceiling: suaType === "M" ? null : 0,
+              auth: suaType === "M" ? "MOA" : "RESTRICTED",
+              lower: f.LOWER_ALT || "SFC",
+              upper: f.UPPER_ALT || "UNL",
+              times: f.EFF_TIMES || null,
+              agency: f.CON_AGCY || null,
+              suaType,
+              suaLabel: typeMap[suaType] || "SPECIAL USE"
+            });
+            setLaancStatus("loaded");
+            return;
+          }
+          // Layer 4: Class airspace (no LAANC grid, but still controlled)
+          if (cls.features && cls.features.length > 0) {
+            const f = cls.features[0].attributes;
+            const airClass = f.CLASS || "?";
+            setLaancData({
+              source: "class",
+              facility: "CLASS " + airClass + (f.NAME ? " · " + f.NAME : ""),
+              ceiling: null,
+              auth: "CONTROLLED",
+              lower: null, upper: null, times: null, agency: null, suaType: null
+            });
+            setLaancStatus("loaded");
+            return;
+          }
+          // All layers empty — truly uncontrolled Class G
+          setLaancData(null);
+          setLaancStatus("uncontrolled");
+        });
     }, () => setPosErr(true), { enableHighAccuracy: true, maximumAge: 5000 });
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
@@ -5487,11 +5545,17 @@ const [showComms, setShowComms] = useState(false);
     /* ── LAANC Status Card ── */
     /*#__PURE__*/React.createElement("div", {
       style: (() => {
-        const c = laancStatus === "loaded" && laancData
-          ? laancData.ceiling === 0 ? { bg: "rgba(255,59,48,0.07)", br: "rgba(255,59,48,0.25)" }
-          : laancData.ceiling <= 100 ? { bg: "rgba(255,159,10,0.07)", br: "rgba(255,159,10,0.25)" }
-          : { bg: "rgba(52,199,89,0.07)", br: "rgba(52,199,89,0.25)" }
-          : { bg: "rgba(255,255,255,0.04)", br: "rgba(255,255,255,0.08)" };
+        let c = { bg: "rgba(255,255,255,0.04)", br: "rgba(255,255,255,0.08)" };
+        if (laancStatus === "loaded" && laancData) {
+          const src = laancData.source;
+          const isRed = src === "nsr" || (src === "sua" && (laancData.suaType === "R" || laancData.suaType === "P")) || (src === "laanc" && laancData.ceiling === 0);
+          const isGreen = src === "laanc" && laancData.ceiling > 100;
+          c = isRed ? { bg: "rgba(255,59,48,0.07)", br: "rgba(255,59,48,0.25)" }
+            : isGreen ? { bg: "rgba(52,199,89,0.07)", br: "rgba(52,199,89,0.25)" }
+            : { bg: "rgba(255,159,10,0.07)", br: "rgba(255,159,10,0.25)" };
+        } else if (laancStatus === "uncontrolled") {
+          c = { bg: "rgba(52,199,89,0.07)", br: "rgba(52,199,89,0.25)" };
+        }
         return { background: c.bg, border: "1px solid " + c.br, borderRadius: 14, padding: 14 };
       })()
     },
@@ -5499,51 +5563,95 @@ const [showComms, setShowComms] = useState(false);
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
         /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 7 } },
           /*#__PURE__*/React.createElement("div", { style: (() => {
-            const col = laancStatus === "loaded" && laancData
-              ? laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759"
-              : "#475569";
+            const src = laancData && laancData.source;
+            const isRed = laancStatus === "loaded" && laancData && (src === "nsr" || (src === "sua" && (laancData.suaType === "R" || laancData.suaType === "P")) || (src === "laanc" && laancData.ceiling === 0));
+            const isGreen = (laancStatus === "loaded" && src === "laanc" && laancData.ceiling > 100) || laancStatus === "uncontrolled";
+            const col = isRed ? "#FF3B30" : isGreen ? "#34C759" : laancStatus === "loaded" ? "#FF9F0A" : "#475569";
             return { width: 7, height: 7, borderRadius: "50%", background: col,
-              boxShadow: laancStatus === "loaded" && laancData && laancData.ceiling > 0 ? "0 0 6px " + col : "none" };
+              boxShadow: laancStatus === "loaded" ? "0 0 6px " + col : "none" };
           })() }),
           /*#__PURE__*/React.createElement("span", { style: (() => {
-            const col = laancStatus === "loaded" && laancData
-              ? laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759"
-              : "#64748B";
+            const src = laancData && laancData.source;
+            const isRed = laancStatus === "loaded" && laancData && (src === "nsr" || (src === "sua" && (laancData.suaType === "R" || laancData.suaType === "P")) || (src === "laanc" && laancData.ceiling === 0));
+            const isGreen = (laancStatus === "loaded" && src === "laanc" && laancData.ceiling > 100) || laancStatus === "uncontrolled";
+            const col = isRed ? "#FF3B30" : isGreen ? "#34C759" : laancStatus === "loaded" ? "#FF9F0A" : "#64748B";
             return { fontSize: 8, letterSpacing: "2.5px", color: col, fontWeight: 700 };
-          })() }, "LAANC")
+          })() }, "AIRSPACE")
         ),
         /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, letterSpacing: 1, color: "#94A3B8", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, padding: "2px 8px" } },
           laancStatus === "loaded" && laancData ? laancData.facility : laancStatus === "loading" ? "QUERYING..." : laancStatus === "uncontrolled" ? "UNCONTROLLED" : "NO GPS"
         )
       ),
-      /* Ceiling value */
+      /* Card body */
       laancStatus === "loaded" && laancData ? /*#__PURE__*/React.createElement(React.Fragment, null,
+        /* Primary display row */
         /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 } },
-          /*#__PURE__*/React.createElement("span", { style: (() => {
-            const col = laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759";
-            return { fontSize: 32, fontWeight: 700, color: col, lineHeight: 1, letterSpacing: "-1px" };
-          })() }, laancData.ceiling),
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#64748B", letterSpacing: 1 } }, "FT"),
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#475569", letterSpacing: "1.5px", marginLeft: 2 } }, "AGL CEILING")
+          (() => {
+            if (laancData.source === "laanc") {
+              const col = laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759";
+              return /*#__PURE__*/React.createElement(React.Fragment, null,
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 32, fontWeight: 700, color: col, lineHeight: 1, letterSpacing: "-1px" } }, laancData.ceiling),
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#64748B", letterSpacing: 1 } }, "FT"),
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#475569", letterSpacing: "1.5px", marginLeft: 2 } }, "AGL CEILING")
+              );
+            }
+            if (laancData.source === "nsr") {
+              return /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, fontWeight: 700, color: "#FF3B30", letterSpacing: 1 } }, "PROHIBITED \u2014 NATIONAL SECURITY RESTRICTION");
+            }
+            if (laancData.source === "sua") {
+              const col = laancData.suaType === "M" ? "#FF9F0A" : laancData.suaType === "W" || laancData.suaType === "A" ? "#FF9F0A" : "#FF3B30";
+              return /*#__PURE__*/React.createElement(React.Fragment, null,
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 20, fontWeight: 700, color: col, lineHeight: 1, letterSpacing: 1 } }, laancData.suaLabel),
+                laancData.lower && /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, color: "#64748B", marginLeft: 6, letterSpacing: 1 } }, laancData.lower + " \u2013 " + laancData.upper)
+              );
+            }
+            if (laancData.source === "class") {
+              return /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, fontWeight: 700, color: "#FF9F0A", letterSpacing: 1 } }, "CONTROLLED AIRSPACE \u2014 NO LAANC GRID");
+            }
+          })()
         ),
+        /* Chips row */
         /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 } },
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, letterSpacing: 1, color: "#64748B", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "3px 7px" } },
-            posCoords ? posCoords.lat.toFixed(3) + "\u00B0 N \u00B7 " + Math.abs(posCoords.lon).toFixed(3) + "\u00B0 W" : "---"
+          posCoords && /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, letterSpacing: 1, color: "#64748B", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "3px 7px" } },
+            posCoords.lat.toFixed(3) + "\u00B0 N \u00B7 " + Math.abs(posCoords.lon).toFixed(3) + "\u00B0 W"
           ),
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, letterSpacing: 1, color: "#64748B", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "3px 7px" } },
-            laancData.auth === "LAANC" ? "LAANC AVAILABLE" : "NO LAANC"
+          laancData.times && /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, letterSpacing: 1, color: "#64748B", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "3px 7px" } },
+            laancData.times
+          ),
+          laancData.agency && /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, letterSpacing: 1, color: "#64748B", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "3px 7px" } },
+            laancData.agency
+          ),
+          laancData.source === "laanc" && /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, letterSpacing: 1, color: "#64748B", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "3px 7px" } },
+            laancData.auth === "LAANC" ? "LAANC AVAILABLE" : "DRONEZONE REQUIRED"
           )
         ),
+        /* Action bar */
         /*#__PURE__*/React.createElement("div", { style: (() => {
-          const col = laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759";
+          const isRed = laancData.source === "nsr" || (laancData.source === "sua" && (laancData.suaType === "R" || laancData.suaType === "P")) || (laancData.source === "laanc" && laancData.ceiling === 0);
+          const isAmber = !isRed && (laancData.source === "sua" || laancData.source === "class" || (laancData.source === "laanc" && laancData.ceiling <= 100));
+          const col = isRed ? "#FF3B30" : isAmber ? "#FF9F0A" : "#34C759";
           return { padding: "7px 10px", background: "rgba(255,255,255,0.04)", borderRadius: 8, fontSize: 9, color: col, letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 };
         })() },
-          laancData.ceiling === 0 ? "\u2715  DRONEZONE MANUAL AUTH REQUIRED \u2014 DO NOT LAUNCH"
-          : laancData.ceiling <= 100 ? "\u26A0  CEILING RESTRICTED \u2014 VERIFY BEFORE LAUNCH"
-          : "\u2713  INSTANT AUTHORIZATION \u2014 APPROVE VIA ALOFT OR SKYVECTOR"
+          (() => {
+            if (laancData.source === "nsr") return "\u2715  CONTACT FAA / DOD BEFORE ANY OPERATIONS";
+            if (laancData.source === "sua") {
+              if (laancData.suaType === "P") return "\u2715  PROHIBITED AIRSPACE \u2014 NO ENTRY";
+              if (laancData.suaType === "R") return "\u2715  RESTRICTED \u2014 COORDINATE WITH CONTROLLING AGENCY";
+              if (laancData.suaType === "M") return "\u26A0  MOA \u2014 VERIFY ACTIVE STATUS BEFORE LAUNCH";
+              return "\u26A0  SPECIAL USE AIRSPACE \u2014 VERIFY BEFORE LAUNCH";
+            }
+            if (laancData.source === "class") return "\u26A0  CONTROLLED AIRSPACE \u2014 APPLY VIA DRONEZONE";
+            if (laancData.source === "laanc") {
+              if (laancData.ceiling === 0) return "\u2715  DRONEZONE MANUAL AUTH REQUIRED \u2014 DO NOT LAUNCH";
+              if (laancData.ceiling <= 100) return "\u26A0  CEILING RESTRICTED \u2014 VERIFY BEFORE LAUNCH";
+              return "\u2713  INSTANT AUTHORIZATION \u2014 APPROVE VIA ALOFT OR SKYVECTOR";
+            }
+          })()
         )
       ) : /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#475569", letterSpacing: 1, padding: "8px 0 4px" } },
-        laancStatus === "loading" ? "QUERYING FAA FACILITY MAP..." : laancStatus === "uncontrolled" ? "POSITION IS IN UNCONTROLLED AIRSPACE" : "AWAITING GPS LOCK"
+        laancStatus === "loading" ? "QUERYING FAA AIRSPACE DATA..."
+        : laancStatus === "uncontrolled" ? "CLASS G \u2014 NO RESTRICTIONS IDENTIFIED"
+        : "AWAITING GPS LOCK"
       )
     ),
 
