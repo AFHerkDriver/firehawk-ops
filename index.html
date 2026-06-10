@@ -8619,7 +8619,7 @@ function FirehawkOps() {
           fsGet("firehawk", "access_log").then(log => {
             const entries = (log && log.entries) ? log.entries : [];
             entries.unshift(entry);
-            fsSet("firehawk", "access_log", { entries: entries.slice(0, 50) });
+            fsSet("firehawk", "access_log", { entries: entries.slice(0, 5) });
           }).catch(() => {});
         } else {
           setPinError(true);
@@ -8677,7 +8677,7 @@ function FirehawkOps() {
         fsGet("firehawk", "access_log").then(log => {
           const entries = (log && log.entries) ? log.entries : [];
           entries.unshift(entry);
-          fsSet("firehawk", "access_log", { entries: entries.slice(0, 50) });
+          fsSet("firehawk", "access_log", { entries: entries.slice(0, 5) });
         });
       } else {
         setPinError(true);
