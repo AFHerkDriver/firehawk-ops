@@ -4632,6 +4632,8 @@ const [showComms, setShowComms] = useState(false);
   const [posMGRS, setPosMGRS] = useState(null);
   const [posW3W, setPosW3W] = useState(null);
   const [copyLabel, setCopyLabel] = useState(null);
+  const [laancData, setLaancData] = useState(null);
+  const [laancStatus, setLaancStatus] = useState("idle");
   const [nearestAirfields, setNearestAirfields] = useState([]);
   const [adsbTraffic, setAdsbTraffic] = useState([]);
   const [adsbLoading, setAdsbLoading] = useState(true);
@@ -4914,6 +4916,26 @@ const [showComms, setShowComms] = useState(false);
         { id:"KRND", name:"Randolph Field",     cls:"D", ctaf:"Tower 123.9",  lat:29.5297, lon:-98.2789 }
       ].map(a => ({ ...a, dist: distNm(lat,lon,a.lat,a.lon), brg: Math.round(bearingTo(lat,lon,a.lat,a.lon)) }));
       setNearestAirfields(af);
+      // ── LAANC facility map query ────────────────────────────────────────
+      setLaancStatus("loading");
+      fetch("https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/UAS_FacilityMaps_Airports/FeatureServer/0/query?geometry=" + lon + "%2C" + lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=FACILITY_NAME,CEILING,AUTHORIZATION,APTID&f=json")
+        .then(r => r.json())
+        .then(d => {
+          if (d.features && d.features.length > 0) {
+            const f = d.features[0].attributes;
+            setLaancData({
+              facility: f.APTID || f.FACILITY_NAME || "UNKNOWN",
+              ceiling: f.CEILING != null ? parseInt(f.CEILING) : null,
+              auth: f.AUTHORIZATION || "MANUAL",
+              raw: f
+            });
+            setLaancStatus("loaded");
+          } else {
+            setLaancData(null);
+            setLaancStatus("uncontrolled");
+          }
+        })
+        .catch(() => setLaancStatus("error"));
     }, () => setPosErr(true), { enableHighAccuracy: true, maximumAge: 5000 });
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
@@ -5460,7 +5482,72 @@ const [showComms, setShowComms] = useState(false);
       flexDirection: "column",
       gap: 10
     }
-  }, nearestAirfields && nearestAirfields.length > 0 && /*#__PURE__*/React.createElement("div", {
+  },
+
+    /* ── LAANC Status Card ── */
+    /*#__PURE__*/React.createElement("div", {
+      style: (() => {
+        const c = laancStatus === "loaded" && laancData
+          ? laancData.ceiling === 0 ? { bg: "rgba(255,59,48,0.07)", br: "rgba(255,59,48,0.25)" }
+          : laancData.ceiling <= 100 ? { bg: "rgba(255,159,10,0.07)", br: "rgba(255,159,10,0.25)" }
+          : { bg: "rgba(52,199,89,0.07)", br: "rgba(52,199,89,0.25)" }
+          : { bg: "rgba(255,255,255,0.04)", br: "rgba(255,255,255,0.08)" };
+        return { background: c.bg, border: "1px solid " + c.br, borderRadius: 14, padding: 14 };
+      })()
+    },
+      /* Header row */
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 7 } },
+          /*#__PURE__*/React.createElement("div", { style: (() => {
+            const col = laancStatus === "loaded" && laancData
+              ? laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759"
+              : "#475569";
+            return { width: 7, height: 7, borderRadius: "50%", background: col,
+              boxShadow: laancStatus === "loaded" && laancData && laancData.ceiling > 0 ? "0 0 6px " + col : "none" };
+          })() }),
+          /*#__PURE__*/React.createElement("span", { style: (() => {
+            const col = laancStatus === "loaded" && laancData
+              ? laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759"
+              : "#64748B";
+            return { fontSize: 8, letterSpacing: "2.5px", color: col, fontWeight: 700 };
+          })() }, "LAANC")
+        ),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, letterSpacing: 1, color: "#94A3B8", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, padding: "2px 8px" } },
+          laancStatus === "loaded" && laancData ? laancData.facility : laancStatus === "loading" ? "QUERYING..." : laancStatus === "uncontrolled" ? "UNCONTROLLED" : "NO GPS"
+        )
+      ),
+      /* Ceiling value */
+      laancStatus === "loaded" && laancData ? /*#__PURE__*/React.createElement(React.Fragment, null,
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 } },
+          /*#__PURE__*/React.createElement("span", { style: (() => {
+            const col = laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759";
+            return { fontSize: 32, fontWeight: 700, color: col, lineHeight: 1, letterSpacing: "-1px" };
+          })() }, laancData.ceiling),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#64748B", letterSpacing: 1 } }, "FT"),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#475569", letterSpacing: "1.5px", marginLeft: 2 } }, "AGL CEILING")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, letterSpacing: 1, color: "#64748B", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "3px 7px" } },
+            posCoords ? posCoords.lat.toFixed(3) + "\u00B0 N \u00B7 " + Math.abs(posCoords.lon).toFixed(3) + "\u00B0 W" : "---"
+          ),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, letterSpacing: 1, color: "#64748B", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "3px 7px" } },
+            laancData.auth === "LAANC" ? "LAANC AVAILABLE" : "NO LAANC"
+          )
+        ),
+        /*#__PURE__*/React.createElement("div", { style: (() => {
+          const col = laancData.ceiling === 0 ? "#FF3B30" : laancData.ceiling <= 100 ? "#FF9F0A" : "#34C759";
+          return { padding: "7px 10px", background: "rgba(255,255,255,0.04)", borderRadius: 8, fontSize: 9, color: col, letterSpacing: 1, display: "flex", alignItems: "center", gap: 6 };
+        })() },
+          laancData.ceiling === 0 ? "\u2715  DRONEZONE MANUAL AUTH REQUIRED \u2014 DO NOT LAUNCH"
+          : laancData.ceiling <= 100 ? "\u26A0  CEILING RESTRICTED \u2014 VERIFY BEFORE LAUNCH"
+          : "\u2713  INSTANT AUTHORIZATION \u2014 APPROVE VIA ALOFT OR SKYVECTOR"
+        )
+      ) : /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#475569", letterSpacing: 1, padding: "8px 0 4px" } },
+        laancStatus === "loading" ? "QUERYING FAA FACILITY MAP..." : laancStatus === "uncontrolled" ? "POSITION IS IN UNCONTROLLED AIRSPACE" : "AWAITING GPS LOCK"
+      )
+    ),
+
+    nearestAirfields && nearestAirfields.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"12px 14px",marginBottom:4}
   },
     /*#__PURE__*/React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:3,marginBottom:8}}, "LIVE DISTANCE FROM POSITION"),
