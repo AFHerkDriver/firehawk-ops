@@ -5157,24 +5157,39 @@ const [showComms, setShowComms] = useState(false);
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }
       },
-        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2 } }, "COORDINATES"),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#FF6B35", letterSpacing: 2 } }, "W3W"),
         /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
           /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: posErr ? "#FF3B30" : posStatus === "live" ? "#34C759" : "#FF9F0A", letterSpacing: 1 } },
             posErr ? "\u26A0 ERROR" : posStatus === "live" ? "\u25CF LIVE" : "\u25CF ACQUIRING..."
           ),
+          posW3W && /*#__PURE__*/React.createElement("button", {
+            onClick: () => copyPos(posW3W),
+            style: { background: "rgba(255,107,53,0.15)", border: "1px solid rgba(255,107,53,0.3)", borderRadius: 5, color: "#FF6B35", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
+          }, copyLabel === "w3w" ? "\u2713" : "COPY")
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: "#E2E8F0" } },
+        posW3W || "Requesting location..."
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#475569", marginTop: 3 } }, "dispatcher-ready")
+    ),
+
+    /* COORDS + MGRS row */
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } },
+      /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B", letterSpacing: 2 } }, "COORDINATES"),
           posCoords && /*#__PURE__*/React.createElement("button", {
             onClick: () => copyPos(posCoords.lat.toFixed(4) + "\xb0 N, " + Math.abs(posCoords.lon.toFixed(4)) + "\xb0 W"),
             style: { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 5, color: "#94A3B8", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
           }, copyLabel === "coords" ? "\u2713" : "COPY")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#E2E8F0", lineHeight: 1.5 } },
+          posCoords ? posCoords.lat.toFixed(4) + "\xb0 N, " + Math.abs(posCoords.lon).toFixed(4) + "\xb0 W" : "---"
         )
       ),
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, color: "#E2E8F0" } },
-        posCoords ? posCoords.lat.toFixed(4) + "\xb0 N, " + Math.abs(posCoords.lon).toFixed(4) + "\xb0 W" : "Requesting location..."
-      )
-    ),
-
-    /* MGRS + W3W row */
-    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } },
       /*#__PURE__*/React.createElement("div", {
         style: { flex: 1, background: "rgba(74,144,217,0.08)", border: "1px solid rgba(74,144,217,0.2)", borderRadius: 12, padding: 12 }
       },
@@ -5189,21 +5204,6 @@ const [showComms, setShowComms] = useState(false);
           posMGRS || "---"
         ),
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#475569", marginTop: 3 } }, "TAK \xb7 TDEM \xb7 TXTF1")
-      ),
-      /*#__PURE__*/React.createElement("div", {
-        style: { flex: 1, background: "rgba(255,107,53,0.08)", border: "1px solid rgba(255,107,53,0.2)", borderRadius: 12, padding: 12 }
-      },
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#FF6B35", letterSpacing: 2 } }, "W3W"),
-          posW3W && /*#__PURE__*/React.createElement("button", {
-            onClick: () => copyPos(posW3W),
-            style: { background: "rgba(255,107,53,0.15)", border: "1px solid rgba(255,107,53,0.3)", borderRadius: 5, color: "#FF6B35", fontSize: 8, padding: "2px 7px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 1 }
-          }, copyLabel === "w3w" ? "\u2713" : "COPY")
-        ),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#E2E8F0", lineHeight: 1.5 } },
-          posW3W || "---"
-        ),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#475569", marginTop: 3 } }, "dispatcher-ready")
       )
     ),
 
