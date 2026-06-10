@@ -4921,39 +4921,36 @@ const [showComms, setShowComms] = useState(false);
         .then(r => r.json()).then(d => { if(d.words) setPosW3W("///" + d.words); else setPosW3W("///key.not.active"); }).catch(()=>{ setPosW3W("///key.not.active"); });
       // Nearest airfields — dynamic query from FAA/DOT dataset
       (() => {
-        const afUrl = "https://geo.dot.gov/server/rest/services/hosted/Airports_/FeatureServer/0/query"
+        // Use services6.arcgis.com (same domain as LAANC — already CORS-trusted)
+        const afUrl = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/US_Airport/FeatureServer/0/query"
           + "?geometry=" + lon + "%2C" + lat
           + "&geometryType=esriGeometryPoint"
           + "&inSR=4326"
           + "&spatialRel=esriSpatialRelIntersects"
           + "&distance=30&units=esriSRUnit_NauticalMile"
-          + "&where=fac_type%3D'AIRPORT'%20AND%20(tower_on_apt%3D'Y'%20OR%20owner_type%3D'MA')"
-          + "&outFields=loc_id,fac_name,owner_type,air_space_class,tower_freq,ctaf_freq,x,y"
+          + "&where=TOWER%3D'Y'"
+          + "&outFields=ARPT_ID,FACILITY_NAME,ICAO_ID,AIR_SPACE_CLASS,TWR_FREQ,ATIS_FREQ,OWNERS"
           + "&returnGeometry=true&outSR=4326"
           + "&resultRecordCount=20&f=json";
         fetch(afUrl)
           .then(r => r.json())
           .then(d => {
-            if (!d.features || d.features.length === 0) {
-              // Fallback: keep previous value if query returns empty
-              return;
-            }
+            if (!d.features || d.features.length === 0) return;
             const mapped = d.features.map(f => {
               const a = f.attributes;
               const afLat = f.geometry ? f.geometry.y : null;
               const afLon = f.geometry ? f.geometry.x : null;
               if (!afLat || !afLon) return null;
-              const cls = a.air_space_class || (a.owner_type === "MA" ? "D" : "D");
-              const towerFreq = a.tower_freq ? a.tower_freq.trim() : null;
-              const ctafFreq  = a.ctaf_freq  ? a.ctaf_freq.trim()  : null;
-              const ctaf = towerFreq ? "Tower " + towerFreq : ctafFreq ? "CTAF " + ctafFreq : "See chart";
+              const id   = (a.ICAO_ID || a.ARPT_ID || "????").trim();
+              const name = (a.FACILITY_NAME || "Unknown").trim();
+              const cls  = (a.AIR_SPACE_CLASS || "D").trim();
+              const isMil = a.OWNERS && a.OWNERS.toUpperCase().includes("MIL");
+              const twr  = a.TWR_FREQ  ? "Tower " + a.TWR_FREQ.trim()  : null;
+              const ctaf = twr || "See chart";
+              const atis = a.ATIS_FREQ ? "ATIS " + a.ATIS_FREQ.trim() : null;
               return {
-                id:   (a.loc_id || "????").trim(),
-                name: (a.fac_name || "Unknown").trim(),
-                cls,
-                ctaf,
-                lat: afLat,
-                lon: afLon,
+                id, name, cls, ctaf, atis, isMilDynamic: isMil,
+                lat: afLat, lon: afLon,
                 dist: distNm(lat, lon, afLat, afLon),
                 brg:  Math.round(bearingTo(lat, lon, afLat, afLon))
               };
@@ -4964,14 +4961,12 @@ const [showComms, setShowComms] = useState(false);
             setNearestAirfields(mapped);
           })
           .catch(() => {
-            // Fallback to hardcoded SA airports if fetch fails
-            const fallback = [
-              { id:"KSAT", name:"San Antonio Intl",  cls:"C", ctaf:"Tower 119.8", lat:29.5337, lon:-98.4698 },
-              { id:"KSKF", name:"Kelly Field",       cls:"D", ctaf:"Tower 124.3", lat:29.3842, lon:-98.5811 },
-              { id:"KSSF", name:"Stinson Municipal", cls:"D", ctaf:"CTAF 118.2",  lat:29.3369, lon:-98.4711 },
-              { id:"KRND", name:"Randolph Field",    cls:"D", ctaf:"Tower 123.9", lat:29.5297, lon:-98.2789 }
-            ].map(a => ({ ...a, dist: distNm(lat,lon,a.lat,a.lon), brg: Math.round(bearingTo(lat,lon,a.lat,a.lon)) }));
-            setNearestAirfields(fallback);
+            // Fallback: update distances on hardcoded airports
+            setNearestAirfields(prev => prev.map(a => ({
+              ...a,
+              dist: distNm(lat, lon, a.lat, a.lon),
+              brg:  Math.round(bearingTo(lat, lon, a.lat, a.lon))
+            })));
           });
       })();
       // ── Airspace query stack ─────────────────────────────────────────────
@@ -5722,10 +5717,10 @@ const [showComms, setShowComms] = useState(false);
         const clsColor = af.cls==="B"?"#FF6B35":af.cls==="C"?"#4A90D9":"#4A90D9";
         const clsBg    = af.cls==="B"?"rgba(255,107,53,0.12)":"rgba(74,144,217,0.12)";
         const clsBorder= af.cls==="B"?"rgba(255,107,53,0.35)":"rgba(74,144,217,0.35)";
-        const isMil = detail ? detail.military : false;
+        const isMil = detail ? detail.military : (af.isMilDynamic || false);
         const hasLaanc = detail ? detail.laanc : null;
         const twr  = detail ? detail.twr  : af.ctaf;
-        const atis = detail ? detail.atis  : null;
+        const atis = detail ? detail.atis  : (af.atis || null);
         return /*#__PURE__*/React.createElement("button", {
           key: af.id,
           onClick: () => detail ? setSelectedAirport(detail) : null,
