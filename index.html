@@ -5392,7 +5392,7 @@ const [showComms, setShowComms] = useState(false);
               /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
                 /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color, fontWeight: 700 } }, ac.call),
                 /*#__PURE__*/React.createElement("span", { style: { background: isConflict ? "rgba(255,59,48,0.15)" : isNearby ? "rgba(255,159,10,0.1)" : "rgba(52,199,89,0.1)", border: "1px solid " + border, borderRadius: 4, fontSize: 7, color, padding: "1px 5px", letterSpacing: 1 } },
-                  isConflict ? "CONFLICT LAYER" : isNearby ? "NEARBY" : "HIGH TRAFFIC"
+                  isConflict ? "CONFLICT" : isNearby ? "NEARBY" : "CLEAR"
                 )
               ),
               /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#64748B", marginTop: 2 } },
@@ -5415,15 +5415,15 @@ const [showComms, setShowComms] = useState(false);
       ),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
         /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#FF3B30" } }),
-        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "CONFLICT 0\u2013400ft")
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "CONFLICT")
       ),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
         /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#FF9F0A" } }),
-        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "NEARBY 400\u20131k")
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "NEARBY")
       ),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
         /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: "#34C759" } }),
-        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "HIGH 1k+")
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: "#64748B" } }, "CLEAR")
       )
     ),
 
