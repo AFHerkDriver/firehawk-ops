@@ -7783,22 +7783,6 @@ function WeatherModal({ onClose }) {
       } catch(e) {}
       setAlerts(activeAlerts);
 
-      var rawText = "";
-      try {
-        var METAR_URL = "https://aviationweather.gov/api/data/metar?ids=KSKF&format=json&taf=false";
-        for (var purl of makeProxies(METAR_URL)) {
-          try {
-            var r = await fetch(purl);
-            if (!r.ok) continue;
-            var parsed = JSON.parse(await r.text());
-            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].rawOb) {
-              rawText = parsed[0].rawOb;
-              break;
-            }
-          } catch(e) { continue; }
-        }
-      } catch(e) {}
-
       // Pick closest 2 airfields to operator position from local DB
       var dist2 = function(a, b) {
         var dlat = a.lat - b.lat, dlon = a.lon - b.lon;
@@ -7807,7 +7791,9 @@ function WeatherModal({ onClose }) {
       var opPos = {lat: opLat, lon: opLon};
       var sorted = AIRPORT_DB.slice().sort(function(a,b) { return dist2(a,opPos) - dist2(b,opPos); });
       var closestTwo = sorted.slice(0,2).map(function(a){return a.id;}).join(",");
+      var nearestId = sorted[0] ? sorted[0].id : "KSKF";
       var regionalMETARs = {};
+      var rawText = "";
       try {
         var REGIONAL_URL = "https://aviationweather.gov/api/data/metar?ids=" + closestTwo + "&format=json&taf=false";
         for (var purl of makeProxies(REGIONAL_URL)) {
@@ -7817,15 +7803,35 @@ function WeatherModal({ onClose }) {
             var parsed = JSON.parse(await r.text());
             if (Array.isArray(parsed)) {
               parsed.forEach(function(m) { if (m.icaoId && m.rawOb) regionalMETARs[m.icaoId] = m; });
-              if (Object.keys(regionalMETARs).length > 0) break;
+              if (Object.keys(regionalMETARs).length > 0) {
+                // Use nearest airport METAR as raw reference and for ceiling
+                var nearestMetar = regionalMETARs[nearestId] || regionalMETARs[Object.keys(regionalMETARs)[0]];
+                if (nearestMetar) {
+                  rawText = nearestMetar.rawOb || "";
+                  // Extract ceiling from METAR sky conditions
+                  var metarCeil = null;
+                  if (nearestMetar.clouds && Array.isArray(nearestMetar.clouds)) {
+                    var ceilLayers = nearestMetar.clouds.filter(function(c) {
+                      return c.cover === "BKN" || c.cover === "OVC" || c.cover === "VV";
+                    });
+                    if (ceilLayers.length > 0) {
+                      metarCeil = Math.min.apply(null, ceilLayers.map(function(c) { return (c.base || 0) * 100; }));
+                    }
+                  } else if (nearestMetar.ceiling != null) {
+                    metarCeil = nearestMetar.ceiling * 100;
+                  }
+                  if (metarCeil != null) ceiling = metarCeil;
+                }
+                break;
+              }
             }
           } catch(e) { continue; }
         }
       } catch(e) {}
 
       setWx({
-        station:     gotGPS ? "GPS" : "KSKF",
-        name:        gotGPS ? "Operator Position" : "Kelly Field",
+        station:     gotGPS ? "GPS" : nearestId,
+        name:        gotGPS ? "Operator Position" : (sorted[0] ? sorted[0].n : "Local"),
         time:        new Date().toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) + " local",
         raw:         rawText,
         regional:    regionalMETARs,
@@ -7882,8 +7888,8 @@ function WeatherModal({ onClose }) {
         }}, "PREFLIGHT WX"),
         React.createElement("div", { style:{fontSize:8, color:"#64748B", letterSpacing:2, marginTop:2}},
           wx && wx.station === "GPS"
-            ? "Operator GPS Position \u00B7 Open-Meteo \u00B7 KSKF Ceiling"
-            : "KSKF Kelly Field \u00B7 Open-Meteo \u00B7 KSKF Ceiling"
+            ? "Operator GPS Position \u00B7 Open-Meteo \u00B7 Local METAR Ceiling"
+            : "Local Station \u00B7 Open-Meteo \u00B7 Local METAR Ceiling"
         )
       ),
       React.createElement("div", { style:{display:"flex", gap:8, alignItems:"center"}},
