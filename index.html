@@ -7799,19 +7799,13 @@ function WeatherModal({ onClose }) {
         }
       } catch(e) {}
 
-      // Pick closest 2 airfields to operator position
-      var AIRFIELDS = [
-        {id:"KSAT", lat:29.5337, lon:-98.4698},
-        {id:"KSKF", lat:29.3842, lon:-98.5811},
-        {id:"KSSF", lat:29.3369, lon:-98.4711},
-        {id:"KRND", lat:29.5297, lon:-98.2789}
-      ];
+      // Pick closest 2 airfields to operator position from local DB
       var dist2 = function(a, b) {
         var dlat = a.lat - b.lat, dlon = a.lon - b.lon;
         return dlat*dlat + dlon*dlon;
       };
       var opPos = {lat: opLat, lon: opLon};
-      var sorted = AIRFIELDS.slice().sort(function(a,b) { return dist2(a,opPos) - dist2(b,opPos); });
+      var sorted = AIRPORT_DB.slice().sort(function(a,b) { return dist2(a,opPos) - dist2(b,opPos); });
       var closestTwo = sorted.slice(0,2).map(function(a){return a.id;}).join(",");
       var regionalMETARs = {};
       try {
