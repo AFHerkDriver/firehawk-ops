@@ -5912,18 +5912,43 @@ const [showComms, setShowComms] = useState(false);
           // Layer 4: Class airspace (no LAANC grid, but still controlled)
           if (cls.features && cls.features.length > 0) {
             const f = cls.features[0].attributes;
-            const airClass = f.CLASS || "?";
+            const airClass = (f.CLASS || "?").trim();
+            // Use nearest airport from local DB for meaningful context
+            const nearestApt = AIRPORT_DB
+              .map(a => ({ ...a, dist: Math.sqrt(Math.pow((a.lat-lat)*60,2)+Math.pow((a.lon-lon)*60*Math.cos(lat*Math.PI/180),2)) }))
+              .sort((a,b) => a.dist-b.dist)[0];
+            const aptLabel = nearestApt && nearestApt.dist < 30
+              ? nearestApt.id + " · " + nearestApt.n.split(" ").slice(0,3).join(" ")
+              : "CLASS " + airClass;
+            const derivedClass = nearestApt && nearestApt.dist < 5 ? nearestApt.cls : airClass;
             setLaancData({
               source: "class",
-              facility: "CLASS " + airClass + (f.NAME ? " · " + f.NAME : ""),
+              facility: aptLabel,
               ceiling: null,
               auth: "CONTROLLED",
-              lower: null, upper: null, times: null, agency: null, suaType: null
+              lower: null, upper: null, times: null, agency: null, suaType: null,
+              derivedClass
             });
             setLaancStatus("loaded");
             return;
           }
-          // All layers empty — truly uncontrolled Class G
+          // All layers empty — check nearest airport before calling it Class G
+          const nearestCheck = AIRPORT_DB
+            .map(a => ({ ...a, dist: Math.sqrt(Math.pow((a.lat-lat)*60,2)+Math.pow((a.lon-lon)*60*Math.cos(lat*Math.PI/180),2)) }))
+            .sort((a,b) => a.dist-b.dist)[0];
+          if (nearestCheck && nearestCheck.dist < 5 && (nearestCheck.cls === "B" || nearestCheck.cls === "C")) {
+            setLaancData({
+              source: "class",
+              facility: nearestCheck.id + " · " + nearestCheck.n.split(" ").slice(0,3).join(" "),
+              ceiling: null,
+              auth: "CONTROLLED",
+              lower: null, upper: null, times: null, agency: null, suaType: null,
+              derivedClass: nearestCheck.cls
+            });
+            setLaancStatus("loaded");
+            return;
+          }
+          // Truly uncontrolled Class G
           setLaancData(null);
           setLaancStatus("uncontrolled");
         });
@@ -6541,7 +6566,9 @@ const [showComms, setShowComms] = useState(false);
               );
             }
             if (laancData.source === "class") {
-              return /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, fontWeight: 700, color: "#FF9F0A", letterSpacing: 1 } }, "CONTROLLED AIRSPACE \u2014 NO LAANC GRID");
+              const dc = laancData.derivedClass || "?";
+              const clsLabel = dc === "B" ? "CLASS B" : dc === "C" ? "CLASS C" : dc === "D" ? "CLASS D" : "CONTROLLED";
+              return /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, fontWeight: 700, color: "#FF9F0A", letterSpacing: 1 } }, clsLabel + " \u2014 NO LAANC GRID");
             }
           })()
         ),
@@ -6575,7 +6602,7 @@ const [showComms, setShowComms] = useState(false);
               if (laancData.suaType === "M") return "\u26A0  MOA \u2014 VERIFY ACTIVE STATUS BEFORE LAUNCH";
               return "\u26A0  SPECIAL USE AIRSPACE \u2014 VERIFY BEFORE LAUNCH";
             }
-            if (laancData.source === "class") return "\u26A0  CONTROLLED AIRSPACE \u2014 APPLY VIA DRONEZONE";
+            if (laancData.source === "class") { const dc = laancData.derivedClass || "?"; return "\u26A0  CLASS " + dc + " \u2014 NO LAANC GRID \u00B7 APPLY VIA DRONEZONE"; }
             if (laancData.source === "laanc") {
               if (laancData.ceiling === 0) return "\u2715  DRONEZONE MANUAL AUTH REQUIRED \u2014 DO NOT LAUNCH";
               if (laancData.ceiling <= 100) return "\u26A0  CEILING RESTRICTED \u2014 VERIFY BEFORE LAUNCH";
