@@ -9554,17 +9554,17 @@ function FirehawkOps() {
         padding: "1px 7px",
         letterSpacing: 1
       }
-    }, st.label), c.part107 && /*#__PURE__*/React.createElement("span", {
+    }, st.label), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 9,
         color: "#64748B",
         marginLeft: 8
       }
-    }, "Exp: ", new Date(c.part107).toLocaleDateString("en-US", {
+    }, c.part107 ? ("Exp: " + new Date(c.part107).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric"
-    }), days !== null && days >= 0 && ` · ${days}d`))), /*#__PURE__*/React.createElement("div", {
+    }) + (days !== null && days >= 0 ? " \u00B7 " + days + "d" : "")) : "No expiry on record"))), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
