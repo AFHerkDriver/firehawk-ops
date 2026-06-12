@@ -226,10 +226,10 @@ const STATUS_STYLE = {
     label: "EXPIRED"
   },
   unknown: {
-    color: "#64748B",
-    bg: "rgba(71,85,105,0.1)",
-    border: "rgba(71,85,105,0.3)",
-    label: "NOT SET"
+    color: "#FF9F0A",
+    bg: "rgba(255,159,10,0.08)",
+    border: "rgba(255,159,10,0.35)",
+    label: "NO CERT"
   }
 };
 const PIN = "241408"; // legacy back-compat
@@ -9053,7 +9053,7 @@ function FirehawkOps() {
         borderRadius: 4,
         padding: "2px 7px"
       }
-    }, days !== null && days < 0 ? "EXPIRED" : days !== null ? `${days}d LEFT` : "NOT SET"));
+    }, days !== null && days < 0 ? "EXPIRED" : days !== null ? `${days}d LEFT` : "NO CERT"));
   })), bulletins.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(255,255,255,0.055)",
