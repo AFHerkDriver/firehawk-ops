@@ -232,7 +232,6 @@ const STATUS_STYLE = {
     label: "NO CERT"
   }
 };
-const PIN = "241408"; // legacy back-compat
 const MANAGER_PINS = {
   "241408": { name: "Aaron Sanchez (Program Manager)", admin: true },
   "0336":   { name: "Ryan Bauchman (Program Coordinator)", admin: false }
@@ -1884,7 +1883,12 @@ function SchedulerPanel({
           availability: c.availability || [],
           availRaw: c.availRaw || "",
           role: c.role,
-          part107: c.part107 || null
+          part107: c.part107 || null,
+          reserve: c.reserve || false,
+          archived: c.archived || false,
+          color: c.color,
+          initials: c.initials,
+          name: c.name
         }))
       });
     } else {
@@ -2229,7 +2233,12 @@ function SchedulerPanel({
               availability: c.availability || [],
               availRaw: c.availRaw || "",
               role: c.role,
-              part107: c.part107 || null
+              part107: c.part107 || null,
+              reserve: c.reserve || false,
+              archived: c.archived || false,
+              color: c.color,
+              initials: c.initials,
+              name: c.name
             }))
           });
         } else {
@@ -3442,7 +3451,12 @@ function SchedulerPanel({
           availability: m.availability || [],
           availRaw: m.availRaw || "",
           role: m.role,
-          part107: m.part107 || null
+          part107: m.part107 || null,
+          reserve: m.reserve || false,
+          archived: m.archived || false,
+          color: m.color,
+          initials: m.initials,
+          name: m.name
         }))
       });
     },
@@ -5605,7 +5619,7 @@ const [showComms, setShowComms] = useState(false);
   }, {
     id: "KSKF",
     name: "Kelly Field / Lackland",
-    cls: "D",
+    cls: "C",
     classColor: "#4A90D9",
     classBg: "rgba(74,144,217,0.12)",
     classBorder: "rgba(74,144,217,0.35)",
@@ -5665,7 +5679,7 @@ const [showComms, setShowComms] = useState(false);
   }, {
     id: "KRND",
     name: "Randolph AFB",
-    cls: "D",
+    cls: "C",
     classColor: "#4A90D9",
     classBg: "rgba(74,144,217,0.12)",
     classBorder: "rgba(74,144,217,0.35)",
@@ -6060,12 +6074,13 @@ const [showComms, setShowComms] = useState(false);
       if (e.webkitCompassHeading !== undefined) setHeading(Math.round(e.webkitCompassHeading));
       else if (e.alpha !== null) setHeading(Math.round(360 - e.alpha));
     };
+    let cancelled = false;
     if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-      DeviceOrientationEvent.requestPermission().then(p => { if(p==="granted") window.addEventListener("deviceorientation", handler); }).catch(()=>{});
+      DeviceOrientationEvent.requestPermission().then(p => { if(p==="granted" && !cancelled) window.addEventListener("deviceorientation", handler); }).catch(()=>{});
     } else {
       window.addEventListener("deviceorientation", handler);
     }
-    return () => window.removeEventListener("deviceorientation", handler);
+    return () => { cancelled = true; window.removeEventListener("deviceorientation", handler); };
   }, []);
 
   return /*#__PURE__*/React.createElement("div", {
@@ -6103,7 +6118,7 @@ const [showComms, setShowComms] = useState(false);
       letterSpacing: 3,
       marginTop: 2
     }
-  }, "LAANC \xB7 NWS \xB7 BEXAR COUNTY")), /*#__PURE__*/React.createElement("div", {
+  }, "LAANC \xB7 ADS-B \xB7 GPS POSITION")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -8212,7 +8227,9 @@ function FirehawkOps() {
             availability: match.availability || [],
             availRaw: match.availRaw || "",
             role: match.role || c.role,
-            part107: match.part107 || null
+            part107: match.part107 || null,
+            reserve: match.reserve !== undefined ? match.reserve : (c.reserve || false),
+            archived: match.archived !== undefined ? match.archived : (c.archived || false)
           } : c;
         }));
       }
