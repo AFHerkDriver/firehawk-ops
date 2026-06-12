@@ -8039,7 +8039,7 @@ function WeatherModal({ onClose }) {
                 },
                   React.createElement("div", null,
                     React.createElement("div", {style:{fontSize:12,fontWeight:700,color:s.color,letterSpacing:1}}, ac.id),
-                    s.reasons.length === 0 && React.createElement("div", {style:{fontSize:9,color:"#64748B"}}, ac.ip + " \u00B7 " + ac.maxWind + "mph sustained" + (ac.maxGust > ac.maxWind ? " / " + ac.maxGust + "mph gust" : ""))
+                    s.status !== "GO" && React.createElement("div", {style:{fontSize:9,color:"#64748B"}}, ac.ip + " \u00B7 " + ac.maxWind + "mph sustained" + (ac.maxGust > ac.maxWind ? " / " + ac.maxGust + "mph gust" : ""))
                   ),
                   React.createElement("div", {style:{flex:1}},
                     s.reasons.length > 0
