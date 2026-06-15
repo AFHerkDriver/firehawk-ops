@@ -127,31 +127,35 @@ async function fetchBurnBan() {
   } catch(e) {}
 }
 
+// Fetch flood warnings
+async function fetchFlood() {
+  try {
+    const workerBase = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
+    const alertResp = await fetch(workerBase + encodeURIComponent("https://api.weather.gov/alerts/active?zone=TXZ205,TXC029"));
+    const alertData = await alertResp.json();
+    const floodEvents = ["Flood Warning","Flash Flood Warning","Flood Watch","Flash Flood Watch","Flash Flood Statement"];
+    const flood = (alertData.features || []).find(f => floodEvents.includes(f.properties.event));
+    const floodBar = document.getElementById("floodBar");
+    if (flood) {
+      document.getElementById("floodEvent").textContent = flood.properties.event.toUpperCase();
+      const ends = flood.properties.ends
+        ? new Date(flood.properties.ends).toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"})
+        : "Until further notice";
+      document.getElementById("floodEnds").textContent = "BEXAR COUNTY \u00B7 " + ends;
+      document.getElementById("floodTime").textContent = "NWS";
+      floodBar.style.display = "flex";
+    } else {
+      floodBar.style.display = "none";
+    }
+  } catch(e) {}
+}
+
 // Fetch Red Flag Warning status
 async function fetchRedFlag() {
   try {
     const r = await fetch("https://firehawk-wx.usafsentinel-45e.workers.dev/redflag");
     if (r.ok) {
       const data = await r.json();
-      // Flood warnings from NWS alerts
-      try {
-        const alertResp = await fetch(worker + encodeURIComponent("https://api.weather.gov/alerts/active?zone=TXZ205,TXC029"));
-        const alertData = await alertResp.json();
-        const floodEvents = ["Flood Warning","Flash Flood Warning","Flood Watch","Flash Flood Watch","Flash Flood Statement"];
-        const flood = (alertData.features || []).find(f => floodEvents.includes(f.properties.event));
-        const floodBar = document.getElementById("floodBar");
-        if (flood) {
-          document.getElementById("floodEvent").textContent = flood.properties.event.toUpperCase();
-          const ends = flood.properties.ends
-            ? new Date(flood.properties.ends).toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"})
-            : "Until further notice";
-          document.getElementById("floodEnds").textContent = "BEXAR COUNTY \u00B7 " + ends;
-          document.getElementById("floodTime").textContent = "NWS";
-          floodBar.style.display = "flex";
-        } else {
-          floodBar.style.display = "none";
-        }
-      } catch(e) {}
 
       const bar = document.getElementById("redFlagBar");
       if (data.active) {
@@ -170,8 +174,10 @@ async function fetchRedFlag() {
 
 fetchBurnBan();
 fetchRedFlag();
+fetchFlood();
 setInterval(fetchBurnBan, 3600000);
 setInterval(fetchRedFlag, 1800000);
+setInterval(fetchFlood, 1800000);
 
 const CREW = [
   {id:1,name:"Sanchez",  role:"RPIC",color:"#4A90D9",initials:"AS"},

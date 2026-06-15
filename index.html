@@ -7680,7 +7680,7 @@ function MetarCard({ id, rawOb }) {
 }
 
 
-function WeatherModal({ onClose }) {
+function WeatherModal({ onClose, onFloodWarning }) {
   const [wx, setWx] = React.useState(null);
   const [alerts, setAlerts] = React.useState([]);
   const [status, setStatus] = React.useState("loading");
@@ -7804,7 +7804,21 @@ function WeatherModal({ onClose }) {
       };
       var activeAlerts = [];
       try {
-        var ALERT_URL = "https://api.weather.gov/alerts/active?zone=TXZ205,TXC029";
+        // Get the correct NWS zone for the operator's GPS position
+        var nwsZone = "TXZ205,TXC029"; // fallback to Bexar County
+        try {
+          var pointsResp = await fetch(makeProxies("https://api.weather.gov/points/" + opLat.toFixed(4) + "," + opLon.toFixed(4))[0]);
+          if (pointsResp.ok) {
+            var pointsData = JSON.parse(await pointsResp.text());
+            var props = pointsData.properties || {};
+            var zoneUrl = props.forecastZone || "";
+            var zoneId = zoneUrl.split("/").pop();
+            var countyUrl = props.county || "";
+            var countyId = countyUrl.split("/").pop();
+            if (zoneId) nwsZone = zoneId + (countyId ? "," + countyId : "");
+          }
+        } catch(e) {}
+        var ALERT_URL = "https://api.weather.gov/alerts/active?zone=" + nwsZone;
         for (var purl of makeProxies(ALERT_URL)) {
           try {
             var r = await fetch(purl);
@@ -7826,7 +7840,7 @@ function WeatherModal({ onClose }) {
               return floodEvents.indexOf(f.properties.event) !== -1;
             });
             if (floodAlert) {
-              setFloodWarning({
+              onFloodWarning && onFloodWarning({
                 active: true,
                 event: floodAlert.properties.event,
                 ends: floodAlert.properties.ends
@@ -7835,7 +7849,7 @@ function WeatherModal({ onClose }) {
                 updated: new Date().toISOString()
               });
             } else {
-              setFloodWarning(null);
+              onFloodWarning && onFloodWarning(null);
             }
             break;
           } catch(e) { continue; }
@@ -8231,6 +8245,34 @@ function FirehawkOps() {
     };
     fetchRedFlag();
     const t = setInterval(fetchRedFlag, 1800000); // refresh every 30 min
+    return () => clearInterval(t);
+  }, []);
+
+  // Fetch flood warnings directly from NWS alerts API (Bexar County zone + FIPS)
+  useEffect(() => {
+    const fetchFlood = async () => {
+      try {
+        const r = await fetch("https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent("https://api.weather.gov/alerts/active?zone=TXZ205,TXC029"));
+        if (!r.ok) return;
+        const data = await r.json();
+        const floodTypes = ["Flood Warning","Flash Flood Warning","Flood Watch","Flash Flood Watch","Flash Flood Statement"];
+        const hit = (data.features || []).find(f => floodTypes.indexOf(f.properties.event) !== -1);
+        if (hit) {
+          setFloodWarning({
+            active: true,
+            event: hit.properties.event,
+            ends: hit.properties.ends
+              ? new Date(hit.properties.ends).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+              : "Until further notice",
+            updated: new Date().toISOString()
+          });
+        } else {
+          setFloodWarning(null);
+        }
+      } catch(e) {}
+    };
+    fetchFlood();
+    const t = setInterval(fetchFlood, 1800000); // refresh every 30 min
     return () => clearInterval(t);
   }, []);
 
@@ -10154,7 +10196,8 @@ function FirehawkOps() {
     crew: crew,
     setCrew: setCrew
   })), showWeather && /*#__PURE__*/React.createElement(WeatherModal, {
-    onClose: () => setShowWeather(false)
+    onClose: () => setShowWeather(false),
+    onFloodWarning: setFloodWarning
   }), showThermal && /*#__PURE__*/React.createElement(ThermalModal, {
     onClose: () => setShowThermal(false)
   }), showAirspace && /*#__PURE__*/React.createElement(AirspaceModal, {
