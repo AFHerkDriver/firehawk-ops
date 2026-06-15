@@ -7820,6 +7820,23 @@ function WeatherModal({ onClose }) {
                   : "Until further notice"
               };
             });
+            // Extract flood warnings separately for banner display
+            var floodEvents = ["Flood Warning","Flash Flood Warning","Flood Watch","Flash Flood Watch","Flash Flood Statement"];
+            var floodAlert = (alertData.features || []).find(function(f) {
+              return floodEvents.indexOf(f.properties.event) !== -1;
+            });
+            if (floodAlert) {
+              setFloodWarning({
+                active: true,
+                event: floodAlert.properties.event,
+                ends: floodAlert.properties.ends
+                  ? new Date(floodAlert.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" })
+                  : "Until further notice",
+                updated: new Date().toISOString()
+              });
+            } else {
+              setFloodWarning(null);
+            }
             break;
           } catch(e) { continue; }
         }
@@ -8153,6 +8170,7 @@ function FirehawkOps() {
   const [showAirspace, setShowAirspace] = useState(false);
   const [burnBan, setBurnBan] = useState(null);
   const [redFlag, setRedFlag] = useState(null);
+  const [floodWarning, setFloodWarning] = useState(null);
   const [expandedBulletins, setExpandedBulletins] = useState({});
   const [editingBulletin, setEditingBulletin] = useState(null); // { id, title, body }
   const [showSAR, setShowSAR] = useState(false);
@@ -8614,7 +8632,29 @@ function FirehawkOps() {
   }, "TFS \xB7 ", burnBan.updated ? new Date(burnBan.updated).toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit'
-  }) : "")), showPin && /*#__PURE__*/React.createElement("div", {
+  }) : "")), floodWarning && floodWarning.active && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "linear-gradient(135deg,rgba(74,144,217,0.25),rgba(0,80,180,0.15))",
+      borderBottom: "1px solid rgba(74,144,217,0.6)",
+      padding: "8px 20px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", alignItems: "center", gap: 10 }
+  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 16 } }, "\uD83D\uDEA7"),
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 11, fontWeight: 700, color: "#4A90D9", letterSpacing: 2 }
+    }, floodWarning.event ? floodWarning.event.toUpperCase() : "FLOOD WARNING"),
+    /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 9, color: "#94A3B8", marginLeft: 10, letterSpacing: 1 }
+    }, "BEXAR COUNTY \xB7 ", floodWarning.ends))),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 8, color: "#64748B", letterSpacing: 1, flexShrink: 0 }
+  }, "NWS")), showPin && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
