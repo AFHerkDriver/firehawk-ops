@@ -135,7 +135,7 @@ async function fetchRedFlag() {
       const data = await r.json();
       // Flood warnings from NWS alerts
       try {
-        const alertResp = await fetch(worker + encodeURIComponent("https://api.weather.gov/alerts/active?zone=TXZ205"));
+        const alertResp = await fetch(worker + encodeURIComponent("https://api.weather.gov/alerts/active?zone=TXZ205,TXC029"));
         const alertData = await alertResp.json();
         const floodEvents = ["Flood Warning","Flash Flood Warning","Flood Watch","Flash Flood Watch","Flash Flood Statement"];
         const flood = (alertData.features || []).find(f => floodEvents.includes(f.properties.event));

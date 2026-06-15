@@ -7804,7 +7804,7 @@ function WeatherModal({ onClose }) {
       };
       var activeAlerts = [];
       try {
-        var ALERT_URL = "https://api.weather.gov/alerts/active?zone=TXZ205";
+        var ALERT_URL = "https://api.weather.gov/alerts/active?zone=TXZ205,TXC029";
         for (var purl of makeProxies(ALERT_URL)) {
           try {
             var r = await fetch(purl);
