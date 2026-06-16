@@ -5867,7 +5867,7 @@ const [showComms, setShowComms] = useState(false);
       setLaancStatus("loading");
       const geoParam = "geometry=" + lon + "%2C" + lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&f=json";
       const BASE_SUA = "https://gis.nri.tamu.edu/arcgis/rest/services/SUA_MTR/SUA/MapServer/0/query?" + geoParam + "&outFields=NAME,TYPE,SUAS_IDENT,LOWER_ALT,UPPER_ALT,EFF_TIMES,CON_AGCY";
-      const BASE_LAANC = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + geoParam + "&outFields=FACILITY_NAME,CEILING,AUTHORIZATION,APTID";
+      const BASE_LAANC = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + geoParam + "&outFields=*";
       const BASE_NSR = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/NationalSecurityUAS_FlightRestrictions/FeatureServer/0/query?" + geoParam + "&outFields=NAME,TYPE,LOWER_ALT,UPPER_ALT";
       const BASE_CLASS = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + geoParam + "&outFields=CLASS,NAME";
       const safeFetch = url => fetch(url).then(r => r.json()).catch(() => ({ features: [] }));
@@ -5876,11 +5876,16 @@ const [showComms, setShowComms] = useState(false);
           // Layer 1: LAANC facility map
           if (laanc.features && laanc.features.length > 0) {
             const f = laanc.features[0].attributes;
+            // Handle both old (APTID/CEILING) and new (APT1_NAME/APT1_CEILING) field names
+            const facilityName = f.APT1_NAME || f.APTID || f.FACILITY_NAME || "UNKNOWN";
+            const ceiling = f.APT1_CEILING != null ? parseInt(f.APT1_CEILING)
+              : f.CEILING != null ? parseInt(f.CEILING) : null;
+            const laancAuth = f.APT1_LAANC || f.AUTHORIZATION || "LAANC";
             setLaancData({
               source: "laanc",
-              facility: f.APTID || f.FACILITY_NAME || "UNKNOWN",
-              ceiling: f.CEILING != null ? parseInt(f.CEILING) : null,
-              auth: f.AUTHORIZATION || "MANUAL",
+              facility: facilityName,
+              ceiling,
+              auth: laancAuth,
               lower: null, upper: null, times: null, agency: null, suaType: null
             });
             setLaancStatus("loaded");
