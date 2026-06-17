@@ -1913,7 +1913,7 @@ function SchedulerPanel({
         }))
       });
     } else {
-      alert("Couldn't find any day numbers — try: '8 15 16 21 25 26 30' or '3rd through 8th, also the 15th' or 'all month except the 10th'");
+      setAvailInput(availInput); // keep input, just don't save
     }
   };
   const prevMonth = () => {
@@ -2232,8 +2232,8 @@ function SchedulerPanel({
       }
     }), /*#__PURE__*/React.createElement("button", {
       onClick: () => {
-        const raw = staffAvailText;
-        if (!raw.trim()) return;
+        const raw = (staffAvailText || myRaw).trim();
+        if (!raw) return;
         const days = parseAvailability(raw, daysInMonth);
         if (days && days.length > 0) {
           const updatedCrew = crew.map(c => c.id === staffMember.id ? {
@@ -2268,7 +2268,7 @@ function SchedulerPanel({
             }))
           });
         } else {
-          alert("Couldn't find any days — try: '8 15 16 21 25 26 30' or '1st through 10th' or 'all month except the 15th'");
+          // No valid days found — keep input visible, don't save
         }
       },
       style: {
