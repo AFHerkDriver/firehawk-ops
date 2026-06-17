@@ -122,17 +122,25 @@ async function fsSet(col, doc, obj) {
 }
 function fsListen(col, doc, callback) {
   let active = true,
-    lastSig = "";
+    lastSig = "",
+    firstPoll = true;
   const poll = async () => {
     if (!active) return;
     try {
       const data = await fsGet(col, doc);
       const sig = JSON.stringify(data);
-      if (sig !== lastSig) {
+      if (sig !== lastSig || firstPoll) {
         lastSig = sig;
+        firstPoll = false;
         callback(data);
       }
-    } catch (e) {}
+    } catch (e) {
+      // On error, still fire callback once so sync status can resolve
+      if (firstPoll) {
+        firstPoll = false;
+        callback(null);
+      }
+    }
     if (active) setTimeout(poll, 5000);
   };
   poll();
@@ -8332,28 +8340,32 @@ function FirehawkOps() {
   // Single source of truth for crew — loads from Firebase, shared with SchedulerPanel
   useEffect(() => {
     const unsub = fsListen("firehawk", "crew", data => {
-      if (data && data.members) {
-        setCrew(CREW_DEFAULT.map(c => {
-          const match = data.members.find(x => x.id === c.id);
-          return match ? {
-            ...c,
-            availability: match.availability || [],
-            availRaw: match.availRaw || "",
-            role: match.role || c.role,
-            part107: match.part107 || null,
-            reserve: match.reserve !== undefined ? match.reserve : (c.reserve || false),
-            archived: match.archived !== undefined ? match.archived : (c.archived || false),
-            availMonths: (() => {
-              const base = match.availMonths || c.availMonths || {};
-              // Migrate legacy availability[] to current month key if not already present
-              const legacyKey = CURRENT_YEAR + "_" + CURRENT_MONTH;
-              if (!base[legacyKey] && (match.availability || []).length > 0) {
-                return { ...base, [legacyKey]: { days: match.availability, raw: match.availRaw || "" } };
-              }
-              return base;
-            })()
-          } : c;
-        }));
+      try {
+        if (data && Array.isArray(data.members)) {
+          setCrew(CREW_DEFAULT.map(c => {
+            const match = data.members.find(x => x.id === c.id);
+            if (!match) return c;
+            let availMonths = (match.availMonths && typeof match.availMonths === "object") ? match.availMonths : (c.availMonths || {});
+            // Migrate legacy availability[] to current month key if not already present
+            const legacyKey = CURRENT_YEAR + "_" + CURRENT_MONTH;
+            const legacyDays = Array.isArray(match.availability) ? match.availability : [];
+            if (!availMonths[legacyKey] && legacyDays.length > 0) {
+              availMonths = { ...availMonths, [legacyKey]: { days: legacyDays, raw: match.availRaw || "" } };
+            }
+            return {
+              ...c,
+              availability: legacyDays,
+              availRaw: match.availRaw || "",
+              role: match.role || c.role,
+              part107: match.part107 || null,
+              reserve: match.reserve !== undefined ? match.reserve : (c.reserve || false),
+              archived: match.archived !== undefined ? match.archived : (c.archived || false),
+              availMonths
+            };
+          }));
+        }
+      } catch (e) {
+        console.error("crew listener error", e);
       }
       setSyncStatus("synced");
     });
