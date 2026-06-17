@@ -1762,7 +1762,7 @@ function SchedulerPanel({
   const [editingCrew, setEditingCrew] = useState(null);
   const [availInput, setAvailInput] = useState("");
   const [staffMember, setStaffMember] = useState(null);
-  const [staffAvailText, setStaffAvailText] = useState("");
+  const [staffAvailText, setStaffAvailText] = useState(null);
   const [proposals, setProposals] = useState({});
   const [autoPreview, setAutoPreview] = useState(false);
   const [autoApplied, setAutoApplied] = useState(false);
@@ -2093,7 +2093,7 @@ function SchedulerPanel({
     }
   }, crew.filter(c => !c.reserve && !c.archived).map(c => /*#__PURE__*/React.createElement("button", {
     key: c.id,
-    onClick: () => setStaffMember(c),
+    onClick: () => { setStaffMember(c); setStaffAvailText(null); },
     style: {
       display: "flex",
       alignItems: "center",
@@ -2175,7 +2175,7 @@ function SchedulerPanel({
       color: staffMember.role === "RPIC" ? "#4A90D9" : "#34C759"
     }
   }, staffMember.role)), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setStaffMember(null),
+    onClick: () => { setStaffMember(null); setStaffAvailText(null); },
     style: {
       background: "none",
       border: "none",
@@ -2221,8 +2221,7 @@ function SchedulerPanel({
         gap: 8
       }
     }, /*#__PURE__*/React.createElement("textarea", {
-      defaultValue: myRaw,
-      value: staffAvailText,
+      value: staffAvailText !== null ? staffAvailText : myRaw,
       onChange: e => setStaffAvailText(e.target.value),
       placeholder: `e.g. "I'm free the 1st through the 10th, also the 20th and 25th"\n"All month except the 15th-17th"\n"I am unable 12-14 and 26-30"\n"Not available the 5th, 6th, or 7th"`,
       rows: 2,
@@ -2240,7 +2239,7 @@ function SchedulerPanel({
       }
     }), /*#__PURE__*/React.createElement("button", {
       onClick: () => {
-        const raw = (staffAvailText || myRaw).trim();
+        const raw = (staffAvailText !== null ? staffAvailText : myRaw).trim();
         if (!raw) return;
         const days = parseAvailability(raw, daysInMonth);
         if (days && days.length > 0) {
@@ -2259,7 +2258,7 @@ function SchedulerPanel({
               [year + "_" + month]: { days, raw }
             }
           }));
-          setStaffAvailText("");
+          setStaffAvailText(null);
           fsSetPath("firehawk/crew", {
             members: updatedCrew.map(c => ({
               id: c.id,
@@ -3602,6 +3601,7 @@ function SchedulerPanel({
   }, "Save"), /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         const updatedCrew = crew.map(c => c.id === staffMember.id ? {
+          ...c,
           availMonths: { ...c.availMonths, [year + "_" + month]: { days: [], raw: "" } }
         } : c);
         setCrew(updatedCrew);
