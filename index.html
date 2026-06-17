@@ -1763,6 +1763,7 @@ function SchedulerPanel({
   const [availInput, setAvailInput] = useState("");
   const [staffMember, setStaffMember] = useState(null);
   const [staffAvailText, setStaffAvailText] = useState(null);
+  const [debugMsg, setDebugMsg] = useState("");
   const [proposals, setProposals] = useState({});
   const [autoPreview, setAutoPreview] = useState(false);
   const [autoApplied, setAutoApplied] = useState(false);
@@ -2240,8 +2241,9 @@ function SchedulerPanel({
     }), /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         const raw = (staffAvailText !== null ? staffAvailText : myRaw).trim();
-        if (!raw) return;
         const days = parseAvailability(raw, daysInMonth);
+        setDebugMsg("raw=[" + raw + "] days=[" + days.join(",") + "] len=" + days.length + " m=" + month + " y=" + year);
+        if (!raw) { setDebugMsg("BAILED: raw empty"); return; }
         if (days && days.length > 0) {
           const updatedCrew = crew.map(c => c.id === staffMember.id ? {
             ...c,
@@ -3626,7 +3628,7 @@ function SchedulerPanel({
       color: "#64748B",
       alignSelf: "center"
     }
-  }, "Saves and syncs to server"))))), crew.filter(c => c.reserve).length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Saves and syncs to server"), debugMsg && /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#FFC107", marginTop: 6, fontFamily: "monospace", wordBreak: "break-all" } }, debugMsg))))), crew.filter(c => c.reserve).length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8
     }
