@@ -3564,7 +3564,28 @@ function SchedulerPanel({
       fontFamily: "inherit",
       fontWeight: 700
     }
-  }, "Save"), /*#__PURE__*/React.createElement("div", {
+  }, "Save"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        const updatedCrew = crew.map(c => c.id === staffMember.id ? {
+          ...c, availability: [], availRaw: ""
+        } : c);
+        setCrew(updatedCrew);
+        setStaffMember(prev => ({ ...prev, availability: [], availRaw: "" }));
+        setStaffAvailText("");
+        fsSetPath("firehawk/crew", {
+          members: updatedCrew.map(c => ({
+            id: c.id, availability: c.availability || [], availRaw: c.availRaw || "",
+            role: c.role, part107: c.part107 || null, reserve: c.reserve || false,
+            archived: c.archived || false, color: c.color, initials: c.initials, name: c.name
+          }))
+        });
+      },
+      style: {
+        background: "rgba(255,59,48,0.1)", border: "1px solid rgba(255,59,48,0.3)",
+        borderRadius: 6, padding: "8px 12px", color: "#FF3B30",
+        cursor: "pointer", fontSize: 11, fontFamily: "inherit"
+      }
+    }, "Clear"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 9,
       color: "#64748B",
