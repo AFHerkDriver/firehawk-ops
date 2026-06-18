@@ -32,6 +32,8 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
+  const APP_VERSION = "2.1";                  // bump on EVERY change so the footer shows what's live
+  const U124       = "#50FA7B";               // UAV124 unit color (bright green); UAV121 = #4A90D9 (blue)
   const FS_PROJECT = "firehawk-scheduler";
   const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
   const FS_BASE    = "https://firestore.googleapis.com/v1/projects/" + FS_PROJECT + "/databases/(default)/documents";
@@ -390,8 +392,8 @@
           h("span", { style:{ fontSize:9, fontWeight:500, color:sc.color } }, sh)),
         h("div", { style:{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1 } },
           a121 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:"#4A90D9", lineHeight:1.15 } }, "121·AS") : null,
-          a124 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:C.accent, lineHeight:1.15 } }, "124·" + initialsFor(du.u124.rpic)) : null,
-          !manned ? h("span", { style:{ fontSize:8.5, color:C.red, letterSpacing:0.5, opacity:0.85 } }, "NO COVERAGE") : null),
+          a124 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:U124, lineHeight:1.15 } }, "124·" + initialsFor(du.u124.rpic)) : null,
+          !manned ? h("span", { style:{ fontSize:11, fontWeight:600, color:C.red, letterSpacing:1 } }, "OOS") : null),
         h("div", { style:{ display:"flex", justifyContent:"center", gap:4, height:10, fontSize:9 } },
           hasOOS ? h("span", { style:{ color:C.amber } }, "◷") : null)
       ));
@@ -457,9 +459,9 @@
     const cert124 = r124 ? certStatus(r124.part107) : "current";
     const usedBy121 = (u121 && u121.active) ? [LEAD_PILOT_ID, u121.vo].filter(x => x != null) : [];
     const used124self = u124 ? [u124.rpic, u124.vo].concat(u124.extra || []).filter(x => x != null) : [];
-    const card124 = h("div", { style: cardStyle(!!(u124 && u124.rpic != null), C.accent) },
+    const card124 = h("div", { style: cardStyle(!!(u124 && u124.rpic != null), U124) },
       h("div", { style:{ marginBottom:10 } },
-        h("span", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:18, letterSpacing:1, color:C.accent } }, "UAV124")),
+        h("span", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:18, letterSpacing:1, color:U124 } }, "UAV124")),
       lbl("RPIC"),
       sel(u124 ? u124.rpic : null, e => { const v = e.target.value === "" ? null : parseInt(e.target.value);
           applyUnits(u121, v == null ? { rpic:null, vo:null, extra:[] } : { rpic:v, vo:(u124?u124.vo:null), extra:(u124?(u124.extra||[]):[]).filter(x => x !== v) }); },
@@ -505,9 +507,9 @@
         h("div", { style:{ display:"flex", gap:13, marginTop:12, fontSize:10, color:C.dim, flexWrap:"wrap" } },
           h("span", null, h("span", { style:{ color:C.green } }, "■"), " Confirmed"),
           h("span", null, h("span", { style:{ color:C.amber } }, "■"), " Unconfirmed"),
-          h("span", null, h("span", { style:{ color:C.red } }, "■"), " No Coverage"),
+          h("span", null, h("span", { style:{ color:C.red } }, "■"), " OOS"),
           h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), "/", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), "/", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " Shift"),
-          h("span", null, h("span", { style:{ color:"#4A90D9" } }, "121"), "/", h("span", { style:{ color:C.accent } }, "124"), " Unit"),
+          h("span", null, h("span", { style:{ color:"#4A90D9" } }, "121"), "/", h("span", { style:{ color:U124 } }, "124"), " Unit"),
           h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window")),
         h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, paddingTop:12, borderTop:"1px solid "+C.border } },
           h("div", { style:{ fontSize:10.5, color:C.dim } }, crewedDays.length === 0 ? "No crewed days yet" : (finalizedCount + " of " + crewedDays.length + " crewed days finalized")),
@@ -697,7 +699,7 @@
 
         // Footer
         h("div", { style:{ fontSize:10, color:C.dim, textAlign:"center", marginTop:6, lineHeight:1.6 } },
-          "increment 2 — availability + schedule · collection ", h("b", null, DEV_COL)),
+          "increment ", h("b", null, APP_VERSION), " · collection ", h("b", null, DEV_COL)),
 
         // Toast
         toast ? h("div", { style:{ position:"fixed", left:"50%", bottom:24, transform:"translateX(-50%)", background:C.panel2, border:"1px solid "+C.accent, color:C.text, padding:"9px 16px", borderRadius:20, fontSize:12, boxShadow:"0 6px 24px rgba(0,0,0,0.5)", zIndex:60 } }, toast) : null
