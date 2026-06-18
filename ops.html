@@ -271,7 +271,7 @@
       h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:14 } },
         h("div", { style:{ fontSize:12, color:C.dim } },
           days.size === 0 ? "Not available this month" : days.size + (days.size === 1 ? " day available" : " days available"),
-          dirty ? h("span", { style:{ color:C.accent } }, "  • unsaved") : null),
+          dirty ? h("span", { style:{ color:C.accent } }, "  • Unsaved") : null),
         h("div", { style:{ display:"flex", gap:8 } },
           h("button", { onClick: clearDays, disabled: locked || busy, style: actionBtn("clear", locked || busy) }, "Clear"),
           h("button", { onClick: save, disabled: locked || busy || !dirty, style: actionBtn("save", locked || busy || !dirty) }, busy ? "…" : "Save"))),
@@ -381,24 +381,24 @@
       h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14 } },
         h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 } },
           h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, "TAP A DAY TO ASSIGN CREW"),
-          h("div", { style:{ fontSize:10, color: saving ? C.amber : C.dim } }, saving ? "saving…" : (savedAt ? "auto-saved" : (loaded ? "" : "loading…")))),
+          h("div", { style:{ fontSize:10, color: saving ? C.amber : C.dim } }, saving ? "Saving…" : (savedAt ? "Auto-saved" : (loaded ? "" : "Loading…")))),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:6 } },
           DOW.map(d => h("div", { key:d, style:{ textAlign:"center", fontSize:10, color:C.dim, letterSpacing:1 } }, d))),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 } }, cells),
         h("div", { style:{ display:"flex", gap:14, marginTop:12, fontSize:10, color:C.dim, flexWrap:"wrap" } },
-          h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), " / ", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), " / ", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " shift"),
-          h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS window"),
-          h("span", null, h("span", { style:{ color:C.green } }, "✓"), " finalized"))
+          h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), " / ", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), " / ", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " Shift"),
+          h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window"),
+          h("span", null, h("span", { style:{ color:C.green } }, "✓"), " Finalized"))
       ),
 
       // ── Day editor sheet ──
       selDay != null ? h("div", {
         onClick: () => setSelDay(null),
-        style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:50 }
+        style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50, padding:16 }
       },
         h("div", {
           onClick: e => e.stopPropagation(),
-          style: { width:"100%", maxWidth:520, maxHeight:"88vh", overflowY:"auto", background:C.panel, borderTop:"2px solid "+C.accent, borderRadius:"16px 16px 0 0", padding:16, minHeight:0 }
+          style: { width:"100%", maxWidth:480, maxHeight:"85vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.accent, borderRadius:16, padding:16, minHeight:0, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" }
         },
           h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 } },
             h("div", null,
@@ -435,7 +435,7 @@
           // Finalized toggle
           h("div", { style:{ marginTop:12, borderTop:"1px solid "+C.border, paddingTop:12, display:"flex", justifyContent:"space-between", alignItems:"center" } },
             h("div", null,
-              h("div", { style:{ fontSize:13, color:C.text } }, "Mark day finalized"),
+              h("div", { style:{ fontSize:13, color:C.text } }, "Mark Day Finalized"),
               h("div", { style:{ fontSize:10, color:C.dim, marginTop:2 } }, "Shows a ✓ on the board for the chiefs")),
             h("button", { onClick:() => editDay(selDay, { confirmed: !day.confirmed }),
               style:{ width:54, height:30, borderRadius:15, border:"1px solid "+(day.confirmed?C.green:C.border), background: day.confirmed?"rgba(52,199,89,0.2)":C.panel2, color: day.confirmed?C.green:C.dim, fontSize:11 } },
@@ -564,8 +564,8 @@
         h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
           h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:8 } }, "MANAGER / DEV CONTROLS"),
           h("div", { style:{ display:"flex", gap:8 } },
-            h("button", { onClick: seed, disabled: busy, style: ghostBtn(busy) }, "Seed / reset roster"),
-            h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] + " avail" : "Lock " + MONTHS[vMonth] + " avail"))),
+            h("button", { onClick: seed, disabled: busy, style: ghostBtn(busy) }, "Seed / Reset Roster"),
+            h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] + " Avail" : "Lock " + MONTHS[vMonth] + " Avail"))),
 
         // Error line
         lastErr ? h("div", { style:{ background:"rgba(255,59,48,0.12)", border:"1px solid "+C.red, borderRadius:8, padding:"9px 11px", fontSize:11, color:C.red, marginBottom:10, lineHeight:1.5, wordBreak:"break-word" } }, "⚠ " + lastErr) : null,
