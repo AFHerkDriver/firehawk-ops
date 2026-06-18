@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Firehawk Ops — DEV SANDBOX</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: #0D1117; color: #E6EDF3; font-family: 'DM Mono', monospace; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,107,53,0.3); border-radius: 2px; }
+    button { font-family: 'DM Mono', monospace; cursor: pointer; }
+    select { font-family: 'DM Mono', monospace; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FIREHAWK OPS v2 — DEV SHELL  (increment 1: staff availability calendar)
+  //
+  // SANDBOX: this build reads/writes ONLY the "firehawk_dev" Firestore
+  // collections. The live app ("firehawk" collections) is never touched.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const { useState, useEffect, useRef } = React;
+  const h = React.createElement;
+
+  // ── Config ────────────────────────────────────────────────────────────────
+  const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
+  const FS_PROJECT = "firehawk-scheduler";
+  const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
+  const FS_BASE    = "https://firestore.googleapis.com/v1/projects/" + FS_PROJECT + "/databases/(default)/documents";
+
+  // ── Firestore REST (lifted verbatim from index.html — proven encoding) ──────
+  function fromFSVal(v) {
+    if (!v) return null;
+    if ("stringValue" in v) return v.stringValue;
+    if ("integerValue" in v) return parseInt(v.integerValue);
+    if ("doubleValue" in v) return v.doubleValue;
+    if ("booleanValue" in v) return v.booleanValue;
+    if ("nullValue" in v) return null;
+    if ("mapValue" in v) return fromFSFields(v.mapValue.fields || {});
+    if ("arrayValue" in v) return (v.arrayValue.values || []).map(fromFSVal);
+    return null;
+  }
+  function fromFSFields(fields) {
+    if (!fields) return null;
+    const out = {};
+    for (const k in fields) out[k] = fromFSVal(fields[k]);
+    return out;
+  }
+  function toFSVal(v) {
+    if (v === null || v === undefined) return { nullValue: null };
+    if (typeof v === "boolean") return { booleanValue: v };
+    if (typeof v === "number") return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+    if (typeof v === "string") return { stringValue: v };
+    if (Array.isArray(v)) return { arrayValue: { values: v.map(toFSVal) } };
+    if (typeof v === "object") {
+      const fields = {};
+      for (const k in v) fields[k] = toFSVal(v[k]);
+      return { mapValue: { fields } };
+    }
+    return { stringValue: String(v) };
+  }
+  function toFSFields(obj) {
+    const fields = {};
+    for (const k in obj) fields[k] = toFSVal(obj[k]);
+    return fields;
+  }
+  async function fsGet(col, doc) {
+    try {
+      const url = FS_BASE + "/" + col + "/" + doc + "?key=" + FS_API_KEY;
+      const res = await fetch(url, { method: "GET", headers: { "Accept": "application/json" } });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.fields ? fromFSFields(data.fields) : null;
+    } catch (e) { return null; }
+  }
+  async function fsSet(col, doc, obj) {
+    try {
+      const url = FS_BASE + "/" + col + "/" + doc + "?key=" + FS_API_KEY;
+      const body = JSON.stringify({ fields: toFSFields(obj) });
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body
+      });
+      if (!res.ok) { const t = await res.text(); console.error("fsSet FAIL", res.status, t.slice(0, 200)); }
+      return res.ok;
+    } catch (e) { console.error("fsSet ERROR", e.message); return false; }
+  }
+  // Resilient listener — fires the callback on the FIRST poll even on error/null
+  // (the firstPoll fix that was missing from the live index.html), so sync
+  // status can always resolve off "connecting".
+  function fsListen(col, doc, callback) {
+    let active = true, lastSig = "", firstPoll = true;
+    const poll = async () => {
+      if (!active) return;
+      let data = null;
+      try { data = await fsGet(col, doc); } catch (e) { data = null; }
+      const sig = JSON.stringify(data);
+      if (firstPoll || sig !== lastSig) {
+        firstPoll = false;
+        lastSig = sig;
+        try { callback(data); } catch (e) {}
+      }
+      if (active) setTimeout(poll, 5000);
+    };
+    poll();
+    return () => { active = false; };
+  }
+
+  // ── Date helpers (month 0-indexed everywhere, e.g. June = 5) ────────────────
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  function monthKey(year, month) { return year + "_" + month; }
+  function daysInMonth(year, month) { return new Date(year, month + 1, 0).getDate(); }
+  function firstWeekday(year, month) { return new Date(year, month, 1).getDay(); }
+
+  // ── Embedded fallback roster (used only if crew_defaults.json fails to load —
+  // graceful degradation so a missing data file degrades, not breaks) ─────────
+  const FALLBACK_ROSTER = [
+    { id:1, name:"Sanchez",   role:"RPIC", color:"#4A90D9", initials:"AS", part107:"2026-11-01", reserve:false },
+    { id:3, name:"Bauchman",  role:"RPIC", color:"#E67E22", initials:"RB", part107:"2027-05-06", reserve:false },
+    { id:4, name:"Thomas",    role:"RPIC", color:"#7D3C98", initials:"MT", part107:"2028-01-16", reserve:false },
+    { id:2, name:"Goddu",     role:"VO",   color:"#C0392B", initials:"BG", part107:null,         reserve:false },
+    { id:5, name:"Rodriguez", role:"VO",   color:"#C8A84B", initials:"JR", part107:null,         reserve:false },
+    { id:6, name:"Rait",      role:"RPIC", color:"#8B4513", initials:"CR", part107:"2027-05-31", reserve:true  }
+  ];
+
+  // ── Theme ───────────────────────────────────────────────────────────────────
+  const C = {
+    bg:"#0D1117", panel:"#161B22", panel2:"#1C2230", border:"#30363D",
+    text:"#E6EDF3", dim:"#8B949E", accent:"#FF6B35",
+    green:"#34C759", amber:"#FFC107", red:"#FF3B30"
+  };
+
+  function App() {
+    const [defaults, setDefaults]       = useState(null);   // roster from crew_defaults.json
+    const [dataSource, setDataSource]   = useState("loading");
+    const [crew, setCrew]               = useState([]);     // merged: defaults + dev availMonths
+    const [crewLoaded, setCrewLoaded]   = useState(false);  // has the dev/crew doc resolved at least once
+    const [locks, setLocks]             = useState({});     // firehawk_dev/availability_locks
+    const [sync, setSync]               = useState("connecting");
+    const [selId, setSelId]             = useState(null);
+    const now = new Date();
+    const [vYear, setVYear]             = useState(now.getFullYear());
+    const [vMonth, setVMonth]           = useState(now.getMonth());
+    const [days, setDays]               = useState(new Set());   // selected (available) days for current member+month
+    const [dirty, setDirty]             = useState(false);
+    const [busy, setBusy]               = useState(false);
+    const [toast, setToast]             = useState("");
+
+    const crewRef = useRef(crew); crewRef.current = crew;
+    const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
+
+    // Load the roster data file.
+    useEffect(() => {
+      fetch("crew_defaults.json")
+        .then(r => { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+        .then(j => { setDefaults(j.roster); setDataSource("json"); })
+        .catch(() => { setDefaults(FALLBACK_ROSTER); setDataSource("fallback"); });
+    }, []);
+
+    // Subscribe to dev crew + dev locks.
+    useEffect(() => {
+      if (!defaults) return;
+      const unsubCrew = fsListen(DEV_COL, "crew", data => {
+        const members = (data && Array.isArray(data.members)) ? data.members : [];
+        const merged = defaults.map(d => {
+          const m = members.find(x => x.id === d.id);
+          return { ...d, availMonths: (m && typeof m.availMonths === "object" && m.availMonths) || {} };
+        });
+        setCrew(merged);
+        setCrewLoaded(true);
+        setSync("synced");
+      });
+      const unsubLocks = fsListen(DEV_COL, "availability_locks", data => {
+        setLocks((data && typeof data === "object") ? data : {});
+      });
+      return () => { unsubCrew(); unsubLocks(); };
+    }, [defaults]);
+
+    // Default the selected member once crew is available.
+    useEffect(() => {
+      if (selId === null && crew.length) setSelId(crew[0].id);
+    }, [crew, selId]);
+
+    // Load selected days from stored data when member / month changes (reads a ref
+    // so a background poll doesn't clobber an in-progress edit).
+    useEffect(() => {
+      const m = crewRef.current.find(c => c.id === selId);
+      const key = monthKey(vYear, vMonth);
+      const stored = (m && m.availMonths && m.availMonths[key] && m.availMonths[key].days) || [];
+      setDays(new Set(stored));
+      setDirty(false);
+    }, [selId, vYear, vMonth]);
+
+    const key       = monthKey(vYear, vMonth);
+    const member    = crew.find(c => c.id === selId) || null;
+    const monthRec  = (member && member.availMonths && member.availMonths[key]) || null;
+    const locked    = !!(locks[key] && locks[key].locked);
+
+    const toggleDay = (d) => {
+      if (locked) return;
+      setDays(prev => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; });
+      setDirty(true);
+    };
+    const clearDays = () => { if (locked) return; setDays(new Set()); setDirty(true); };
+
+    const navMonth = (delta) => {
+      let m = vMonth + delta, y = vYear;
+      if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+      setVMonth(m); setVYear(y);
+    };
+
+    const writeCrew = async (updated) => {
+      return fsSet(DEV_COL, "crew", {
+        members: updated.map(c => ({
+          id: c.id, name: c.name, role: c.role, color: c.color,
+          initials: c.initials, part107: c.part107 == null ? null : c.part107,
+          reserve: !!c.reserve, availMonths: c.availMonths || {}
+        }))
+      });
+    };
+
+    const save = async () => {
+      if (!member || locked) return;
+      setBusy(true);
+      const rec = {
+        days: [...days].sort((a, b) => a - b),
+        lastEditedBy: member.name + " (self)",
+        lastEditedAt: new Date().toISOString(),
+        editedByManager: false
+      };
+      const updated = crew.map(c => c.id === selId
+        ? { ...c, availMonths: { ...c.availMonths, [key]: rec } }
+        : c);
+      setCrew(updated);
+      const ok = await writeCrew(updated);
+      setBusy(false);
+      setDirty(false);
+      flash(ok ? "Saved to firehawk_dev" : "Save failed — see console");
+    };
+
+    // Seed / reset the dev roster (writes default roster with empty availability).
+    const seed = async () => {
+      if (crewLoaded && crew.some(c => c.availMonths && Object.keys(c.availMonths).length)
+          && !window.confirm("Re-seed the SANDBOX roster? This wipes availability entered in firehawk_dev (live data is untouched).")) return;
+      setBusy(true);
+      const fresh = (defaults || FALLBACK_ROSTER).map(d => ({ ...d, availMonths: {} }));
+      const ok = await writeCrew(fresh);
+      setBusy(false);
+      flash(ok ? "Seeded firehawk_dev/crew" : "Seed failed — see console");
+    };
+
+    // Manager (dev) lock toggle — locking is a manager action; included here so
+    // lock behavior is testable end-to-end this increment.
+    const toggleLock = async () => {
+      setBusy(true);
+      const next = { ...locks };
+      if (locked) { next[key] = { locked: false, lockedBy: "Sanchez", lockedAt: new Date().toISOString() }; }
+      else { next[key] = { locked: true, lockedBy: "Sanchez", lockedAt: new Date().toISOString() }; }
+      setLocks(next);
+      const ok = await fsSet(DEV_COL, "availability_locks", next);
+      setBusy(false);
+      flash(ok ? (locked ? "Unlocked " + MONTHS[vMonth] : "Locked " + MONTHS[vMonth]) : "Lock write failed");
+    };
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    const syncColor = sync === "synced" ? C.green : C.amber;
+    const wrap = { maxWidth: 520, margin: "0 auto", padding: "0 14px 40px" };
+
+    // Calendar cells: leading blanks + day numbers.
+    const lead = firstWeekday(vYear, vMonth);
+    const dim  = daysInMonth(vYear, vMonth);
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push(h("div", { key: "b" + i }));
+    for (let d = 1; d <= dim; d++) {
+      const on = days.has(d);
+      cells.push(h("button", {
+        key: "d" + d,
+        onClick: () => toggleDay(d),
+        disabled: locked,
+        style: {
+          aspectRatio: "1 / 1", borderRadius: 8,
+          border: "1px solid " + (on ? C.accent : C.border),
+          background: on ? "rgba(255,107,53,0.18)" : C.panel2,
+          color: on ? C.accent : C.dim,
+          fontSize: 15, fontWeight: on ? 500 : 400,
+          opacity: locked ? 0.45 : 1,
+          display: "flex", alignItems: "center", justifyContent: "center"
+        }
+      }, d));
+    }
+
+    return h("div", { style: { minHeight: "100vh", paddingTop: 14 } },
+      h("div", { style: wrap },
+
+        // Header
+        h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } },
+          h("div", null,
+            h("div", { style: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, letterSpacing: 1, lineHeight: 1, color: C.text } }, "FIREHAWK OPS"),
+            h("div", { style: { fontSize: 11, color: C.accent, letterSpacing: 2, marginTop: 2 } }, "DEV SANDBOX · AVAILABILITY")
+          ),
+          h("div", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.dim } },
+            h("span", { style: { width: 8, height: 8, borderRadius: "50%", background: syncColor, display: "inline-block" } }),
+            sync === "synced" ? "SYNCED" : "CONNECTING"
+          )
+        ),
+
+        // Sandbox banner
+        h("div", { style: { background: "rgba(255,193,7,0.10)", border: "1px solid rgba(255,193,7,0.35)", borderRadius: 8, padding: "8px 11px", fontSize: 11, color: C.amber, marginBottom: 14, lineHeight: 1.5 } },
+          "Reads / writes ", h("b", null, DEV_COL), " only — the live site is untouched. Data file: ",
+          h("b", null, dataSource === "json" ? "crew_defaults.json" : dataSource === "fallback" ? "embedded fallback (json not found)" : "loading…")
+        ),
+
+        // Controls card
+        h("div", { style: { background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: 14, marginBottom: 14 } },
+
+          // Member + month row
+          h("div", { style: { display: "flex", gap: 8, marginBottom: 12 } },
+            h("select", {
+              value: selId == null ? "" : selId,
+              onChange: e => setSelId(parseInt(e.target.value)),
+              style: { flex: 1, background: C.panel2, color: C.text, border: "1px solid " + C.border, borderRadius: 8, padding: "9px 10px", fontSize: 13 }
+            }, (crew.length ? crew : []).map(c => h("option", { key: c.id, value: c.id }, c.name + " · " + c.role)))
+          ),
+
+          // Month navigator
+          h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } },
+            h("button", { onClick: () => navMonth(-1), style: navBtn() }, "‹"),
+            h("div", { style: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 1 } }, MONTHS[vMonth] + " " + vYear),
+            h("button", { onClick: () => navMonth(1), style: navBtn() }, "›")
+          ),
+
+          // Locked badge
+          locked ? h("div", { style: { textAlign: "center", fontSize: 11, color: C.amber, letterSpacing: 1, marginBottom: 8 } },
+            "🔒 LOCKED BY " + (locks[key].lockedBy || "MANAGER").toUpperCase() + " — READ ONLY") : null,
+
+          // Day-of-week header
+          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6, marginBottom: 6 } },
+            DOW.map(d => h("div", { key: d, style: { textAlign: "center", fontSize: 10, color: C.dim, letterSpacing: 1 } }, d))
+          ),
+
+          // Calendar grid
+          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 } }, cells),
+
+          // Count + actions
+          h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 } },
+            h("div", { style: { fontSize: 12, color: C.dim } },
+              days.size === 0 ? "Not available this month" : days.size + (days.size === 1 ? " day available" : " days available"),
+              dirty ? h("span", { style: { color: C.accent } }, "  • unsaved") : null
+            ),
+            h("div", { style: { display: "flex", gap: 8 } },
+              h("button", { onClick: clearDays, disabled: locked || busy, style: actionBtn("clear", locked || busy) }, "Clear"),
+              h("button", { onClick: save, disabled: locked || busy || !dirty, style: actionBtn("save", locked || busy || !dirty) }, busy ? "…" : "Save")
+            )
+          ),
+
+          // Last-edited line
+          monthRec && monthRec.lastEditedBy ? h("div", { style: { fontSize: 10.5, color: C.dim, marginTop: 8, borderTop: "1px solid " + C.border, paddingTop: 8 } },
+            "Last edited by " + monthRec.lastEditedBy + " · " + new Date(monthRec.lastEditedAt).toLocaleString()
+          ) : null
+        ),
+
+        // Manager / dev controls
+        h("div", { style: { background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: 12, marginBottom: 10 } },
+          h("div", { style: { fontSize: 10, color: C.dim, letterSpacing: 1, marginBottom: 8 } }, "MANAGER / DEV CONTROLS"),
+          h("div", { style: { display: "flex", gap: 8 } },
+            h("button", { onClick: seed, disabled: busy, style: ghostBtn(busy) }, "Seed / reset roster"),
+            h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] : "Lock " + MONTHS[vMonth])
+          )
+        ),
+
+        // Footer
+        h("div", { style: { fontSize: 10, color: C.dim, textAlign: "center", marginTop: 6, lineHeight: 1.6 } },
+          "increment 1 — staff availability picker · collection ", h("b", null, DEV_COL)
+        ),
+
+        // Toast
+        toast ? h("div", { style: { position: "fixed", left: "50%", bottom: 24, transform: "translateX(-50%)", background: C.panel2, border: "1px solid " + C.accent, color: C.text, padding: "9px 16px", borderRadius: 20, fontSize: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.5)" } }, toast) : null
+      )
+    );
+  }
+
+  function navBtn() {
+    return { width: 40, height: 40, borderRadius: 8, background: C.panel2, border: "1px solid " + C.border, color: C.text, fontSize: 20, lineHeight: 1 };
+  }
+  function actionBtn(kind, disabled) {
+    const base = { borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 500, opacity: disabled ? 0.4 : 1, border: "1px solid " };
+    if (kind === "save") return { ...base, borderColor: C.accent, background: "rgba(255,107,53,0.16)", color: C.accent };
+    return { ...base, borderColor: C.red, background: "rgba(255,59,48,0.12)", color: C.red };
+  }
+  function ghostBtn(disabled) {
+    return { flex: 1, borderRadius: 8, padding: "9px 10px", fontSize: 12, background: C.panel2, border: "1px solid " + C.border, color: C.dim, opacity: disabled ? 0.5 : 1 };
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+  </script>
+</body>
+</html>
