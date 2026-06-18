@@ -416,6 +416,16 @@
     const lbl = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:4 } }, t);
     const cardStyle = (active, accent) => ({ border:"1px solid "+(active?accent:C.border), background: active?"rgba(255,255,255,0.02)":C.panel2, borderRadius:10, padding:12, marginBottom:10 });
 
+    // Per-day availability — a SOFT signal in the dropdowns; the manager can still
+    // assign anyone (manager always wins). Availability is a HARD gate only in
+    // smart assignment (increment 3).
+    const mk = monthKey(vYear, vMonth);
+    const isAvail = (id) => { const m = crew.find(c => c.id === id); const rec = m && m.availMonths && m.availMonths[mk]; return !!(rec && Array.isArray(rec.days) && selDay != null && rec.days.indexOf(selDay) !== -1); };
+    const sortAvail = (list) => list.slice().sort((a, b) => (isAvail(b.id) ? 1 : 0) - (isAvail(a.id) ? 1 : 0));
+    const crewOption = (c) => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ") · " + (isAvail(c.id) ? "avail" : "not avail"));
+    const assignedIds = day ? [day.rpic, day.vo, day.vo2].concat(day.extra || []).filter(x => x != null).map(Number) : [];
+    const unavailNames = assignedIds.filter(id => !isAvail(id)).map(id => { const m = crewById(id); return m ? (m.name + " (" + m.initials + ")") : "?"; });
+
     // UAV121 card — RPIC is always Sanchez; the toggle = "Sanchez flying 121 today"
     const sanchezCert = sanchez ? certStatus(sanchez.part107) : "current";
     const usedBy124 = u124 ? [u124.rpic, u124.vo].concat(u124.extra || []).filter(x => x != null) : [];
@@ -433,7 +443,7 @@
         lbl("VISUAL OBSERVER"),
         sel(u121.vo, e => applyUnits({ active:true, vo: e.target.value === "" ? null : parseInt(e.target.value) }, u124),
           [h("option", { key:"_", value:"" }, "— Unassigned —")].concat(
-            memberOptions(crew, [LEAD_PILOT_ID].concat(usedBy124)).map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")"))))
+            sortAvail(memberOptions(crew, [LEAD_PILOT_ID].concat(usedBy124))).map(crewOption)))
       ) : null
     );
 
@@ -449,14 +459,14 @@
       sel(u124 ? u124.rpic : null, e => { const v = e.target.value === "" ? null : parseInt(e.target.value);
           applyUnits(u121, v == null ? { rpic:null, vo:null, extra:[] } : { rpic:v, vo:(u124?u124.vo:null), extra:(u124?(u124.extra||[]):[]).filter(x => x !== v) }); },
         [h("option", { key:"_", value:"" }, "— Unassigned —")].concat(
-          memberOptions(otherRPIC, usedBy121).map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")")))),
+          sortAvail(memberOptions(otherRPIC, usedBy121)).map(crewOption))),
       (r124 && (cert124 === "expired" || cert124 === "none")) ? h("div", { style:{ fontSize:10.5, color:C.amber, marginTop:6 } },
         "⚠ " + r124.name + (cert124 === "none" ? " has no Part 107 on record" : "'s Part 107 is expired")) : null,
       (u124 && u124.rpic != null) ? h("div", { style:{ marginTop:10 } },
         lbl("VISUAL OBSERVER"),
         sel(u124.vo, e => applyUnits(u121, { rpic:u124.rpic, vo: e.target.value === "" ? null : parseInt(e.target.value), extra:u124.extra }),
           [h("option", { key:"_", value:"" }, "— Unassigned —")].concat(
-            memberOptions(crew, [LEAD_PILOT_ID, u124.rpic].concat(usedBy121).concat(u124.extra || [])).map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")")))),
+            sortAvail(memberOptions(crew, [LEAD_PILOT_ID, u124.rpic].concat(usedBy121).concat(u124.extra || []))).map(crewOption))),
         h("div", { style:{ marginTop:10 } },
           lbl("ADDITIONAL CREW"),
           (u124.extra || []).map(id => h("span", { key:id, style:{ display:"inline-flex", alignItems:"center", gap:6, background:C.panel2, border:"1px solid "+C.border, borderRadius:14, padding:"4px 10px", fontSize:12, marginRight:6, marginBottom:6 } },
@@ -464,9 +474,20 @@
             h("button", { onClick: () => applyUnits(u121, { rpic:u124.rpic, vo:u124.vo, extra:(u124.extra||[]).filter(x => x !== id) }), style:{ background:"none", border:"none", color:C.red, fontSize:14, lineHeight:1 } }, "×"))),
           sel(null, e => { const v = e.target.value === "" ? null : parseInt(e.target.value); if (v != null) applyUnits(u121, { rpic:u124.rpic, vo:u124.vo, extra:(u124.extra||[]).concat([v]) }); },
             [h("option", { key:"_", value:"" }, "+ Add crew…")].concat(
-              memberOptions(crew, [LEAD_PILOT_ID].concat(usedBy121).concat(used124self)).map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")")))))
+              sortAvail(memberOptions(crew, [LEAD_PILOT_ID].concat(usedBy121).concat(used124self))).map(crewOption))))
       ) : null
     );
+
+    // Month-level finalize — bulk-sets per-day confirmed (drives the chief board ✓)
+    const crewedDays = [];
+    for (let _d = 1; _d <= dim; _d++) { const _dd = monthDays[_d]; if (_dd && [_dd.rpic, _dd.vo, _dd.vo2].concat(_dd.extra || []).some(x => x != null)) crewedDays.push(_d); }
+    const finalizedCount = crewedDays.filter(_d => monthDays[_d] && monthDays[_d].confirmed).length;
+    const allFinal = crewedDays.length > 0 && finalizedCount === crewedDays.length;
+    const finalizeMonth = (value) => {
+      const prev = daysRef.current; const next = { ...prev }; let changed = false;
+      crewedDays.forEach(_d => { const _dd = next[_d]; if (_dd && _dd.confirmed !== value) { next[_d] = { ..._dd, confirmed: value, lastEditedBy:"UAS Manager", lastEditedAt: new Date().toISOString() }; changed = true; } });
+      if (changed) { setMonthDays(next); scheduleSave(next); }
+    };
 
     return h("div", null,
       h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14 } },
@@ -480,7 +501,12 @@
           h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), " / ", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), " / ", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " Shift"),
           h("span", null, h("span", { style:{ color:"#4A90D9" } }, "121"), " / ", h("span", { style:{ color:C.accent } }, "124"), " Unit"),
           h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window"),
-          h("span", null, h("span", { style:{ color:C.green } }, "✓"), " Finalized"))
+          h("span", null, h("span", { style:{ color:C.green } }, "✓"), " Finalized")),
+        h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, paddingTop:12, borderTop:"1px solid "+C.border } },
+          h("div", { style:{ fontSize:10.5, color:C.dim } }, crewedDays.length === 0 ? "No crewed days yet" : (finalizedCount + " of " + crewedDays.length + " crewed days finalized")),
+          h("button", { onClick: () => finalizeMonth(!allFinal), disabled: crewedDays.length === 0,
+            style:{ borderRadius:8, padding:"7px 12px", fontSize:11, border:"1px solid "+(allFinal?C.amber:C.green), background: allFinal?"rgba(255,193,7,0.12)":"rgba(52,199,89,0.14)", color: allFinal?C.amber:C.green, opacity: crewedDays.length===0?0.4:1 } },
+            allFinal ? "Unfinalize Month" : "Finalize Month"))
       ),
 
       // ── Day editor sheet ──
@@ -499,6 +525,9 @@
               h("div", { style:{ fontSize:11, color: SHIFT_COLORS[getShift(vYear,vMonth,selDay)].color, marginTop:3 } },
                 "Shift " + getShift(vYear, vMonth, selDay) + (activeUnits.length ? " · " + activeUnits.join(" + ") : ""))),
             h("button", { onClick: () => setSelDay(null), style:{ background:"none", border:"none", color:C.dim, fontSize:22, lineHeight:1 } }, "✕")),
+
+          unavailNames.length ? h("div", { style:{ fontSize:10.5, color:C.amber, marginBottom:10, lineHeight:1.4, background:"rgba(255,193,7,0.10)", border:"1px solid rgba(255,193,7,0.3)", borderRadius:8, padding:"7px 10px" } },
+            "⚠ Marked not available this day: " + unavailNames.join(", ")) : null,
 
           card121,
           card124,
