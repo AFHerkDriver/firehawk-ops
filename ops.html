@@ -13,17 +13,19 @@
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(255,107,53,0.3); border-radius: 2px; }
     button { font-family: 'DM Mono', monospace; cursor: pointer; }
-    select { font-family: 'DM Mono', monospace; }
+    select, input { font-family: 'DM Mono', monospace; }
   </style>
 </head>
 <body>
   <div id="root"></div>
   <script>
   // ═══════════════════════════════════════════════════════════════════════════
-  // FIREHAWK OPS v2 — DEV SHELL  (increment 1: staff availability calendar)
+  // FIREHAWK OPS v2 — DEV SHELL
+  //   increment 1: staff availability calendar (Availability tab)
+  //   increment 2: manager schedule grid + intra-day OOS + auto-save (Schedule tab)
   //
-  // SANDBOX: this build reads/writes ONLY the "firehawk_dev" Firestore
-  // collections. The live app ("firehawk" collections) is never touched.
+  // SANDBOX: reads/writes ONLY the "firehawk_dev" Firestore collections.
+  // The live app ("firehawk" collections) is never touched.
   // ═══════════════════════════════════════════════════════════════════════════
   const { useState, useEffect, useRef } = React;
   const h = React.createElement;
@@ -70,6 +72,10 @@
     for (const k in obj) fields[k] = toFSVal(obj[k]);
     return fields;
   }
+  function fsErr(t) {
+    try { const j = JSON.parse(t); return (j.error && j.error.message) || (t || "").slice(0, 140); }
+    catch (e) { return (t || "").slice(0, 140); }
+  }
   async function fsGet(col, doc) {
     try {
       const url = FS_BASE + "/" + col + "/" + doc + "?key=" + FS_API_KEY;
@@ -78,10 +84,6 @@
       const data = await res.json();
       return data.fields ? fromFSFields(data.fields) : null;
     } catch (e) { return null; }
-  }
-  function fsErr(t) {
-    try { const j = JSON.parse(t); return (j.error && j.error.message) || (t || "").slice(0, 140); }
-    catch (e) { return (t || "").slice(0, 140); }
   }
   async function fsSet(col, doc, obj) {
     try {
@@ -103,9 +105,7 @@
       return { ok: false, status: 0, detail: e.message || "network error" };
     }
   }
-  // Resilient listener — fires the callback on the FIRST poll even on error/null
-  // (the firstPoll fix that was missing from the live index.html), so sync
-  // status can always resolve off "connecting".
+  // Resilient listener — fires on FIRST poll even on error/null so sync resolves.
   function fsListen(col, doc, callback) {
     let active = true, lastSig = "", firstPoll = true;
     const poll = async () => {
@@ -114,8 +114,7 @@
       try { data = await fsGet(col, doc); } catch (e) { data = null; }
       const sig = JSON.stringify(data);
       if (firstPoll || sig !== lastSig) {
-        firstPoll = false;
-        lastSig = sig;
+        firstPoll = false; lastSig = sig;
         try { callback(data); } catch (e) {}
       }
       if (active) setTimeout(poll, 5000);
@@ -123,16 +122,62 @@
     poll();
     return () => { active = false; };
   }
+  // Path helpers for schedule months (stored as a JSON string under daysJson to
+  // avoid Firestore numeric-field-name issues — same pattern as index.html).
+  async function fsGetPath(docPath) {
+    const [c, d] = docPath.split("/");
+    const data = await fsGet(c, d);
+    if (data && data.daysJson) { try { return { days: JSON.parse(data.daysJson) }; } catch (e) { return { days: {} }; } }
+    if (data && data.days) return data;
+    return data;
+  }
+  async function fsSetPath(docPath, obj) {
+    const [c, d] = docPath.split("/");
+    if (obj && obj.days !== undefined) return fsSet(c, d, { daysJson: JSON.stringify(obj.days) });
+    return fsSet(c, d, obj);
+  }
 
-  // ── Date helpers (month 0-indexed everywhere, e.g. June = 5) ────────────────
+  // ── Crew identity / units (from index.html) ─────────────────────────────────
+  const LEAD_PILOT_ID = 1;          // Sanchez = UAV121
+  const UNIT_LEAD     = "UAV121";
+  const UNIT_PRIMARY  = "UAV124";   // all other RPICs
+  function unitFor(rpicId) {
+    if (rpicId == null) return null;
+    return rpicId === LEAD_PILOT_ID ? UNIT_LEAD : UNIT_PRIMARY;
+  }
+  function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    const exp = new Date(dateStr); const today = new Date(); today.setHours(0, 0, 0, 0);
+    return Math.ceil((exp - today) / 86400000);
+  }
+  function certStatus(dateStr) {
+    const d = daysUntil(dateStr);
+    if (d === null) return "none";
+    if (d < 0) return "expired";
+    if (d <= 30) return "soon";
+    return "current";
+  }
+
+  // ── Dates / shifts (reproduced exactly from index.html) ─────────────────────
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const ANCHOR_DATE = Date.UTC(2026, 0, 1);
+  const SHIFT_PATTERN = ["A","A","B","B","C","C"];
+  const SHIFT_COLORS = {
+    A: { color:"#FF3B30", bg:"rgba(255,59,48,0.15)", border:"rgba(255,59,48,0.35)" },
+    B: { color:"#4A90D9", bg:"rgba(74,144,217,0.15)", border:"rgba(74,144,217,0.35)" },
+    C: { color:"#34C759", bg:"rgba(52,199,89,0.15)", border:"rgba(52,199,89,0.35)" }
+  };
+  function getShift(year, month, day) {
+    const utcDay = Date.UTC(year, month, day);
+    const diff = Math.floor((utcDay - ANCHOR_DATE) / 86400000);
+    return SHIFT_PATTERN[(diff % 6 + 6) % 6];
+  }
   function monthKey(year, month) { return year + "_" + month; }
   function daysInMonth(year, month) { return new Date(year, month + 1, 0).getDate(); }
   function firstWeekday(year, month) { return new Date(year, month, 1).getDay(); }
 
-  // ── Embedded fallback roster (used only if crew_defaults.json fails to load —
-  // graceful degradation so a missing data file degrades, not breaks) ─────────
+  // ── Fallback roster (used only if crew_defaults.json fails to load) ──────────
   const FALLBACK_ROSTER = [
     { id:1, name:"Sanchez",   role:"RPIC", color:"#4A90D9", initials:"AS", part107:"2026-11-01", reserve:false },
     { id:3, name:"Bauchman",  role:"RPIC", color:"#E67E22", initials:"RB", part107:"2027-05-06", reserve:false },
@@ -142,34 +187,285 @@
     { id:6, name:"Rait",      role:"RPIC", color:"#8B4513", initials:"CR", part107:"2027-05-31", reserve:true  }
   ];
 
-  // ── Theme ───────────────────────────────────────────────────────────────────
+  // ── Theme ────────────────────────────────────────────────────────────────────
   const C = {
     bg:"#0D1117", panel:"#161B22", panel2:"#1C2230", border:"#30363D",
     text:"#E6EDF3", dim:"#8B949E", accent:"#FF6B35",
     green:"#34C759", amber:"#FFC107", red:"#FF3B30"
   };
 
-  function App() {
-    const [defaults, setDefaults]       = useState(null);   // roster from crew_defaults.json
-    const [dataSource, setDataSource]   = useState("loading");
-    const [crew, setCrew]               = useState([]);     // merged: defaults + dev availMonths
-    const [crewLoaded, setCrewLoaded]   = useState(false);  // has the dev/crew doc resolved at least once
-    const [locks, setLocks]             = useState({});     // firehawk_dev/availability_locks
-    const [sync, setSync]               = useState("connecting");
-    const [selId, setSelId]             = useState(null);
-    const now = new Date();
-    const [vYear, setVYear]             = useState(now.getFullYear());
-    const [vMonth, setVMonth]           = useState(now.getMonth());
-    const [days, setDays]               = useState(new Set());   // selected (available) days for current member+month
-    const [dirty, setDirty]             = useState(false);
-    const [busy, setBusy]               = useState(false);
-    const [toast, setToast]             = useState("");
-    const [lastErr, setLastErr]         = useState("");
+  // ── Shared crew write (preserves every field — no field-drop) ────────────────
+  function writeCrewDoc(crewArr) {
+    return fsSet(DEV_COL, "crew", {
+      members: crewArr.map(c => ({
+        id: c.id, name: c.name, role: c.role, color: c.color,
+        initials: c.initials, part107: c.part107 == null ? null : c.part107,
+        reserve: !!c.reserve, availMonths: c.availMonths || {}
+      }))
+    });
+  }
 
+  function emptyDay() { return { rpic:null, vo:null, vo2:null, additional:[], oos:[], confirmed:false }; }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // AVAILABILITY VIEW  (increment 1 — staff calendar picker)
+  // ════════════════════════════════════════════════════════════════════════════
+  function AvailabilityView(props) {
+    const { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr } = props;
+    const [selId, setSelId] = useState(null);
+    const [days, setDays]   = useState(new Set());
+    const [dirty, setDirty] = useState(false);
+    const [busy, setBusy]   = useState(false);
     const crewRef = useRef(crew); crewRef.current = crew;
+
+    useEffect(() => { if (selId === null && crew.length) setSelId(crew[0].id); }, [crew, selId]);
+    useEffect(() => {
+      const m = crewRef.current.find(c => c.id === selId);
+      const k = monthKey(vYear, vMonth);
+      const stored = (m && m.availMonths && m.availMonths[k] && m.availMonths[k].days) || [];
+      setDays(new Set(stored)); setDirty(false);
+    }, [selId, vYear, vMonth]);
+
+    const k        = monthKey(vYear, vMonth);
+    const member   = crew.find(c => c.id === selId) || null;
+    const monthRec = (member && member.availMonths && member.availMonths[k]) || null;
+    const locked   = !!(locks[k] && locks[k].locked);
+
+    const toggleDay = (d) => { if (locked) return; setDays(p => { const n = new Set(p); n.has(d) ? n.delete(d) : n.add(d); return n; }); setDirty(true); };
+    const clearDays = () => { if (locked) return; setDays(new Set()); setDirty(true); };
+
+    const save = async () => {
+      if (!member || locked) return;
+      setBusy(true);
+      const rec = { days: [...days].sort((a,b)=>a-b), lastEditedBy: member.name + " (self)", lastEditedAt: new Date().toISOString(), editedByManager: false };
+      const res = await saveMemberMonth(selId, k, rec);
+      setBusy(false);
+      if (res.ok) { setDirty(false); setLastErr(""); flash("Saved to firehawk_dev"); }
+      else { setLastErr("Save failed (" + res.status + "): " + res.detail); flash("Not saved — see error below"); }
+    };
+
+    const lead = firstWeekday(vYear, vMonth), dim = daysInMonth(vYear, vMonth);
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push(h("div", { key: "b" + i }));
+    for (let d = 1; d <= dim; d++) {
+      const on = days.has(d);
+      cells.push(h("button", {
+        key: "d" + d, onClick: () => toggleDay(d), disabled: locked,
+        style: { aspectRatio:"1 / 1", borderRadius:8, border:"1px solid "+(on?C.accent:C.border), background:on?"rgba(255,107,53,0.18)":C.panel2, color:on?C.accent:C.dim, fontSize:15, fontWeight:on?500:400, opacity:locked?0.45:1, display:"flex", alignItems:"center", justifyContent:"center" }
+      }, d));
+    }
+
+    return h("div", { style: { background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14 } },
+      h("select", {
+        value: selId == null ? "" : selId, onChange: e => setSelId(parseInt(e.target.value)),
+        style: { width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, marginBottom:12 }
+      }, (crew.length ? crew : []).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + c.role))),
+
+      locked ? h("div", { style:{ textAlign:"center", fontSize:11, color:C.amber, letterSpacing:1, marginBottom:8 } },
+        "🔒 LOCKED BY UAS MANAGER — READ ONLY") : null,
+
+      h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:6 } },
+        DOW.map(d => h("div", { key:d, style:{ textAlign:"center", fontSize:10, color:C.dim, letterSpacing:1 } }, d))),
+      h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 } }, cells),
+
+      h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:14 } },
+        h("div", { style:{ fontSize:12, color:C.dim } },
+          days.size === 0 ? "Not available this month" : days.size + (days.size === 1 ? " day available" : " days available"),
+          dirty ? h("span", { style:{ color:C.accent } }, "  • unsaved") : null),
+        h("div", { style:{ display:"flex", gap:8 } },
+          h("button", { onClick: clearDays, disabled: locked || busy, style: actionBtn("clear", locked || busy) }, "Clear"),
+          h("button", { onClick: save, disabled: locked || busy || !dirty, style: actionBtn("save", locked || busy || !dirty) }, busy ? "…" : "Save"))),
+
+      monthRec && monthRec.lastEditedBy ? h("div", { style:{ fontSize:10.5, color:C.dim, marginTop:8, borderTop:"1px solid "+C.border, paddingTop:8 } },
+        "Last edited by " + monthRec.lastEditedBy + " · " + new Date(monthRec.lastEditedAt).toLocaleString()) : null
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // SCHEDULE VIEW  (increment 2 — manager grid + intra-day OOS + auto-save)
+  // ════════════════════════════════════════════════════════════════════════════
+  function ScheduleView(props) {
+    const { crew, vYear, vMonth, flash, setLastErr } = props;
+    const [monthDays, setMonthDays] = useState({});
+    const [loaded, setLoaded]       = useState(false);
+    const [selDay, setSelDay]       = useState(null);
+    const [saving, setSaving]       = useState(false);
+    const [savedAt, setSavedAt]     = useState(0);
+    const daysRef  = useRef(monthDays); daysRef.current = monthDays;
+    const saveTimer = useRef(null);
+
+    // Load this month's schedule once per month (manager is the single editor;
+    // a one-time read + auto-save avoids a poll clobbering an in-progress edit).
+    useEffect(() => {
+      let alive = true; setLoaded(false);
+      fsGetPath(DEV_COL + "/schedule_" + vYear + "_" + vMonth).then(r => {
+        if (!alive) return;
+        setMonthDays((r && r.days) ? r.days : {});
+        setLoaded(true);
+      });
+      return () => { alive = false; };
+    }, [vYear, vMonth]);
+
+    const scheduleSave = (daysObj) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      setSaving(true);
+      saveTimer.current = setTimeout(async () => {
+        const res = await fsSetPath(DEV_COL + "/schedule_" + vYear + "_" + vMonth, { days: daysObj });
+        setSaving(false);
+        if (res.ok) { setSavedAt(Date.now()); setLastErr(""); }
+        else { setLastErr("Schedule save failed (" + res.status + "): " + res.detail); }
+      }, 600);
+    };
+
+    const editDay = (d, patch) => {
+      const prev = daysRef.current;
+      const cur = prev[d] || emptyDay();
+      const nextDay = { ...cur, ...patch, lastEditedBy: "Sanchez", lastEditedAt: new Date().toISOString() };
+      const next = { ...prev, [d]: nextDay };
+      setMonthDays(next);
+      scheduleSave(next);
+    };
+
+    const rpicCrew = crew.filter(c => c.role === "RPIC");
+    const crewById = (id) => crew.find(c => c.id === id) || null;
+    const initialsFor = (id) => { const m = crewById(id); return m ? m.initials : "—"; };
+
+    // Calendar grid
+    const lead = firstWeekday(vYear, vMonth), dim = daysInMonth(vYear, vMonth);
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push(h("div", { key:"b"+i }));
+    for (let d = 1; d <= dim; d++) {
+      const day = monthDays[d] || null;
+      const sh = getShift(vYear, vMonth, d);
+      const sc = SHIFT_COLORS[sh];
+      const hasOOS = day && day.oos && day.oos.length;
+      const conf = day && day.confirmed;
+      cells.push(h("button", {
+        key:"d"+d, onClick: () => setSelDay(d),
+        style: { minHeight:58, borderRadius:8, border:"1px solid "+sc.border, background:sc.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1, position:"relative" }
+      },
+        h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center" } },
+          h("span", { style:{ fontSize:11, color:C.dim } }, d),
+          h("span", { style:{ fontSize:9, fontWeight:500, color:sc.color } }, sh)),
+        h("div", { style:{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:500, color: day && day.rpic != null ? C.text : C.dim } },
+          day && day.rpic != null ? initialsFor(day.rpic) : "·"),
+        h("div", { style:{ display:"flex", justifyContent:"center", gap:4, height:10, fontSize:9 } },
+          hasOOS ? h("span", { style:{ color:C.amber } }, "◷") : null,
+          conf ? h("span", { style:{ color:C.green } }, "✓") : null)
+      ));
+    }
+
+    const day  = selDay != null ? (monthDays[selDay] || emptyDay()) : null;
+    const unit = day ? unitFor(day.rpic) : null;
+    const rpicMember = day ? crewById(day.rpic) : null;
+    const certWarn = rpicMember ? certStatus(rpicMember.part107) : null;
+
+    // OOS editing helpers
+    const setOOS = (newOOS) => editDay(selDay, { oos: newOOS });
+    const addOOS = () => setOOS([...(day.oos || []), { unit: unit || UNIT_PRIMARY, from:"12:00", to:"13:00", reason:"" }]);
+    const editOOS = (i, patch) => setOOS((day.oos || []).map((w, idx) => idx === i ? { ...w, ...patch } : w));
+    const removeOOS = (i) => setOOS((day.oos || []).filter((_, idx) => idx !== i));
+
+    const slotSelect = (label, field, options) => h("div", { style:{ marginBottom:10 } },
+      h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:4 } }, label),
+      h("select", {
+        value: day[field] == null ? "" : day[field],
+        onChange: e => editDay(selDay, { [field]: e.target.value === "" ? null : parseInt(e.target.value) }),
+        style: { width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13 }
+      },
+        h("option", { value:"" }, "— Unassigned —"),
+        options.map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")"))
+      ));
+
+    return h("div", null,
+      h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14 } },
+        h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 } },
+          h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, "TAP A DAY TO ASSIGN CREW"),
+          h("div", { style:{ fontSize:10, color: saving ? C.amber : C.dim } }, saving ? "saving…" : (savedAt ? "auto-saved" : (loaded ? "" : "loading…")))),
+        h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:6 } },
+          DOW.map(d => h("div", { key:d, style:{ textAlign:"center", fontSize:10, color:C.dim, letterSpacing:1 } }, d))),
+        h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 } }, cells),
+        h("div", { style:{ display:"flex", gap:14, marginTop:12, fontSize:10, color:C.dim, flexWrap:"wrap" } },
+          h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), " / ", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), " / ", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " shift"),
+          h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS window"),
+          h("span", null, h("span", { style:{ color:C.green } }, "✓"), " finalized"))
+      ),
+
+      // ── Day editor sheet ──
+      selDay != null ? h("div", {
+        onClick: () => setSelDay(null),
+        style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:50 }
+      },
+        h("div", {
+          onClick: e => e.stopPropagation(),
+          style: { width:"100%", maxWidth:520, maxHeight:"88vh", overflowY:"auto", background:C.panel, borderTop:"2px solid "+C.accent, borderRadius:"16px 16px 0 0", padding:16, minHeight:0 }
+        },
+          h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 } },
+            h("div", null,
+              h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:24, letterSpacing:1, lineHeight:1 } },
+                DOW[new Date(vYear, vMonth, selDay).getDay()] + " " + MONTHS[vMonth] + " " + selDay),
+              h("div", { style:{ fontSize:11, color: SHIFT_COLORS[getShift(vYear,vMonth,selDay)].color, marginTop:3 } },
+                "Shift " + getShift(vYear, vMonth, selDay) + (unit ? " · " + unit : ""))),
+            h("button", { onClick: () => setSelDay(null), style:{ background:"none", border:"none", color:C.dim, fontSize:22, lineHeight:1 } }, "✕")),
+
+          slotSelect("RPIC", "rpic", rpicCrew),
+          rpicMember && (certWarn === "expired" || certWarn === "none") ? h("div", { style:{ fontSize:10.5, color:C.amber, marginTop:-6, marginBottom:10 } },
+            "⚠ " + rpicMember.name + (certWarn === "none" ? " has no Part 107 on record" : "'s Part 107 is expired")) : null,
+          slotSelect("VISUAL OBSERVER", "vo", crew),
+          slotSelect("VO 2", "vo2", crew),
+
+          // OOS windows
+          h("div", { style:{ marginTop:6, borderTop:"1px solid "+C.border, paddingTop:12 } },
+            h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 } },
+              h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, "OUT-OF-SERVICE WINDOWS (INTRA-DAY)"),
+              h("button", { onClick: addOOS, style:{ background:"rgba(255,107,53,0.16)", border:"1px solid "+C.accent, color:C.accent, borderRadius:7, padding:"4px 10px", fontSize:11 } }, "+ Add")),
+            (day.oos || []).length === 0 ? h("div", { style:{ fontSize:11, color:C.dim } }, "None — unit available all day (if crewed).") : null,
+            (day.oos || []).map((w, i) => h("div", { key:i, style:{ background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:10, marginBottom:8 } },
+              h("div", { style:{ display:"flex", gap:8, alignItems:"center", marginBottom:8 } },
+                h("select", { value:w.unit, onChange:e => editOOS(i, { unit:e.target.value }), style:{ background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:6, padding:"6px 8px", fontSize:12 } },
+                  h("option", { value:UNIT_LEAD }, UNIT_LEAD), h("option", { value:UNIT_PRIMARY }, UNIT_PRIMARY)),
+                h("input", { type:"time", value:w.from, onChange:e => editOOS(i, { from:e.target.value }), style:timeInput() }),
+                h("span", { style:{ color:C.dim, fontSize:12 } }, "→"),
+                h("input", { type:"time", value:w.to, onChange:e => editOOS(i, { to:e.target.value }), style:timeInput() }),
+                h("button", { onClick:() => removeOOS(i), style:{ marginLeft:"auto", background:"none", border:"none", color:C.red, fontSize:16 } }, "✕")),
+              h("input", { type:"text", value:w.reason, placeholder:"Reason (training, appointment…)", onChange:e => editOOS(i, { reason:e.target.value }),
+                style:{ width:"100%", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:6, padding:"7px 9px", fontSize:12 } })
+            ))),
+
+          // Finalized toggle
+          h("div", { style:{ marginTop:12, borderTop:"1px solid "+C.border, paddingTop:12, display:"flex", justifyContent:"space-between", alignItems:"center" } },
+            h("div", null,
+              h("div", { style:{ fontSize:13, color:C.text } }, "Mark day finalized"),
+              h("div", { style:{ fontSize:10, color:C.dim, marginTop:2 } }, "Shows a ✓ on the board for the chiefs")),
+            h("button", { onClick:() => editDay(selDay, { confirmed: !day.confirmed }),
+              style:{ width:54, height:30, borderRadius:15, border:"1px solid "+(day.confirmed?C.green:C.border), background: day.confirmed?"rgba(52,199,89,0.2)":C.panel2, color: day.confirmed?C.green:C.dim, fontSize:11 } },
+              day.confirmed ? "ON" : "OFF")),
+
+          h("div", { style:{ fontSize:10, color:C.dim, marginTop:14, textAlign:"center" } }, "Changes auto-save · no publish needed")
+        )
+      ) : null
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // APP  (shared state + tabs + month nav + dev controls)
+  // ════════════════════════════════════════════════════════════════════════════
+  function App() {
+    const [defaults, setDefaults]   = useState(null);
+    const [dataSource, setDataSource] = useState("loading");
+    const [crew, setCrew]           = useState([]);
+    const [crewLoaded, setCrewLoaded] = useState(false);
+    const [locks, setLocks]         = useState({});
+    const [sync, setSync]           = useState("connecting");
+    const [tab, setTab]             = useState("avail");
+    const now = new Date();
+    const [vYear, setVYear]         = useState(now.getFullYear());
+    const [vMonth, setVMonth]       = useState(now.getMonth());
+    const [toast, setToast]         = useState("");
+    const [lastErr, setLastErr]     = useState("");
+    const [busy, setBusy]           = useState(false);
     const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
 
-    // Load the roster data file.
     useEffect(() => {
       fetch("crew_defaults.json")
         .then(r => { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
@@ -177,51 +473,19 @@
         .catch(() => { setDefaults(FALLBACK_ROSTER); setDataSource("fallback"); });
     }, []);
 
-    // Subscribe to dev crew + dev locks.
     useEffect(() => {
       if (!defaults) return;
       const unsubCrew = fsListen(DEV_COL, "crew", data => {
         const members = (data && Array.isArray(data.members)) ? data.members : [];
-        const merged = defaults.map(d => {
+        setCrew(defaults.map(d => {
           const m = members.find(x => x.id === d.id);
           return { ...d, availMonths: (m && typeof m.availMonths === "object" && m.availMonths) || {} };
-        });
-        setCrew(merged);
-        setCrewLoaded(true);
-        setSync("synced");
+        }));
+        setCrewLoaded(true); setSync("synced");
       });
-      const unsubLocks = fsListen(DEV_COL, "availability_locks", data => {
-        setLocks((data && typeof data === "object") ? data : {});
-      });
+      const unsubLocks = fsListen(DEV_COL, "availability_locks", data => { setLocks((data && typeof data === "object") ? data : {}); });
       return () => { unsubCrew(); unsubLocks(); };
     }, [defaults]);
-
-    // Default the selected member once crew is available.
-    useEffect(() => {
-      if (selId === null && crew.length) setSelId(crew[0].id);
-    }, [crew, selId]);
-
-    // Load selected days from stored data when member / month changes (reads a ref
-    // so a background poll doesn't clobber an in-progress edit).
-    useEffect(() => {
-      const m = crewRef.current.find(c => c.id === selId);
-      const key = monthKey(vYear, vMonth);
-      const stored = (m && m.availMonths && m.availMonths[key] && m.availMonths[key].days) || [];
-      setDays(new Set(stored));
-      setDirty(false);
-    }, [selId, vYear, vMonth]);
-
-    const key       = monthKey(vYear, vMonth);
-    const member    = crew.find(c => c.id === selId) || null;
-    const monthRec  = (member && member.availMonths && member.availMonths[key]) || null;
-    const locked    = !!(locks[key] && locks[key].locked);
-
-    const toggleDay = (d) => {
-      if (locked) return;
-      setDays(prev => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; });
-      setDirty(true);
-    };
-    const clearDays = () => { if (locked) return; setDays(new Set()); setDirty(true); };
 
     const navMonth = (delta) => {
       let m = vMonth + delta, y = vYear;
@@ -229,197 +493,102 @@
       setVMonth(m); setVYear(y);
     };
 
-    const writeCrew = async (updated) => {
-      return fsSet(DEV_COL, "crew", {
-        members: updated.map(c => ({
-          id: c.id, name: c.name, role: c.role, color: c.color,
-          initials: c.initials, part107: c.part107 == null ? null : c.part107,
-          reserve: !!c.reserve, availMonths: c.availMonths || {}
-        }))
-      });
+    const saveMemberMonth = async (memberId, mk, rec) => {
+      const updated = crew.map(c => c.id === memberId ? { ...c, availMonths: { ...c.availMonths, [mk]: rec } } : c);
+      const res = await writeCrewDoc(updated);
+      if (res.ok) { setCrew(updated); }
+      return res;
     };
 
-    const save = async () => {
-      if (!member || locked) return;
-      setBusy(true);
-      const rec = {
-        days: [...days].sort((a, b) => a - b),
-        lastEditedBy: member.name + " (self)",
-        lastEditedAt: new Date().toISOString(),
-        editedByManager: false
-      };
-      const updated = crew.map(c => c.id === selId
-        ? { ...c, availMonths: { ...c.availMonths, [key]: rec } }
-        : c);
-      const res = await writeCrew(updated);   // write first — only reflect locally once Firestore confirms
-      setBusy(false);
-      if (res.ok) {
-        setCrew(updated);
-        setDirty(false);
-        setLastErr("");
-        flash("Saved to firehawk_dev");
-      } else {
-        setLastErr("Save failed (" + res.status + "): " + res.detail);
-        flash("Not saved — see error below");
-      }
-    };
+    const k = monthKey(vYear, vMonth);
+    const locked = !!(locks[k] && locks[k].locked);
 
-    // Seed / reset the dev roster (writes default roster with empty availability).
     const seed = async () => {
       if (crewLoaded && crew.some(c => c.availMonths && Object.keys(c.availMonths).length)
           && !window.confirm("Re-seed the SANDBOX roster? This wipes availability entered in firehawk_dev (live data is untouched).")) return;
       setBusy(true);
       const fresh = (defaults || FALLBACK_ROSTER).map(d => ({ ...d, availMonths: {} }));
-      const res = await writeCrew(fresh);
+      const res = await writeCrewDoc(fresh);
       setBusy(false);
       if (res.ok) { setLastErr(""); flash("Seeded firehawk_dev/crew"); }
       else { setLastErr("Seed failed (" + res.status + "): " + res.detail); flash("Seed failed — see error below"); }
     };
 
-    // Manager (dev) lock toggle — locking is a manager action; included here so
-    // lock behavior is testable end-to-end this increment.
     const toggleLock = async () => {
       setBusy(true);
       const next = { ...locks };
-      if (locked) { next[key] = { locked: false, lockedBy: "Sanchez", lockedAt: new Date().toISOString() }; }
-      else { next[key] = { locked: true, lockedBy: "Sanchez", lockedAt: new Date().toISOString() }; }
+      next[k] = { locked: !locked, lockedBy: "UAS Manager", lockedAt: new Date().toISOString() };
       const res = await fsSet(DEV_COL, "availability_locks", next);
       setBusy(false);
       if (res.ok) { setLocks(next); setLastErr(""); flash(locked ? "Unlocked " + MONTHS[vMonth] : "Locked " + MONTHS[vMonth]); }
       else { setLastErr("Lock write failed (" + res.status + "): " + res.detail); flash("Lock failed — see error below"); }
     };
 
-    // ── Render ────────────────────────────────────────────────────────────────
     const syncColor = sync === "synced" ? C.green : C.amber;
-    const wrap = { maxWidth: 520, margin: "0 auto", padding: "0 14px 40px" };
+    const wrap = { maxWidth: 520, margin: "0 auto", padding: "14px 14px 44px" };
+    const tabBtn = (id, label) => h("button", { onClick: () => setTab(id),
+      style: { flex:1, padding:"10px 0", fontSize:12, letterSpacing:1, borderRadius:9, border:"1px solid "+(tab===id?C.accent:C.border), background: tab===id?"rgba(255,107,53,0.16)":C.panel, color: tab===id?C.accent:C.dim } }, label);
 
-    // Calendar cells: leading blanks + day numbers.
-    const lead = firstWeekday(vYear, vMonth);
-    const dim  = daysInMonth(vYear, vMonth);
-    const cells = [];
-    for (let i = 0; i < lead; i++) cells.push(h("div", { key: "b" + i }));
-    for (let d = 1; d <= dim; d++) {
-      const on = days.has(d);
-      cells.push(h("button", {
-        key: "d" + d,
-        onClick: () => toggleDay(d),
-        disabled: locked,
-        style: {
-          aspectRatio: "1 / 1", borderRadius: 8,
-          border: "1px solid " + (on ? C.accent : C.border),
-          background: on ? "rgba(255,107,53,0.18)" : C.panel2,
-          color: on ? C.accent : C.dim,
-          fontSize: 15, fontWeight: on ? 500 : 400,
-          opacity: locked ? 0.45 : 1,
-          display: "flex", alignItems: "center", justifyContent: "center"
-        }
-      }, d));
-    }
-
-    return h("div", { style: { minHeight: "100vh", paddingTop: 14 } },
+    return h("div", { style:{ minHeight:"100vh" } },
       h("div", { style: wrap },
 
         // Header
-        h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } },
+        h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 } },
           h("div", null,
-            h("div", { style: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 30, letterSpacing: 1, lineHeight: 1, color: C.text } }, "FIREHAWK OPS"),
-            h("div", { style: { fontSize: 11, color: C.accent, letterSpacing: 2, marginTop: 2 } }, "DEV SANDBOX · AVAILABILITY")
-          ),
-          h("div", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.dim } },
-            h("span", { style: { width: 8, height: 8, borderRadius: "50%", background: syncColor, display: "inline-block" } }),
-            sync === "synced" ? "SYNCED" : "CONNECTING"
-          )
-        ),
+            h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:30, letterSpacing:1, lineHeight:1, color:C.text } }, "FIREHAWK OPS"),
+            h("div", { style:{ fontSize:11, color:C.accent, letterSpacing:2, marginTop:2 } }, "DEV SANDBOX")),
+          h("div", { style:{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:C.dim } },
+            h("span", { style:{ width:8, height:8, borderRadius:"50%", background:syncColor, display:"inline-block" } }),
+            sync === "synced" ? "SYNCED" : "CONNECTING")),
 
         // Sandbox banner
-        h("div", { style: { background: "rgba(255,193,7,0.10)", border: "1px solid rgba(255,193,7,0.35)", borderRadius: 8, padding: "8px 11px", fontSize: 11, color: C.amber, marginBottom: 14, lineHeight: 1.5 } },
+        h("div", { style:{ background:"rgba(255,193,7,0.10)", border:"1px solid rgba(255,193,7,0.35)", borderRadius:8, padding:"8px 11px", fontSize:11, color:C.amber, marginBottom:14, lineHeight:1.5 } },
           "Reads / writes ", h("b", null, DEV_COL), " only — the live site is untouched. Data file: ",
-          h("b", null, dataSource === "json" ? "crew_defaults.json" : dataSource === "fallback" ? "embedded fallback (json not found)" : "loading…")
-        ),
+          h("b", null, dataSource === "json" ? "crew_defaults.json" : dataSource === "fallback" ? "embedded fallback (json not found)" : "loading…")),
 
-        // Controls card
-        h("div", { style: { background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: 14, marginBottom: 14 } },
+        // Tabs
+        h("div", { style:{ display:"flex", gap:8, marginBottom:12 } }, tabBtn("avail", "AVAILABILITY"), tabBtn("sched", "SCHEDULE")),
 
-          // Member + month row
-          h("div", { style: { display: "flex", gap: 8, marginBottom: 12 } },
-            h("select", {
-              value: selId == null ? "" : selId,
-              onChange: e => setSelId(parseInt(e.target.value)),
-              style: { flex: 1, background: C.panel2, color: C.text, border: "1px solid " + C.border, borderRadius: 8, padding: "9px 10px", fontSize: 13 }
-            }, (crew.length ? crew : []).map(c => h("option", { key: c.id, value: c.id }, c.name + " · " + c.role)))
-          ),
+        // Shared month nav
+        h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
+          h("button", { onClick: () => navMonth(-1), style: navBtn() }, "‹"),
+          h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1 } }, MONTHS[vMonth] + " " + vYear),
+          h("button", { onClick: () => navMonth(1), style: navBtn() }, "›")),
 
-          // Month navigator
-          h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } },
-            h("button", { onClick: () => navMonth(-1), style: navBtn() }, "‹"),
-            h("div", { style: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 1 } }, MONTHS[vMonth] + " " + vYear),
-            h("button", { onClick: () => navMonth(1), style: navBtn() }, "›")
-          ),
+        // Active view
+        tab === "avail"
+          ? h(AvailabilityView, { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr })
+          : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr }),
 
-          // Locked badge
-          locked ? h("div", { style: { textAlign: "center", fontSize: 11, color: C.amber, letterSpacing: 1, marginBottom: 8 } },
-            "🔒 LOCKED BY " + (locks[key].lockedBy || "MANAGER").toUpperCase() + " — READ ONLY") : null,
-
-          // Day-of-week header
-          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6, marginBottom: 6 } },
-            DOW.map(d => h("div", { key: d, style: { textAlign: "center", fontSize: 10, color: C.dim, letterSpacing: 1 } }, d))
-          ),
-
-          // Calendar grid
-          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 } }, cells),
-
-          // Count + actions
-          h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 } },
-            h("div", { style: { fontSize: 12, color: C.dim } },
-              days.size === 0 ? "Not available this month" : days.size + (days.size === 1 ? " day available" : " days available"),
-              dirty ? h("span", { style: { color: C.accent } }, "  • unsaved") : null
-            ),
-            h("div", { style: { display: "flex", gap: 8 } },
-              h("button", { onClick: clearDays, disabled: locked || busy, style: actionBtn("clear", locked || busy) }, "Clear"),
-              h("button", { onClick: save, disabled: locked || busy || !dirty, style: actionBtn("save", locked || busy || !dirty) }, busy ? "…" : "Save")
-            )
-          ),
-
-          // Last-edited line
-          monthRec && monthRec.lastEditedBy ? h("div", { style: { fontSize: 10.5, color: C.dim, marginTop: 8, borderTop: "1px solid " + C.border, paddingTop: 8 } },
-            "Last edited by " + monthRec.lastEditedBy + " · " + new Date(monthRec.lastEditedAt).toLocaleString()
-          ) : null
-        ),
-
-        // Manager / dev controls
-        h("div", { style: { background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: 12, marginBottom: 10 } },
-          h("div", { style: { fontSize: 10, color: C.dim, letterSpacing: 1, marginBottom: 8 } }, "MANAGER / DEV CONTROLS"),
-          h("div", { style: { display: "flex", gap: 8 } },
+        // Dev controls
+        h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
+          h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:8 } }, "MANAGER / DEV CONTROLS"),
+          h("div", { style:{ display:"flex", gap:8 } },
             h("button", { onClick: seed, disabled: busy, style: ghostBtn(busy) }, "Seed / reset roster"),
-            h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] : "Lock " + MONTHS[vMonth])
-          )
-        ),
+            h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] + " avail" : "Lock " + MONTHS[vMonth] + " avail"))),
 
-        // Error line (shows the real Firestore error on-screen instead of the console)
-        lastErr ? h("div", { style: { background: "rgba(255,59,48,0.12)", border: "1px solid " + C.red, borderRadius: 8, padding: "9px 11px", fontSize: 11, color: C.red, marginBottom: 10, lineHeight: 1.5, wordBreak: "break-word" } }, "⚠ " + lastErr) : null,
+        // Error line
+        lastErr ? h("div", { style:{ background:"rgba(255,59,48,0.12)", border:"1px solid "+C.red, borderRadius:8, padding:"9px 11px", fontSize:11, color:C.red, marginBottom:10, lineHeight:1.5, wordBreak:"break-word" } }, "⚠ " + lastErr) : null,
 
         // Footer
-        h("div", { style: { fontSize: 10, color: C.dim, textAlign: "center", marginTop: 6, lineHeight: 1.6 } },
-          "increment 1 — staff availability picker · collection ", h("b", null, DEV_COL)
-        ),
+        h("div", { style:{ fontSize:10, color:C.dim, textAlign:"center", marginTop:6, lineHeight:1.6 } },
+          "increment 2 — availability + schedule · collection ", h("b", null, DEV_COL)),
 
         // Toast
-        toast ? h("div", { style: { position: "fixed", left: "50%", bottom: 24, transform: "translateX(-50%)", background: C.panel2, border: "1px solid " + C.accent, color: C.text, padding: "9px 16px", borderRadius: 20, fontSize: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.5)" } }, toast) : null
+        toast ? h("div", { style:{ position:"fixed", left:"50%", bottom:24, transform:"translateX(-50%)", background:C.panel2, border:"1px solid "+C.accent, color:C.text, padding:"9px 16px", borderRadius:20, fontSize:12, boxShadow:"0 6px 24px rgba(0,0,0,0.5)", zIndex:60 } }, toast) : null
       )
     );
   }
 
-  function navBtn() {
-    return { width: 40, height: 40, borderRadius: 8, background: C.panel2, border: "1px solid " + C.border, color: C.text, fontSize: 20, lineHeight: 1 };
-  }
+  // ── shared button styles ──
+  function navBtn() { return { width:40, height:40, borderRadius:8, background:C.panel2, border:"1px solid "+C.border, color:C.text, fontSize:20, lineHeight:1 }; }
   function actionBtn(kind, disabled) {
-    const base = { borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 500, opacity: disabled ? 0.4 : 1, border: "1px solid " };
-    if (kind === "save") return { ...base, borderColor: C.accent, background: "rgba(255,107,53,0.16)", color: C.accent };
-    return { ...base, borderColor: C.red, background: "rgba(255,59,48,0.12)", color: C.red };
+    const base = { borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:500, opacity:disabled?0.4:1, border:"1px solid " };
+    if (kind === "save") return { ...base, borderColor:C.accent, background:"rgba(255,107,53,0.16)", color:C.accent };
+    return { ...base, borderColor:C.red, background:"rgba(255,59,48,0.12)", color:C.red };
   }
-  function ghostBtn(disabled) {
-    return { flex: 1, borderRadius: 8, padding: "9px 10px", fontSize: 12, background: C.panel2, border: "1px solid " + C.border, color: C.dim, opacity: disabled ? 0.5 : 1 };
-  }
+  function ghostBtn(disabled) { return { flex:1, borderRadius:8, padding:"9px 10px", fontSize:12, background:C.panel2, border:"1px solid "+C.border, color:C.dim, opacity:disabled?0.5:1 }; }
+  function timeInput() { return { background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:6, padding:"6px 8px", fontSize:12, colorScheme:"dark" }; }
 
   ReactDOM.createRoot(document.getElementById("root")).render(h(App));
   </script>
