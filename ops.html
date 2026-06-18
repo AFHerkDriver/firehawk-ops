@@ -373,11 +373,17 @@
       const du = dd ? decodeDay(dd, crew) : null;
       const a121 = !!(du && du.u121.active);
       const a124 = !!(du && du.u124.rpic != null);
+      const manned = a121 || a124;
+      const conf = !!(dd && dd.confirmed);
       const hasOOS = dd && dd.oos && dd.oos.length;
-      const conf = dd && dd.confirmed;
+      // Coverage coloring: green = manned + confirmed, amber = manned but unconfirmed, red = no coverage
+      const cov = !manned
+        ? { bg:"rgba(255,59,48,0.13)",  border:"rgba(255,59,48,0.42)" }
+        : (conf ? { bg:"rgba(52,199,89,0.13)", border:"rgba(52,199,89,0.42)" }
+                : { bg:"rgba(255,193,7,0.10)", border:"rgba(255,193,7,0.34)" });
       cells.push(h("button", {
         key:"d"+d, onClick: () => setSelDay(d),
-        style: { minHeight:62, borderRadius:8, border:"1px solid "+sc.border, background:sc.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1 }
+        style: { minHeight:62, borderRadius:8, border:"1px solid "+cov.border, background:cov.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1 }
       },
         h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center" } },
           h("span", { style:{ fontSize:11, color:C.dim } }, d),
@@ -385,10 +391,9 @@
         h("div", { style:{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1 } },
           a121 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:"#4A90D9", lineHeight:1.15 } }, "121·AS") : null,
           a124 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:C.accent, lineHeight:1.15 } }, "124·" + initialsFor(du.u124.rpic)) : null,
-          (!a121 && !a124) ? h("span", { style:{ fontSize:13, color:C.dim } }, "·") : null),
+          !manned ? h("span", { style:{ fontSize:8.5, color:C.red, letterSpacing:0.5, opacity:0.85 } }, "NO COVERAGE") : null),
         h("div", { style:{ display:"flex", justifyContent:"center", gap:4, height:10, fontSize:9 } },
-          hasOOS ? h("span", { style:{ color:C.amber } }, "◷") : null,
-          conf ? h("span", { style:{ color:C.green } }, "✓") : null)
+          hasOOS ? h("span", { style:{ color:C.amber } }, "◷") : null)
       ));
     }
 
@@ -497,11 +502,13 @@
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:6 } },
           DOW.map(d => h("div", { key:d, style:{ textAlign:"center", fontSize:10, color:C.dim, letterSpacing:1 } }, d))),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 } }, cells),
-        h("div", { style:{ display:"flex", gap:14, marginTop:12, fontSize:10, color:C.dim, flexWrap:"wrap" } },
-          h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), " / ", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), " / ", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " Shift"),
-          h("span", null, h("span", { style:{ color:"#4A90D9" } }, "121"), " / ", h("span", { style:{ color:C.accent } }, "124"), " Unit"),
-          h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window"),
-          h("span", null, h("span", { style:{ color:C.green } }, "✓"), " Finalized")),
+        h("div", { style:{ display:"flex", gap:13, marginTop:12, fontSize:10, color:C.dim, flexWrap:"wrap" } },
+          h("span", null, h("span", { style:{ color:C.green } }, "■"), " Confirmed"),
+          h("span", null, h("span", { style:{ color:C.amber } }, "■"), " Unconfirmed"),
+          h("span", null, h("span", { style:{ color:C.red } }, "■"), " No Coverage"),
+          h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), "/", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), "/", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " Shift"),
+          h("span", null, h("span", { style:{ color:"#4A90D9" } }, "121"), "/", h("span", { style:{ color:C.accent } }, "124"), " Unit"),
+          h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window")),
         h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, paddingTop:12, borderTop:"1px solid "+C.border } },
           h("div", { style:{ fontSize:10.5, color:C.dim } }, crewedDays.length === 0 ? "No crewed days yet" : (finalizedCount + " of " + crewedDays.length + " crewed days finalized")),
           h("button", { onClick: () => finalizeMonth(!allFinal), disabled: crewedDays.length === 0,
