@@ -205,7 +205,38 @@
     });
   }
 
-  function emptyDay() { return { rpic:null, vo:null, vo2:null, additional:[], oos:[], confirmed:false }; }
+  function emptyDay() { return { rpic:null, vo:null, vo2:null, extra:[], oos:[], confirmed:false }; }
+
+  // Two-unit day model — the stored day keeps the live shape {rpic, vo, vo2, extra}
+  // and units are DERIVED: Sanchez (anywhere on the crew) flies UAV121; any other
+  // RPIC flies UAV124. decodeDay → explicit editor view; encodeDay → stored shape.
+  function decodeDay(day, crew) {
+    const N = (x) => x == null ? null : parseInt(x);
+    const extra = (day.extra || []).map(N).filter(x => x != null);
+    const ids = [N(day.rpic), N(day.vo), N(day.vo2)].concat(extra).filter(x => x != null);
+    const sanchezPresent = ids.indexOf(LEAD_PILOT_ID) !== -1;
+    const isRPIC = (id) => { const m = crew.find(c => c.id === id); return !!(m && m.role === "RPIC"); };
+    let u124rpic = (N(day.rpic) != null && N(day.rpic) !== LEAD_PILOT_ID) ? N(day.rpic) : null;
+    if (u124rpic == null) { const f = extra.find(id => id !== LEAD_PILOT_ID && isRPIC(id)); if (f != null) u124rpic = f; }
+    const both = sanchezPresent && u124rpic != null;
+    const u121vo = sanchezPresent ? (both ? N(day.vo2) : (u124rpic != null ? null : N(day.vo))) : null;
+    const u124vo = u124rpic != null ? N(day.vo) : null;
+    const u124extra = extra.filter(id => id !== LEAD_PILOT_ID && id !== u124rpic);
+    return { u121: { active: sanchezPresent, vo: u121vo }, u124: { rpic: u124rpic, vo: u124vo, extra: u124extra } };
+  }
+  function encodeDay(u121, u124) {
+    let rpic = null, vo = null, vo2 = null, extra = [];
+    if (u124.rpic != null) {
+      rpic = u124.rpic;
+      vo = u124.vo != null ? u124.vo : null;
+      extra = (u124.extra || []).slice();
+      if (u121.active) { extra = [LEAD_PILOT_ID].concat(extra); vo2 = u121.vo != null ? u121.vo : null; }
+    } else if (u121.active) {
+      rpic = LEAD_PILOT_ID;
+      vo = u121.vo != null ? u121.vo : null;
+    }
+    return { rpic: rpic, vo: vo, vo2: vo2, extra: extra };
+  }
 
   // ════════════════════════════════════════════════════════════════════════════
   // AVAILABILITY VIEW  (increment 1 — staff calendar picker)
@@ -320,13 +351,14 @@
     const editDay = (d, patch) => {
       const prev = daysRef.current;
       const cur = prev[d] || emptyDay();
-      const nextDay = { ...cur, ...patch, lastEditedBy: "Sanchez", lastEditedAt: new Date().toISOString() };
+      const nextDay = { ...cur, ...patch, lastEditedBy: "UAS Manager", lastEditedAt: new Date().toISOString() };
       const next = { ...prev, [d]: nextDay };
       setMonthDays(next);
       scheduleSave(next);
     };
 
-    const rpicCrew = crew.filter(c => c.role === "RPIC");
+    const sanchez   = crew.find(c => c.id === LEAD_PILOT_ID) || null;
+    const otherRPIC = crew.filter(c => c.role === "RPIC" && c.id !== LEAD_PILOT_ID);
     const crewById = (id) => crew.find(c => c.id === id) || null;
     const initialsFor = (id) => { const m = crewById(id); return m ? m.initials : "—"; };
 
@@ -335,47 +367,106 @@
     const cells = [];
     for (let i = 0; i < lead; i++) cells.push(h("div", { key:"b"+i }));
     for (let d = 1; d <= dim; d++) {
-      const day = monthDays[d] || null;
+      const dd = monthDays[d] || null;
       const sh = getShift(vYear, vMonth, d);
       const sc = SHIFT_COLORS[sh];
-      const hasOOS = day && day.oos && day.oos.length;
-      const conf = day && day.confirmed;
+      const du = dd ? decodeDay(dd, crew) : null;
+      const a121 = !!(du && du.u121.active);
+      const a124 = !!(du && du.u124.rpic != null);
+      const hasOOS = dd && dd.oos && dd.oos.length;
+      const conf = dd && dd.confirmed;
       cells.push(h("button", {
         key:"d"+d, onClick: () => setSelDay(d),
-        style: { minHeight:58, borderRadius:8, border:"1px solid "+sc.border, background:sc.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1, position:"relative" }
+        style: { minHeight:62, borderRadius:8, border:"1px solid "+sc.border, background:sc.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1 }
       },
         h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center" } },
           h("span", { style:{ fontSize:11, color:C.dim } }, d),
           h("span", { style:{ fontSize:9, fontWeight:500, color:sc.color } }, sh)),
-        h("div", { style:{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:500, color: day && day.rpic != null ? C.text : C.dim } },
-          day && day.rpic != null ? initialsFor(day.rpic) : "·"),
+        h("div", { style:{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1 } },
+          a121 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:"#4A90D9", lineHeight:1.15 } }, "121·AS") : null,
+          a124 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:C.accent, lineHeight:1.15 } }, "124·" + initialsFor(du.u124.rpic)) : null,
+          (!a121 && !a124) ? h("span", { style:{ fontSize:13, color:C.dim } }, "·") : null),
         h("div", { style:{ display:"flex", justifyContent:"center", gap:4, height:10, fontSize:9 } },
           hasOOS ? h("span", { style:{ color:C.amber } }, "◷") : null,
           conf ? h("span", { style:{ color:C.green } }, "✓") : null)
       ));
     }
 
-    const day  = selDay != null ? (monthDays[selDay] || emptyDay()) : null;
-    const unit = day ? unitFor(day.rpic) : null;
-    const rpicMember = day ? crewById(day.rpic) : null;
-    const certWarn = rpicMember ? certStatus(rpicMember.part107) : null;
+    const day = selDay != null ? (monthDays[selDay] || emptyDay()) : null;
+    const dec = day ? decodeDay(day, crew) : null;
+    const u121 = dec ? dec.u121 : null;
+    const u124 = dec ? dec.u124 : null;
+    const applyUnits = (n121, n124) => editDay(selDay, encodeDay(n121, n124));
+
+    const activeUnits = [];
+    if (u121 && u121.active) activeUnits.push(UNIT_LEAD);
+    if (u124 && u124.rpic != null) activeUnits.push(UNIT_PRIMARY);
 
     // OOS editing helpers
     const setOOS = (newOOS) => editDay(selDay, { oos: newOOS });
-    const addOOS = () => setOOS([...(day.oos || []), { unit: unit || UNIT_PRIMARY, from:"12:00", to:"13:00", reason:"" }]);
+    const oosDefaultUnit = activeUnits.length ? activeUnits[0] : UNIT_PRIMARY;
+    const addOOS = () => setOOS([...(day.oos || []), { unit: oosDefaultUnit, from:"12:00", to:"13:00", reason:"" }]);
     const editOOS = (i, patch) => setOOS((day.oos || []).map((w, idx) => idx === i ? { ...w, ...patch } : w));
     const removeOOS = (i) => setOOS((day.oos || []).filter((_, idx) => idx !== i));
 
-    const slotSelect = (label, field, options) => h("div", { style:{ marginBottom:10 } },
-      h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:4 } }, label),
-      h("select", {
-        value: day[field] == null ? "" : day[field],
-        onChange: e => editDay(selDay, { [field]: e.target.value === "" ? null : parseInt(e.target.value) }),
-        style: { width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13 }
-      },
-        h("option", { value:"" }, "— Unassigned —"),
-        options.map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")"))
-      ));
+    // shared select / label builders
+    const memberOptions = (opts, exclude) => opts.filter(c => exclude.indexOf(c.id) === -1);
+    const sel = (value, onChange, optionEls) => h("select", { value: value == null ? "" : value, onChange,
+      style:{ width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13 } }, optionEls);
+    const lbl = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:4 } }, t);
+    const cardStyle = (active, accent) => ({ border:"1px solid "+(active?accent:C.border), background: active?"rgba(255,255,255,0.02)":C.panel2, borderRadius:10, padding:12, marginBottom:10 });
+
+    // UAV121 card — RPIC is always Sanchez; the toggle = "Sanchez flying 121 today"
+    const sanchezCert = sanchez ? certStatus(sanchez.part107) : "current";
+    const usedBy124 = u124 ? [u124.rpic, u124.vo].concat(u124.extra || []).filter(x => x != null) : [];
+    const card121 = h("div", { style: cardStyle(!!(u121 && u121.active), "#4A90D9") },
+      h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: (u121 && u121.active) ? 10 : 0 } },
+        h("div", null,
+          h("span", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:18, letterSpacing:1, color:"#4A90D9" } }, "UAV121"),
+          h("span", { style:{ fontSize:11, color:C.dim, marginLeft:8 } }, "RPIC Sanchez (AS)")),
+        h("button", { onClick: () => applyUnits({ active: !(u121 && u121.active), vo: (u121 && u121.active) ? null : (u121 ? u121.vo : null) }, u124),
+          style:{ width:54, height:28, borderRadius:14, border:"1px solid "+((u121&&u121.active)?"#4A90D9":C.border), background:(u121&&u121.active)?"rgba(74,144,217,0.2)":C.panel2, color:(u121&&u121.active)?"#4A90D9":C.dim, fontSize:11 } },
+          (u121&&u121.active) ? "ON" : "OFF")),
+      (u121 && u121.active) ? h("div", null,
+        (sanchezCert === "expired" || sanchezCert === "none") ? h("div", { style:{ fontSize:10.5, color:C.amber, marginBottom:8 } },
+          "⚠ Sanchez" + (sanchezCert === "none" ? " has no Part 107 on record" : "'s Part 107 is expired")) : null,
+        lbl("VISUAL OBSERVER"),
+        sel(u121.vo, e => applyUnits({ active:true, vo: e.target.value === "" ? null : parseInt(e.target.value) }, u124),
+          [h("option", { key:"_", value:"" }, "— Unassigned —")].concat(
+            memberOptions(crew, [LEAD_PILOT_ID].concat(usedBy124)).map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")"))))
+      ) : null
+    );
+
+    // UAV124 card — RPIC is any non-Sanchez RPIC; selecting one activates the unit
+    const r124 = (u124 && u124.rpic != null) ? crewById(u124.rpic) : null;
+    const cert124 = r124 ? certStatus(r124.part107) : "current";
+    const usedBy121 = (u121 && u121.active) ? [LEAD_PILOT_ID, u121.vo].filter(x => x != null) : [];
+    const used124self = u124 ? [u124.rpic, u124.vo].concat(u124.extra || []).filter(x => x != null) : [];
+    const card124 = h("div", { style: cardStyle(!!(u124 && u124.rpic != null), C.accent) },
+      h("div", { style:{ marginBottom:10 } },
+        h("span", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:18, letterSpacing:1, color:C.accent } }, "UAV124")),
+      lbl("RPIC"),
+      sel(u124 ? u124.rpic : null, e => { const v = e.target.value === "" ? null : parseInt(e.target.value);
+          applyUnits(u121, v == null ? { rpic:null, vo:null, extra:[] } : { rpic:v, vo:(u124?u124.vo:null), extra:(u124?(u124.extra||[]):[]).filter(x => x !== v) }); },
+        [h("option", { key:"_", value:"" }, "— Unassigned —")].concat(
+          memberOptions(otherRPIC, usedBy121).map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")")))),
+      (r124 && (cert124 === "expired" || cert124 === "none")) ? h("div", { style:{ fontSize:10.5, color:C.amber, marginTop:6 } },
+        "⚠ " + r124.name + (cert124 === "none" ? " has no Part 107 on record" : "'s Part 107 is expired")) : null,
+      (u124 && u124.rpic != null) ? h("div", { style:{ marginTop:10 } },
+        lbl("VISUAL OBSERVER"),
+        sel(u124.vo, e => applyUnits(u121, { rpic:u124.rpic, vo: e.target.value === "" ? null : parseInt(e.target.value), extra:u124.extra }),
+          [h("option", { key:"_", value:"" }, "— Unassigned —")].concat(
+            memberOptions(crew, [LEAD_PILOT_ID, u124.rpic].concat(usedBy121).concat(u124.extra || [])).map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")")))),
+        h("div", { style:{ marginTop:10 } },
+          lbl("ADDITIONAL CREW"),
+          (u124.extra || []).map(id => h("span", { key:id, style:{ display:"inline-flex", alignItems:"center", gap:6, background:C.panel2, border:"1px solid "+C.border, borderRadius:14, padding:"4px 10px", fontSize:12, marginRight:6, marginBottom:6 } },
+            (crewById(id) ? crewById(id).name : "?"),
+            h("button", { onClick: () => applyUnits(u121, { rpic:u124.rpic, vo:u124.vo, extra:(u124.extra||[]).filter(x => x !== id) }), style:{ background:"none", border:"none", color:C.red, fontSize:14, lineHeight:1 } }, "×"))),
+          sel(null, e => { const v = e.target.value === "" ? null : parseInt(e.target.value); if (v != null) applyUnits(u121, { rpic:u124.rpic, vo:u124.vo, extra:(u124.extra||[]).concat([v]) }); },
+            [h("option", { key:"_", value:"" }, "+ Add crew…")].concat(
+              memberOptions(crew, [LEAD_PILOT_ID].concat(usedBy121).concat(used124self)).map(c => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ")")))))
+      ) : null
+    );
 
     return h("div", null,
       h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14 } },
@@ -387,6 +478,7 @@
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 } }, cells),
         h("div", { style:{ display:"flex", gap:14, marginTop:12, fontSize:10, color:C.dim, flexWrap:"wrap" } },
           h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), " / ", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), " / ", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " Shift"),
+          h("span", null, h("span", { style:{ color:"#4A90D9" } }, "121"), " / ", h("span", { style:{ color:C.accent } }, "124"), " Unit"),
           h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window"),
           h("span", null, h("span", { style:{ color:C.green } }, "✓"), " Finalized"))
       ),
@@ -405,14 +497,11 @@
               h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:24, letterSpacing:1, lineHeight:1 } },
                 DOW[new Date(vYear, vMonth, selDay).getDay()] + " " + MONTHS[vMonth] + " " + selDay),
               h("div", { style:{ fontSize:11, color: SHIFT_COLORS[getShift(vYear,vMonth,selDay)].color, marginTop:3 } },
-                "Shift " + getShift(vYear, vMonth, selDay) + (unit ? " · " + unit : ""))),
+                "Shift " + getShift(vYear, vMonth, selDay) + (activeUnits.length ? " · " + activeUnits.join(" + ") : ""))),
             h("button", { onClick: () => setSelDay(null), style:{ background:"none", border:"none", color:C.dim, fontSize:22, lineHeight:1 } }, "✕")),
 
-          slotSelect("RPIC", "rpic", rpicCrew),
-          rpicMember && (certWarn === "expired" || certWarn === "none") ? h("div", { style:{ fontSize:10.5, color:C.amber, marginTop:-6, marginBottom:10 } },
-            "⚠ " + rpicMember.name + (certWarn === "none" ? " has no Part 107 on record" : "'s Part 107 is expired")) : null,
-          slotSelect("VISUAL OBSERVER", "vo", crew),
-          slotSelect("VO 2", "vo2", crew),
+          card121,
+          card124,
 
           // OOS windows
           h("div", { style:{ marginTop:6, borderTop:"1px solid "+C.border, paddingTop:12 } },
