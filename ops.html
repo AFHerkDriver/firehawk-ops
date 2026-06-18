@@ -79,6 +79,10 @@
       return data.fields ? fromFSFields(data.fields) : null;
     } catch (e) { return null; }
   }
+  function fsErr(t) {
+    try { const j = JSON.parse(t); return (j.error && j.error.message) || (t || "").slice(0, 140); }
+    catch (e) { return (t || "").slice(0, 140); }
+  }
   async function fsSet(col, doc, obj) {
     try {
       const url = FS_BASE + "/" + col + "/" + doc + "?key=" + FS_API_KEY;
@@ -88,9 +92,16 @@
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body
       });
-      if (!res.ok) { const t = await res.text(); console.error("fsSet FAIL", res.status, t.slice(0, 200)); }
-      return res.ok;
-    } catch (e) { console.error("fsSet ERROR", e.message); return false; }
+      if (!res.ok) {
+        const t = await res.text();
+        console.error("fsSet FAIL", res.status, t.slice(0, 300));
+        return { ok: false, status: res.status, detail: fsErr(t) };
+      }
+      return { ok: true, status: res.status, detail: "" };
+    } catch (e) {
+      console.error("fsSet ERROR", e.message);
+      return { ok: false, status: 0, detail: e.message || "network error" };
+    }
   }
   // Resilient listener — fires the callback on the FIRST poll even on error/null
   // (the firstPoll fix that was missing from the live index.html), so sync
@@ -153,6 +164,7 @@
     const [dirty, setDirty]             = useState(false);
     const [busy, setBusy]               = useState(false);
     const [toast, setToast]             = useState("");
+    const [lastErr, setLastErr]         = useState("");
 
     const crewRef = useRef(crew); crewRef.current = crew;
     const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
@@ -239,11 +251,17 @@
       const updated = crew.map(c => c.id === selId
         ? { ...c, availMonths: { ...c.availMonths, [key]: rec } }
         : c);
-      setCrew(updated);
-      const ok = await writeCrew(updated);
+      const res = await writeCrew(updated);   // write first — only reflect locally once Firestore confirms
       setBusy(false);
-      setDirty(false);
-      flash(ok ? "Saved to firehawk_dev" : "Save failed — see console");
+      if (res.ok) {
+        setCrew(updated);
+        setDirty(false);
+        setLastErr("");
+        flash("Saved to firehawk_dev");
+      } else {
+        setLastErr("Save failed (" + res.status + "): " + res.detail);
+        flash("Not saved — see error below");
+      }
     };
 
     // Seed / reset the dev roster (writes default roster with empty availability).
@@ -252,9 +270,10 @@
           && !window.confirm("Re-seed the SANDBOX roster? This wipes availability entered in firehawk_dev (live data is untouched).")) return;
       setBusy(true);
       const fresh = (defaults || FALLBACK_ROSTER).map(d => ({ ...d, availMonths: {} }));
-      const ok = await writeCrew(fresh);
+      const res = await writeCrew(fresh);
       setBusy(false);
-      flash(ok ? "Seeded firehawk_dev/crew" : "Seed failed — see console");
+      if (res.ok) { setLastErr(""); flash("Seeded firehawk_dev/crew"); }
+      else { setLastErr("Seed failed (" + res.status + "): " + res.detail); flash("Seed failed — see error below"); }
     };
 
     // Manager (dev) lock toggle — locking is a manager action; included here so
@@ -264,10 +283,10 @@
       const next = { ...locks };
       if (locked) { next[key] = { locked: false, lockedBy: "Sanchez", lockedAt: new Date().toISOString() }; }
       else { next[key] = { locked: true, lockedBy: "Sanchez", lockedAt: new Date().toISOString() }; }
-      setLocks(next);
-      const ok = await fsSet(DEV_COL, "availability_locks", next);
+      const res = await fsSet(DEV_COL, "availability_locks", next);
       setBusy(false);
-      flash(ok ? (locked ? "Unlocked " + MONTHS[vMonth] : "Locked " + MONTHS[vMonth]) : "Lock write failed");
+      if (res.ok) { setLocks(next); setLastErr(""); flash(locked ? "Unlocked " + MONTHS[vMonth] : "Locked " + MONTHS[vMonth]); }
+      else { setLastErr("Lock write failed (" + res.status + "): " + res.detail); flash("Lock failed — see error below"); }
     };
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -375,6 +394,9 @@
             h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] : "Lock " + MONTHS[vMonth])
           )
         ),
+
+        // Error line (shows the real Firestore error on-screen instead of the console)
+        lastErr ? h("div", { style: { background: "rgba(255,59,48,0.12)", border: "1px solid " + C.red, borderRadius: 8, padding: "9px 11px", fontSize: 11, color: C.red, marginBottom: 10, lineHeight: 1.5, wordBreak: "break-word" } }, "⚠ " + lastErr) : null,
 
         // Footer
         h("div", { style: { fontSize: 10, color: C.dim, textAlign: "center", marginTop: 6, lineHeight: 1.6 } },
