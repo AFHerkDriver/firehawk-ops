@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "5.2.4";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "5.2.5";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -806,11 +806,15 @@
   function CrewMgmtView(props) {
     const { crew, saveCrew, flash } = props;
     const PALETTE = [
-      "#4A90D9","#E67E22","#7D3C98","#C0392B","#C8A84B","#8B4513",
-      "#E74C3C","#E84393","#F39C12","#F1C40F","#27AE60","#2ECC71",
-      "#16A085","#1ABC9C","#3498DB","#2980B9","#9B59B6","#8E44AD",
-      "#D35400","#E17055","#00B894","#00CEC9","#0984E3","#6C5CE7",
-      "#A29BFE","#FD79A8","#FDCB6E","#55EFC4","#74B9FF","#B7791F"
+      "#C0392B","#E74C3C",                                  // reds
+      "#D35400","#E67E22","#E17055","#F39C12",              // oranges
+      "#B7791F","#C8A84B","#F1C40F","#FDCB6E",              // yellows / golds
+      "#27AE60","#00B894","#2ECC71","#55EFC4",              // greens
+      "#16A085","#1ABC9C","#00CEC9",                        // teals / cyan
+      "#2980B9","#0984E3","#4A90D9","#3498DB","#74B9FF",    // blues
+      "#7D3C98","#8E44AD","#6C5CE7","#9B59B6","#A29BFE",    // purples
+      "#E84393","#FD79A8",                                  // pinks
+      "#8B4513"                                             // brown
     ];
     const [showAdd, setShowAdd]           = useState(false);
     const [showArchived, setShowArchived] = useState(false);
