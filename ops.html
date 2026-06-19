@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "4.1a.2";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "4.1a.3";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -751,7 +751,7 @@
     const logout = () => { setAuthId(null); };
 
     useEffect(() => {
-      fetch("crew_defaults.json")
+      fetch("crew_defaults.json?v=" + APP_VERSION)
         .then(r => { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
         .then(j => { setDefaults(j.roster); setDataSource("json"); })
         .catch(() => { setDefaults(FALLBACK_ROSTER); setDataSource("fallback"); });
@@ -763,7 +763,8 @@
         const members = (data && Array.isArray(data.members)) ? data.members : [];
         setCrew(defaults.map(d => {
           const m = members.find(x => x.id === d.id);
-          return { ...d, availMonths: (m && typeof m.availMonths === "object" && m.availMonths) || {} };
+          const fb = FALLBACK_ROSTER.find(x => x.id === d.id) || {};   // embedded tier/pin survive a stale/old crew_defaults.json
+          return { ...d, tier: d.tier || fb.tier || null, pin: d.pin || fb.pin || null, availMonths: (m && typeof m.availMonths === "object" && m.availMonths) || {} };
         }));
         setCrewLoaded(true); setSync("synced");
       });
