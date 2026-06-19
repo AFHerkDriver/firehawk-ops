@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "3.3";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "3.5";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -181,6 +181,42 @@
   function monthKey(year, month) { return year + "_" + month; }
   function daysInMonth(year, month) { return new Date(year, month + 1, 0).getDate(); }
   function firstWeekday(year, month) { return new Date(year, month, 1).getDay(); }
+
+  // US Federal Holidays — computed per year (month keys are 0-indexed, matching vMonth)
+  function getFederalHolidays(year) {
+    const nthWeekday = (n, weekday, month) => {
+      let count = 0;
+      for (let d = 1; d <= 31; d++) {
+        const date = new Date(year, month, d);
+        if (date.getMonth() !== month) break;
+        if (date.getDay() === weekday) { count++; if (count === n) return d; }
+      }
+      return null;
+    };
+    const lastWeekday = (weekday, month) => {
+      let last = null;
+      for (let d = 1; d <= 31; d++) {
+        const date = new Date(year, month, d);
+        if (date.getMonth() !== month) break;
+        if (date.getDay() === weekday) last = d;
+      }
+      return last;
+    };
+    return {
+      ["0-1"]: "New Year's Day",
+      ["0-" + nthWeekday(3, 1, 0)]: "MLK Jr. Day",
+      ["1-" + nthWeekday(3, 1, 1)]: "Presidents' Day",
+      ["4-" + lastWeekday(1, 4)]: "Memorial Day",
+      ["5-19"]: "Juneteenth",
+      ["6-4"]: "Independence Day",
+      ["8-" + nthWeekday(1, 1, 8)]: "Labor Day",
+      ["9-" + nthWeekday(2, 1, 9)]: "Columbus Day",
+      ["10-11"]: "Veterans Day",
+      ["10-" + nthWeekday(4, 4, 10)]: "Thanksgiving",
+      ["11-25"]: "Christmas Day"
+    };
+  }
+  function getHoliday(year, month, day) { return getFederalHolidays(year)[month + "-" + day] || null; }
 
   // ── Fallback roster (used only if crew_defaults.json fails to load) ──────────
   const FALLBACK_ROSTER = [
@@ -436,8 +472,11 @@
 
     const cells = [];
     for (let i = 0; i < lead; i++) cells.push(h("div", { key:"b"+i }));
+    const today = new Date();
     for (let d = 1; d <= dim; d++) {
       const dd = monthDays[d] || null;
+      const isToday = d === today.getDate() && vMonth === today.getMonth() && vYear === today.getFullYear();
+      const holiday = getHoliday(vYear, vMonth, d);
       const sh = getShift(vYear, vMonth, d);
       const sc = SHIFT_COLORS[sh];
       const du = dd ? decodeDay(dd, crew) : null;
@@ -457,11 +496,12 @@
                     : { bg:"rgba(255,193,7,0.10)", border:"rgba(255,193,7,0.34)" }));
       cells.push(h("button", {
         key:"d"+d, onClick: () => setSelDay(d),
-        style: { minHeight:62, borderRadius:8, border:(cov.dashed?"1px dashed ":"1px solid ")+cov.border, background:cov.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1 }
+        style: { minHeight:62, borderRadius:8, border:((cov.dashed && !isToday && !holiday)?"1px dashed ":"1px solid ")+(isToday?"#FF6B35":(holiday?"rgba(212,175,55,0.6)":cov.border)), background:cov.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1, boxShadow:isToday?"0 0 10px rgba(255,107,53,0.3)":"none" }
       },
         h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center" } },
-          h("span", { style:{ fontSize:11, color:C.dim } }, d),
+          h("span", { style:{ fontSize:11, color: isToday ? "#FF6B35" : C.dim, fontWeight: isToday ? 700 : 400 } }, (holiday ? "★ " : "") + d),
           h("span", { style:{ fontSize:9, fontWeight:500, color:sc.color } }, sh)),
+        holiday ? h("div", { style:{ fontSize:6.5, color:"#D4AF37", lineHeight:1.1, marginTop:1, fontWeight:600, textAlign:"center", overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" } }, holiday) : null,
         h("div", { style:{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1 } },
           prop ? h("span", { style:{ fontSize:10.5, fontWeight:500, color: pUnit === UNIT_LEAD ? U121 : U124, lineHeight:1.15 } }, (pUnit === UNIT_LEAD ? "121·" : "124·") + initialsFor(prop.rpic)) : null,
           (!prop && a121) ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:U121, lineHeight:1.15 } }, "121·AS") : null,
@@ -503,7 +543,7 @@
     const mk = monthKey(vYear, vMonth);
     const isAvail = (id) => { const m = crew.find(c => c.id === id); const rec = m && m.availMonths && m.availMonths[mk]; return !!(rec && Array.isArray(rec.days) && selDay != null && rec.days.indexOf(selDay) !== -1); };
     const sortAvail = (list) => list.slice().sort((a, b) => (isAvail(b.id) ? 1 : 0) - (isAvail(a.id) ? 1 : 0));
-    const crewOption = (c) => h("option", { key:c.id, value:c.id }, c.name + " (" + c.initials + ") · " + (isAvail(c.id) ? "avail" : "not avail"));
+    const crewOption = (c) => h("option", { key:c.id, value:c.id }, (isAvail(c.id) ? "🟢 " : "🔴 ") + c.name + " (" + c.initials + ")");
     const assignedIds = day ? [day.rpic, day.vo, day.vo2].concat(day.extra || []).filter(x => x != null).map(Number) : [];
     const unavailNames = assignedIds.filter(id => !isAvail(id)).map(id => { const m = crewById(id); return m ? (m.name + " (" + m.initials + ")") : "?"; });
 
