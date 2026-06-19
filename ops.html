@@ -32,8 +32,9 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "3.2";                  // bump on EVERY change so the footer shows what's live
-  const U124       = "#50FA7B";               // UAV124 unit color (bright green); UAV121 = #4A90D9 (blue)
+  const APP_VERSION = "3.3";                  // bump on EVERY change so the footer shows what's live
+  const U124       = "#50FA7B";               // UAV124 unit color (neon green)
+  const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
   const isActive  = (c) => !c.reserve && !c.archived;  // reserves/archived are benched: not solicited, not auto-assigned
   const FS_PROJECT = "firehawk-scheduler";
@@ -327,13 +328,14 @@
     const [saving, setSaving]       = useState(false);
     const [savedAt, setSavedAt]     = useState(0);
     const [proposal, setProposal]   = useState(null);   // increment 3: pending smart-assignment draft
+    const [confirmReset, setConfirmReset] = useState(false);   // two-step guard for a full-month wipe
     const daysRef  = useRef(monthDays); daysRef.current = monthDays;
     const saveTimer = useRef(null);
 
     // Load this month's schedule once per month (manager is the single editor;
     // a one-time read + auto-save avoids a poll clobbering an in-progress edit).
     useEffect(() => {
-      let alive = true; setLoaded(false); setProposal(null);
+      let alive = true; setLoaded(false); setProposal(null); setConfirmReset(false);
       fsGetPath(DEV_COL + "/schedule_" + vYear + "_" + vMonth).then(r => {
         if (!alive) return;
         setMonthDays((r && r.days) ? r.days : {});
@@ -425,6 +427,9 @@
       setMonthDays(next); scheduleSave(next); setProposal(null);
     };
 
+    // Full month reset — wipes every assignment (incl. finalized) for the viewed month back to all-OOS
+    const clearMonth = () => { setMonthDays({}); scheduleSave({}); setProposal(null); setConfirmReset(false); };
+
     const proposalCount = proposal ? Object.keys(proposal).length : 0;
     let openCount = 0; for (let _d = 1; _d <= dim; _d++) if (isOpen(_d)) openCount++;
     const uncoverable = proposal ? Math.max(0, openCount - proposalCount) : 0;
@@ -458,8 +463,8 @@
           h("span", { style:{ fontSize:11, color:C.dim } }, d),
           h("span", { style:{ fontSize:9, fontWeight:500, color:sc.color } }, sh)),
         h("div", { style:{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1 } },
-          prop ? h("span", { style:{ fontSize:10.5, fontWeight:500, color: pUnit === UNIT_LEAD ? "#4A90D9" : U124, lineHeight:1.15 } }, (pUnit === UNIT_LEAD ? "121·" : "124·") + initialsFor(prop.rpic)) : null,
-          (!prop && a121) ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:"#4A90D9", lineHeight:1.15 } }, "121·AS") : null,
+          prop ? h("span", { style:{ fontSize:10.5, fontWeight:500, color: pUnit === UNIT_LEAD ? U121 : U124, lineHeight:1.15 } }, (pUnit === UNIT_LEAD ? "121·" : "124·") + initialsFor(prop.rpic)) : null,
+          (!prop && a121) ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:U121, lineHeight:1.15 } }, "121·AS") : null,
           (!prop && a124) ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:U124, lineHeight:1.15 } }, "124·" + initialsFor(du.u124.rpic)) : null,
           (!prop && !manned) ? h("span", { style:{ fontSize:11, fontWeight:600, color:C.red, letterSpacing:1 } }, "OOS") : null),
         h("div", { style:{ display:"flex", justifyContent:"center", gap:4, height:10, fontSize:9 } },
@@ -505,13 +510,13 @@
     // UAV121 card — RPIC is always Sanchez; the toggle = "Sanchez flying 121 today"
     const sanchezCert = sanchez ? certStatus(sanchez.part107) : "current";
     const usedBy124 = u124 ? [u124.rpic, u124.vo].concat(u124.extra || []).filter(x => x != null) : [];
-    const card121 = h("div", { style: cardStyle(!!(u121 && u121.active), "#4A90D9") },
+    const card121 = h("div", { style: cardStyle(!!(u121 && u121.active), U121) },
       h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: (u121 && u121.active) ? 10 : 0 } },
         h("div", null,
-          h("span", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:18, letterSpacing:1, color:"#4A90D9" } }, "UAV121"),
+          h("span", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:18, letterSpacing:1, color:U121 } }, "UAV121"),
           h("span", { style:{ fontSize:11, color:C.dim, marginLeft:8 } }, "RPIC Sanchez (AS)")),
         h("button", { onClick: () => applyUnits({ active: !(u121 && u121.active), vo: (u121 && u121.active) ? null : (u121 ? u121.vo : null) }, u124),
-          style:{ width:54, height:28, borderRadius:14, border:"1px solid "+((u121&&u121.active)?"#4A90D9":C.border), background:(u121&&u121.active)?"rgba(74,144,217,0.2)":C.panel2, color:(u121&&u121.active)?"#4A90D9":C.dim, fontSize:11 } },
+          style:{ width:54, height:28, borderRadius:14, border:"1px solid "+((u121&&u121.active)?U121:C.border), background:(u121&&u121.active)?"rgba(61,190,255,0.2)":C.panel2, color:(u121&&u121.active)?U121:C.dim, fontSize:11 } },
           (u121&&u121.active) ? "ON" : "OFF")),
       (u121 && u121.active) ? h("div", null,
         (sanchezCert === "expired" || sanchezCert === "none") ? h("div", { style:{ fontSize:10.5, color:C.amber, marginBottom:8 } },
@@ -571,8 +576,14 @@
           h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, "TAP A DAY TO ASSIGN CREW"),
           h("div", { style:{ fontSize:10, color: saving ? C.amber : C.dim } }, saving ? "Saving…" : (savedAt ? "Auto-saved" : (loaded ? "" : "Loading…")))),
 
-        // Propose / apply bar (increment 3 — smart assignment)
-        proposal
+        // Propose / apply / reset bar (increment 3 — smart assignment + month reset)
+        confirmReset
+          ? h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10, background:"rgba(255,59,48,0.08)", border:"1px dashed "+C.red, borderRadius:8, padding:"8px 11px" } },
+              h("div", { style:{ fontSize:11, color:C.text } }, h("b", { style:{ color:C.red } }, "Reset · "), "Erase every assignment for this month?"),
+              h("div", { style:{ display:"flex", gap:8 } },
+                h("button", { onClick: () => setConfirmReset(false), style:{ borderRadius:7, padding:"6px 12px", fontSize:11, background:C.panel2, border:"1px solid "+C.border, color:C.dim } }, "Cancel"),
+                h("button", { onClick: clearMonth, style:{ borderRadius:7, padding:"6px 14px", fontSize:11, background:"rgba(255,59,48,0.16)", border:"1px solid "+C.red, color:C.red, fontWeight:500 } }, "Yes, Clear All")))
+          : proposal
           ? h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10, background:"rgba(255,107,53,0.08)", border:"1px dashed "+C.accent, borderRadius:8, padding:"8px 11px" } },
               h("div", { style:{ fontSize:11, color:C.text } },
                 h("b", { style:{ color:C.accent } }, "Draft · "), proposalCount + " day" + (proposalCount === 1 ? "" : "s") + " proposed",
@@ -580,9 +591,13 @@
               h("div", { style:{ display:"flex", gap:8 } },
                 h("button", { onClick: () => setProposal(null), style:{ borderRadius:7, padding:"6px 12px", fontSize:11, background:C.panel2, border:"1px solid "+C.border, color:C.dim } }, "Discard"),
                 h("button", { onClick: applyProposal, style:{ borderRadius:7, padding:"6px 14px", fontSize:11, background:"rgba(52,199,89,0.16)", border:"1px solid "+C.green, color:C.green, fontWeight:500 } }, "Apply")))
-          : h("button", { onClick: proposeMonth, disabled: openCount === 0,
-              style:{ width:"100%", marginBottom:10, borderRadius:8, padding:"10px 0", fontSize:12, letterSpacing:0.5, background:"rgba(255,107,53,0.14)", border:"1px solid "+C.accent, color:C.accent, opacity: openCount === 0 ? 0.4 : 1 } },
-              openCount === 0 ? "Propose Month — no open days" : "✨ Propose Month from Availability"),
+          : h("div", { style:{ display:"flex", gap:8, marginBottom:10 } },
+              h("button", { onClick: proposeMonth, disabled: openCount === 0,
+                style:{ flex:1, borderRadius:8, padding:"10px 0", fontSize:12, letterSpacing:0.5, background:"rgba(255,107,53,0.14)", border:"1px solid "+C.accent, color:C.accent, opacity: openCount === 0 ? 0.4 : 1 } },
+                openCount === 0 ? "Propose Month — no open days" : "✨ Propose Month from Availability"),
+              h("button", { onClick: () => setConfirmReset(true), disabled: crewedDays.length === 0,
+                style:{ borderRadius:8, padding:"10px 12px", fontSize:11, background:C.panel2, border:"1px solid "+C.border, color: crewedDays.length===0?C.dim:C.red, opacity: crewedDays.length===0?0.4:1 } },
+                "Clear Month")),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:6 } },
           DOW.map(d => h("div", { key:d, style:{ textAlign:"center", fontSize:10, color:C.dim, letterSpacing:1 } }, d))),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 } }, cells),
@@ -591,7 +606,7 @@
           h("span", null, h("span", { style:{ color:C.amber } }, "■"), " Unconfirmed"),
           h("span", null, h("span", { style:{ color:C.red } }, "■"), " OOS"),
           h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), "/", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), "/", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " Shift"),
-          h("span", null, h("span", { style:{ color:"#4A90D9" } }, "121"), "/", h("span", { style:{ color:U124 } }, "124"), " Unit"),
+          h("span", null, h("span", { style:{ color:U121 } }, "121"), "/", h("span", { style:{ color:U124 } }, "124"), " Unit"),
           h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window")),
         h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, paddingTop:12, borderTop:"1px solid "+C.border } },
           h("div", { style:{ fontSize:10.5, color:C.dim } }, crewedDays.length === 0 ? "No crewed days yet" : (finalizedCount + " of " + crewedDays.length + " crewed days finalized")),
