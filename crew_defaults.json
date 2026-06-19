@@ -1,10 +1,10 @@
 {
   "roster": [
-    { "id": 1, "name": "Sanchez",   "role": "RPIC", "color": "#4A90D9", "initials": "AS", "part107": "2026-11-01", "reserve": false },
-    { "id": 3, "name": "Bauchman",  "role": "RPIC", "color": "#E67E22", "initials": "RB", "part107": "2027-05-06", "reserve": false },
-    { "id": 4, "name": "Thomas",    "role": "RPIC", "color": "#7D3C98", "initials": "MT", "part107": "2028-01-16", "reserve": false },
-    { "id": 2, "name": "Goddu",     "role": "VO",   "color": "#C0392B", "initials": "BG", "part107": null,         "reserve": false },
-    { "id": 5, "name": "Rodriguez", "role": "VO",   "color": "#C8A84B", "initials": "JR", "part107": null,         "reserve": false },
-    { "id": 6, "name": "Rait",      "role": "RPIC", "color": "#8B4513", "initials": "CR", "part107": "2027-05-31", "reserve": true  }
+    { "id": 1, "name": "Sanchez",   "role": "RPIC", "tier": "owner", "pin": "241408", "color": "#4A90D9", "initials": "AS", "part107": "2026-11-01", "reserve": false },
+    { "id": 3, "name": "Bauchman",  "role": "RPIC", "tier": "admin", "pin": "0336",   "color": "#E67E22", "initials": "RB", "part107": "2027-05-06", "reserve": false },
+    { "id": 4, "name": "Thomas",    "role": "RPIC", "tier": "staff", "pin": "2085",   "color": "#7D3C98", "initials": "MT", "part107": "2028-01-16", "reserve": false },
+    { "id": 2, "name": "Goddu",     "role": "VO",   "tier": "staff", "pin": "2152",   "color": "#C0392B", "initials": "BG", "part107": null,         "reserve": false },
+    { "id": 5, "name": "Rodriguez", "role": "VO",   "tier": "staff", "pin": "2022",   "color": "#C8A84B", "initials": "JR", "part107": null,         "reserve": false },
+    { "id": 6, "name": "Rait",      "role": "RPIC", "tier": "staff", "pin": null,     "color": "#8B4513", "initials": "CR", "part107": "2027-05-31", "reserve": false, "archived": true }
   ]
 }
