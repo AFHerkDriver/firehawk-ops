@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "4.1b";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "4.1c";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -369,7 +369,7 @@
   // SCHEDULE VIEW  (increment 2 — manager grid + intra-day OOS + auto-save)
   // ════════════════════════════════════════════════════════════════════════════
   function ScheduleView(props) {
-    const { crew, vYear, vMonth, flash, setLastErr } = props;
+    const { crew, vYear, vMonth, flash, setLastErr, canEdit } = props;
     const [monthDays, setMonthDays] = useState({});
     const [loaded, setLoaded]       = useState(false);
     const [selDay, setSelDay]       = useState(null);
@@ -417,6 +417,7 @@
     const otherRPIC = activeCrew.filter(c => c.role === "RPIC" && c.id !== LEAD_PILOT_ID);
     const crewById = (id) => crew.find(c => c.id === id) || null;
     const initialsFor = (id) => { const m = crewById(id); return m ? m.initials : "—"; };
+    const nameFor = (id) => { const m = crewById(id); return m ? m.name : "—"; };
 
     // Calendar grid
     const lead = firstWeekday(vYear, vMonth), dim = daysInMonth(vYear, vMonth);
@@ -625,11 +626,11 @@
     return h("div", null,
       h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14 } },
         h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 } },
-          h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, "TAP A DAY TO ASSIGN CREW"),
+          h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, canEdit ? "TAP A DAY TO ASSIGN CREW" : "TAP A DAY FOR DETAILS"),
           h("div", { style:{ fontSize:10, color: saving ? C.amber : C.dim } }, saving ? "Saving…" : (savedAt ? "Auto-saved" : (loaded ? "" : "Loading…")))),
 
-        // Propose / apply / reset bar (increment 3 — smart assignment + month reset)
-        confirmReset
+        // Propose / apply / reset bar (increment 3 — smart assignment + month reset) — manager-only
+        canEdit ? (confirmReset
           ? h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10, background:"rgba(255,59,48,0.08)", border:"1px dashed "+C.red, borderRadius:8, padding:"8px 11px" } },
               h("div", { style:{ fontSize:11, color:C.text } }, h("b", { style:{ color:C.red } }, "Reset · "), "Erase every assignment for this month?"),
               h("div", { style:{ display:"flex", gap:8 } },
@@ -649,7 +650,7 @@
                 openCount === 0 ? "Propose Month — no open days" : "✨ Propose Month from Availability"),
               h("button", { onClick: () => setConfirmReset(true), disabled: crewedDays.length === 0,
                 style:{ borderRadius:8, padding:"10px 12px", fontSize:11, background:C.panel2, border:"1px solid "+C.border, color: crewedDays.length===0?C.dim:C.red, opacity: crewedDays.length===0?0.4:1 } },
-                "Clear Month")),
+                "Clear Month"))) : null,
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:6 } },
           DOW.map(d => h("div", { key:d, style:{ textAlign:"center", fontSize:10, color:C.dim, letterSpacing:1 } }, d))),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 } }, cells),
@@ -662,13 +663,13 @@
           h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window")),
         h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, paddingTop:12, borderTop:"1px solid "+C.border } },
           h("div", { style:{ fontSize:10.5, color:C.dim } }, crewedDays.length === 0 ? "No crewed days yet" : (finalizedCount + " of " + crewedDays.length + " crewed days finalized")),
-          h("button", { onClick: () => finalizeMonth(!allFinal), disabled: crewedDays.length === 0,
+          canEdit ? h("button", { onClick: () => finalizeMonth(!allFinal), disabled: crewedDays.length === 0,
             style:{ borderRadius:8, padding:"7px 12px", fontSize:11, border:"1px solid "+(allFinal?C.amber:C.green), background: allFinal?"rgba(255,193,7,0.12)":"rgba(52,199,89,0.14)", color: allFinal?C.amber:C.green, opacity: crewedDays.length===0?0.4:1 } },
-            allFinal ? "Unfinalize Month" : "Finalize Month"))
+            allFinal ? "Unfinalize Month" : "Finalize Month") : null)
       ),
 
-      // ── Day editor sheet ──
-      selDay != null ? h("div", {
+      // ── Day sheet: editable for managers, read-only card for staff ──
+      selDay != null ? (canEdit ? h("div", {
         onClick: () => setSelDay(null),
         style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50, padding:16 }
       },
@@ -719,7 +720,38 @@
 
           h("div", { style:{ fontSize:10, color:C.dim, marginTop:14, textAlign:"center" } }, "Changes auto-save · no publish needed")
         )
-      ) : null
+      ) : h("div", {
+        onClick: () => setSelDay(null),
+        style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:50, padding:16 }
+      },
+        h("div", {
+          onClick: e => e.stopPropagation(),
+          style: { width:"100%", maxWidth:420, maxHeight:"85vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:16, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" }
+        },
+          h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 } },
+            h("div", null,
+              h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:24, letterSpacing:1, lineHeight:1 } },
+                DOW[new Date(vYear, vMonth, selDay).getDay()] + " " + MONTHS[vMonth] + " " + selDay),
+              h("div", { style:{ fontSize:11, color: SHIFT_COLORS[getShift(vYear,vMonth,selDay)].color, marginTop:3 } },
+                "Shift " + getShift(vYear, vMonth, selDay) + (activeUnits.length ? " · " + activeUnits.join(" + ") : " · OOS"))),
+            h("button", { onClick: () => setSelDay(null), style:{ background:"none", border:"none", color:C.dim, fontSize:22, lineHeight:1 } }, "✕")),
+          (u121 && u121.active) ? h("div", { style:{ background:C.panel2, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8 } },
+            h("div", { style:{ fontSize:12, fontWeight:600, color:U121, marginBottom:3, letterSpacing:1 } }, "UAV121"),
+            h("div", { style:{ fontSize:12.5, color:C.text } }, "RPIC: " + nameFor(LEAD_PILOT_ID) + (u121.vo != null ? "   ·   VO: " + nameFor(u121.vo) : ""))) : null,
+          (u124 && u124.rpic != null) ? h("div", { style:{ background:C.panel2, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8 } },
+            h("div", { style:{ fontSize:12, fontWeight:600, color:U124, marginBottom:3, letterSpacing:1 } }, "UAV124"),
+            h("div", { style:{ fontSize:12.5, color:C.text } }, "RPIC: " + nameFor(u124.rpic) + (u124.vo != null ? "   ·   VO: " + nameFor(u124.vo) : "")),
+            (u124.extra && u124.extra.length) ? h("div", { style:{ fontSize:11.5, color:C.dim, marginTop:3 } }, "Additional: " + u124.extra.map(nameFor).join(", ")) : null) : null,
+          (!activeUnits.length) ? h("div", { style:{ background:"rgba(255,59,48,0.10)", border:"1px solid rgba(255,59,48,0.4)", borderRadius:10, padding:"12px", marginBottom:8, fontSize:12.5, color:C.red, textAlign:"center", letterSpacing:1 } }, "OUT OF SERVICE — NO CREW ASSIGNED") : null,
+          (day.oos && day.oos.length) ? h("div", { style:{ marginTop:4, borderTop:"1px solid "+C.border, paddingTop:10 } },
+            h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:6 } }, "OUT-OF-SERVICE WINDOWS"),
+            day.oos.map((w, i) => h("div", { key:i, style:{ fontSize:11.5, color:C.text, marginBottom:3 } },
+              w.unit + "  " + w.from + " → " + w.to + (w.reason ? "  ·  " + w.reason : "")))) : null,
+          h("div", { style:{ marginTop:12, borderTop:"1px solid "+C.border, paddingTop:10, fontSize:11.5, color: day.confirmed ? C.green : C.dim } },
+            day.confirmed ? "✓ Finalized" : "Not finalized"),
+          h("div", { style:{ fontSize:10, color:C.dim, marginTop:12, textAlign:"center" } }, "Read-only · sign in as a manager to edit")
+        )
+      )) : null
     );
   }
 
@@ -862,7 +894,7 @@
         // Active view
         tab === "avail"
           ? h(AvailabilityView, { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr, canEdit, me })
-          : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr }),
+          : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr, canEdit }),
 
         // Dev controls (manager-only: Lock is operational, Seed is a sandbox tool)
         canEdit ? h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
