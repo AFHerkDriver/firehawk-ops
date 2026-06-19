@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "5.2.1";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "5.2.2";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -804,7 +804,13 @@
 
   function CrewMgmtView(props) {
     const { crew, saveCrew, flash } = props;
-    const PALETTE = ["#4A90D9","#E67E22","#7D3C98","#C0392B","#16A085","#2980B9","#D35400","#27AE60","#8E44AD","#C8A84B"];
+    const PALETTE = [
+      "#4A90D9","#E67E22","#7D3C98","#C0392B","#C8A84B","#8B4513",
+      "#E74C3C","#E84393","#F39C12","#F1C40F","#27AE60","#2ECC71",
+      "#16A085","#1ABC9C","#3498DB","#2980B9","#9B59B6","#8E44AD",
+      "#D35400","#E17055","#00B894","#00CEC9","#0984E3","#6C5CE7",
+      "#A29BFE","#FD79A8","#FDCB6E","#55EFC4","#74B9FF","#B7791F"
+    ];
     const [showAdd, setShowAdd]           = useState(false);
     const [showArchived, setShowArchived] = useState(false);
     const [busy, setBusy]                 = useState(false);
@@ -816,6 +822,9 @@
 
     const activeList   = crew.filter(c => !c.archived);
     const archivedList = crew.filter(c => c.archived);
+    const usedColors   = activeList.map(c => c.color);                          // taken by active/reserve pilots
+    const availColors  = PALETTE.filter(col => usedColors.indexOf(col) === -1);
+    const swatchColors = availColors.length ? availColors : PALETTE;            // fallback if every color is taken
     const fmtCert = (s) => { try { return new Date(s).toLocaleDateString("en-US", { month:"short", year:"numeric", timeZone:"UTC" }); } catch (e) { return s; } };
 
     const doSave = async (updated, msg) => {
@@ -839,6 +848,7 @@
     };
 
     const pillBtn = (on) => ({ fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?C.blue:C.border), background: on?"rgba(59,130,246,0.14)":C.panel2, color: on?C.blue:C.dim, cursor:"pointer" });
+    const openAdd = () => { setFColor(availColors[0] || PALETTE[0]); setShowAdd(true); };
 
     const memberRow = (c) => h("div", { key:c.id, style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8, opacity: c.archived ? 0.6 : 1 } },
       h("div", { style:{ display:"flex", alignItems:"center", gap:8, marginBottom:8 } },
@@ -863,7 +873,7 @@
     return h("div", null,
       h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
         h("div", { style:{ fontSize:11, color:C.dim, letterSpacing:1 } }, "CREW ROSTER · " + activeList.length + (activeList.length === 1 ? " PILOT" : " PILOTS")),
-        h("button", { onClick: () => setShowAdd(true), style:{ fontSize:12, color:C.blue, background:"rgba(59,130,246,0.14)", border:"1px solid "+C.blue, borderRadius:8, padding:"6px 12px", cursor:"pointer" } }, "+ Add Pilot")),
+        h("button", { onClick: openAdd, style:{ fontSize:12, color:C.blue, background:"rgba(59,130,246,0.14)", border:"1px solid "+C.blue, borderRadius:8, padding:"6px 12px", cursor:"pointer" } }, "+ Add Pilot")),
 
       activeList.map(memberRow),
 
@@ -883,7 +893,7 @@
           fieldLabel("Initials"),
           textInput(fInit, setFInit, fName.trim() ? fName.trim().slice(0, 2).toUpperCase() : "e.g. JD", 3),
           fieldLabel("Color"),
-          h("div", { style:{ display:"flex", gap:8, flexWrap:"wrap" } }, PALETTE.map(col => h("button", { key:col, onClick: () => setFColor(col),
+          h("div", { style:{ display:"flex", gap:8, flexWrap:"wrap" } }, swatchColors.map(col => h("button", { key:col, onClick: () => setFColor(col),
             style:{ width:26, height:26, borderRadius:"50%", background:col, border: fColor === col ? "2px solid "+C.text : "2px solid transparent", cursor:"pointer" } }))),
           fieldLabel("Role"),
           h("div", { style:{ display:"flex", gap:8 } },
