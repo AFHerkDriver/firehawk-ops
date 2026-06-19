@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "4.1a.3";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "4.1b";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -283,14 +283,19 @@
   // AVAILABILITY VIEW  (increment 1 — staff calendar picker)
   // ════════════════════════════════════════════════════════════════════════════
   function AvailabilityView(props) {
-    const { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr } = props;
+    const { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr, canEdit, me } = props;
+    const isStaff = !!me && !canEdit;                        // staff: can only set their own availability
     const [selId, setSelId] = useState(null);
     const [days, setDays]   = useState(new Set());
     const [dirty, setDirty] = useState(false);
     const [busy, setBusy]   = useState(false);
     const crewRef = useRef(crew); crewRef.current = crew;
 
-    useEffect(() => { const act = crew.filter(isActive); if (selId === null && act.length) setSelId(act[0].id); }, [crew, selId]);
+    useEffect(() => {
+      if (isStaff) { if (selId !== me.id) setSelId(me.id); return; }   // staff locked to self
+      if (!canEdit) return;                                            // anonymous: no auto-select
+      const act = crew.filter(isActive); if (selId === null && act.length) setSelId(act[0].id);
+    }, [crew, selId, isStaff, canEdit, me]);
     useEffect(() => {
       const m = crewRef.current.find(c => c.id === selId);
       const k = monthKey(vYear, vMonth);
@@ -302,12 +307,13 @@
     const member   = crew.find(c => c.id === selId) || null;
     const monthRec = (member && member.availMonths && member.availMonths[k]) || null;
     const locked   = !!(locks[k] && locks[k].locked);
+    const canEditAvail = !locked && (canEdit || isStaff);   // managers edit anyone; staff edit self; anonymous read-only
 
-    const toggleDay = (d) => { if (locked) return; setDays(p => { const n = new Set(p); n.has(d) ? n.delete(d) : n.add(d); return n; }); setDirty(true); };
-    const clearDays = () => { if (locked) return; setDays(new Set()); setDirty(true); };
+    const toggleDay = (d) => { if (!canEditAvail) return; setDays(p => { const n = new Set(p); n.has(d) ? n.delete(d) : n.add(d); return n; }); setDirty(true); };
+    const clearDays = () => { if (!canEditAvail) return; setDays(new Set()); setDirty(true); };
 
     const save = async () => {
-      if (!member || locked) return;
+      if (!member || !canEditAvail) return;
       setBusy(true);
       const rec = { days: [...days].sort((a,b)=>a-b), lastEditedBy: member.name + " (self)", lastEditedAt: new Date().toISOString(), editedByManager: false };
       const res = await saveMemberMonth(selId, k, rec);
@@ -322,16 +328,22 @@
     for (let d = 1; d <= dim; d++) {
       const on = days.has(d);
       cells.push(h("button", {
-        key: "d" + d, onClick: () => toggleDay(d), disabled: locked,
-        style: { aspectRatio:"1 / 1", borderRadius:8, border:"1px solid "+(on?C.accent:C.border), background:on?"rgba(255,107,53,0.18)":C.panel2, color:on?C.accent:C.dim, fontSize:15, fontWeight:on?500:400, opacity:locked?0.45:1, display:"flex", alignItems:"center", justifyContent:"center" }
+        key: "d" + d, onClick: () => toggleDay(d), disabled: !canEditAvail,
+        style: { aspectRatio:"1 / 1", borderRadius:8, border:"1px solid "+(on?C.accent:C.border), background:on?"rgba(255,107,53,0.18)":C.panel2, color:on?C.accent:C.dim, fontSize:15, fontWeight:on?500:400, opacity:!canEditAvail?0.45:1, display:"flex", alignItems:"center", justifyContent:"center" }
       }, d));
     }
 
     return h("div", { style: { background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14 } },
-      h("select", {
-        value: selId == null ? "" : selId, onChange: e => setSelId(parseInt(e.target.value)),
-        style: { width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, marginBottom:12 }
-      }, crew.filter(isActive).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + c.role))),
+      canEdit
+        ? h("select", {
+            value: selId == null ? "" : selId, onChange: e => setSelId(parseInt(e.target.value)),
+            style: { width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, marginBottom:12 }
+          }, crew.filter(isActive).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + c.role)))
+        : isStaff
+          ? h("div", { style:{ width:"100%", boxSizing:"border-box", background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, color:C.text, marginBottom:12 } },
+              "Your availability · ", h("b", null, me.name), h("span", { style:{ color:C.dim, fontWeight:400 } }, " · " + me.role))
+          : h("div", { style:{ width:"100%", boxSizing:"border-box", background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, color:C.dim, marginBottom:12, textAlign:"center" } },
+              "Sign in to set your availability"),
 
       locked ? h("div", { style:{ textAlign:"center", fontSize:11, color:C.amber, letterSpacing:1, marginBottom:8 } },
         "🔒 LOCKED BY UAS MANAGER — READ ONLY") : null,
@@ -345,8 +357,8 @@
           days.size === 0 ? "Not available this month" : days.size + (days.size === 1 ? " day available" : " days available"),
           dirty ? h("span", { style:{ color:C.accent } }, "  • Unsaved") : null),
         h("div", { style:{ display:"flex", gap:8 } },
-          h("button", { onClick: clearDays, disabled: locked || busy, style: actionBtn("clear", locked || busy) }, "Clear"),
-          h("button", { onClick: save, disabled: locked || busy || !dirty, style: actionBtn("save", locked || busy || !dirty) }, busy ? "…" : "Save"))),
+          h("button", { onClick: clearDays, disabled: !canEditAvail || busy, style: actionBtn("clear", !canEditAvail || busy) }, "Clear"),
+          h("button", { onClick: save, disabled: !canEditAvail || busy || !dirty, style: actionBtn("save", !canEditAvail || busy || !dirty) }, busy ? "…" : "Save"))),
 
       monthRec && monthRec.lastEditedBy ? h("div", { style:{ fontSize:10.5, color:C.dim, marginTop:8, borderTop:"1px solid "+C.border, paddingTop:8 } },
         "Last edited by " + monthRec.lastEditedBy + " · " + new Date(monthRec.lastEditedAt).toLocaleString()) : null
@@ -849,15 +861,15 @@
 
         // Active view
         tab === "avail"
-          ? h(AvailabilityView, { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr })
+          ? h(AvailabilityView, { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr, canEdit, me })
           : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr }),
 
-        // Dev controls
-        h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
+        // Dev controls (manager-only: Lock is operational, Seed is a sandbox tool)
+        canEdit ? h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
           h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:8 } }, "MANAGER / DEV CONTROLS"),
           h("div", { style:{ display:"flex", gap:8 } },
             h("button", { onClick: seed, disabled: busy, style: ghostBtn(busy) }, "Seed / Reset Roster"),
-            h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] + " Avail" : "Lock " + MONTHS[vMonth] + " Avail"))),
+            h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] + " Avail" : "Lock " + MONTHS[vMonth] + " Avail"))) : null,
 
         // Error line
         lastErr ? h("div", { style:{ background:"rgba(255,59,48,0.12)", border:"1px solid "+C.red, borderRadius:8, padding:"9px 11px", fontSize:11, color:C.red, marginBottom:10, lineHeight:1.5, wordBreak:"break-word" } }, "⚠ " + lastErr) : null,
