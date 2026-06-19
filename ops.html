@@ -32,8 +32,10 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "3.0";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "3.2";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (bright green); UAV121 = #4A90D9 (blue)
+  const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
+  const isActive  = (c) => !c.reserve && !c.archived;  // reserves/archived are benched: not solicited, not auto-assigned
   const FS_PROJECT = "firehawk-scheduler";
   const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
   const FS_BASE    = "https://firestore.googleapis.com/v1/projects/" + FS_PROJECT + "/databases/(default)/documents";
@@ -251,7 +253,7 @@
     const [busy, setBusy]   = useState(false);
     const crewRef = useRef(crew); crewRef.current = crew;
 
-    useEffect(() => { if (selId === null && crew.length) setSelId(crew[0].id); }, [crew, selId]);
+    useEffect(() => { const act = crew.filter(isActive); if (selId === null && act.length) setSelId(act[0].id); }, [crew, selId]);
     useEffect(() => {
       const m = crewRef.current.find(c => c.id === selId);
       const k = monthKey(vYear, vMonth);
@@ -292,7 +294,7 @@
       h("select", {
         value: selId == null ? "" : selId, onChange: e => setSelId(parseInt(e.target.value)),
         style: { width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, marginBottom:12 }
-      }, (crew.length ? crew : []).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + c.role))),
+      }, crew.filter(isActive).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + c.role))),
 
       locked ? h("div", { style:{ textAlign:"center", fontSize:11, color:C.amber, letterSpacing:1, marginBottom:8 } },
         "🔒 LOCKED BY UAS MANAGER — READ ONLY") : null,
@@ -361,7 +363,8 @@
     };
 
     const sanchez   = crew.find(c => c.id === LEAD_PILOT_ID) || null;
-    const otherRPIC = crew.filter(c => c.role === "RPIC" && c.id !== LEAD_PILOT_ID);
+    const activeCrew = crew.filter(isActive);
+    const otherRPIC = activeCrew.filter(c => c.role === "RPIC" && c.id !== LEAD_PILOT_ID);
     const crewById = (id) => crew.find(c => c.id === id) || null;
     const initialsFor = (id) => { const m = crewById(id); return m ? m.initials : "—"; };
 
@@ -382,18 +385,30 @@
         if (du && du.u121.active) counts[LEAD_PILOT_ID]++;
         if (du && du.u124.rpic != null) counts[du.u124.rpic] = (counts[du.u124.rpic] || 0) + 1;
       }
+      const rpics = activeCrew.filter(c => c.role === "RPIC" && certValid(c.part107));
+      const openDays = []; for (let d = 1; d <= dim; d++) if (isOpen(d)) openDays.push(d);
+      const pilots = rpics.filter(c => openDays.some(d => availOn(c.id, d)));
+      let coverable = 0; openDays.forEach(d => { if (pilots.some(c => availOn(c.id, d))) coverable++; });
+      const existingTotal = Object.keys(counts).reduce((s, k) => s + counts[k], 0);
+      const cap = pilots.length ? Math.ceil((existingTotal + coverable) / pilots.length) : 0;   // fair share → even totals
+      const availCount = {}; pilots.forEach(c => { let n = 0; openDays.forEach(d => { if (availOn(c.id, d)) n++; }); availCount[c.id] = n; });
+
       const prop = {};
-      for (let d = 1; d <= dim; d++) {
-        if (!isOpen(d)) continue;                       // skip manager-set & finalized days
-        const elig = crew.filter(c => c.role === "RPIC" && certValid(c.part107) && availOn(c.id, d));
-        const active = elig.filter(c => !c.reserve);
-        const pool = active.length ? active : elig;     // reserves only when no active pilot is free
-        if (!pool.length) continue;                     // nobody available → leave OOS
-        pool.sort((a, b) => (counts[a.id] - counts[b.id]) || (a.id - b.id));
-        const pick = pool[0];
-        counts[pick.id]++;
-        prop[d] = { rpic: pick.id };
-      }
+      let cur = null, run = 0;                          // pilot holding the current block, days into it
+      openDays.forEach(d => {
+        const eligAll = pilots.filter(c => availOn(c.id, d));
+        if (!eligAll.length) { cur = null; run = 0; return; }         // nobody available → OOS, breaks the block
+        const under = eligAll.filter(c => counts[c.id] < cap);
+        const pool = under.length ? under : eligAll;                  // once everyone's at fair share, anyone available
+        const keep = cur != null && pool.some(c => c.id === cur) && run < ROTATION_DAYS;
+        if (!keep) {                                                  // hand off to the next pilot
+          let cands = pool.slice();
+          if (cur != null && run >= ROTATION_DAYS && cands.length > 1) cands = cands.filter(c => c.id !== cur);
+          cands.sort((a, b) => (counts[a.id] - counts[b.id]) || (availCount[a.id] - availCount[b.id]) || (a.id - b.id));   // fewest days first, then scarcest availability
+          cur = cands[0].id; run = 0;
+        }
+        run++; counts[cur]++; prop[d] = { rpic: cur };
+      });
       setProposal(prop);
     };
 
@@ -504,7 +519,7 @@
         lbl("VISUAL OBSERVER"),
         sel(u121.vo, e => applyUnits({ active:true, vo: e.target.value === "" ? null : parseInt(e.target.value) }, u124),
           [h("option", { key:"_", value:"" }, "— Unassigned —")].concat(
-            sortAvail(memberOptions(crew, [LEAD_PILOT_ID].concat(usedBy124))).map(crewOption)))
+            sortAvail(memberOptions(activeCrew, [LEAD_PILOT_ID].concat(usedBy124))).map(crewOption)))
       ) : null
     );
 
@@ -527,7 +542,7 @@
         lbl("VISUAL OBSERVER"),
         sel(u124.vo, e => applyUnits(u121, { rpic:u124.rpic, vo: e.target.value === "" ? null : parseInt(e.target.value), extra:u124.extra }),
           [h("option", { key:"_", value:"" }, "— Unassigned —")].concat(
-            sortAvail(memberOptions(crew, [LEAD_PILOT_ID, u124.rpic].concat(usedBy121).concat(u124.extra || []))).map(crewOption))),
+            sortAvail(memberOptions(activeCrew, [LEAD_PILOT_ID, u124.rpic].concat(usedBy121).concat(u124.extra || []))).map(crewOption))),
         h("div", { style:{ marginTop:10 } },
           lbl("ADDITIONAL CREW"),
           (u124.extra || []).map(id => h("span", { key:id, style:{ display:"inline-flex", alignItems:"center", gap:6, background:C.panel2, border:"1px solid "+C.border, borderRadius:14, padding:"4px 10px", fontSize:12, marginRight:6, marginBottom:6 } },
@@ -535,7 +550,7 @@
             h("button", { onClick: () => applyUnits(u121, { rpic:u124.rpic, vo:u124.vo, extra:(u124.extra||[]).filter(x => x !== id) }), style:{ background:"none", border:"none", color:C.red, fontSize:14, lineHeight:1 } }, "×"))),
           sel(null, e => { const v = e.target.value === "" ? null : parseInt(e.target.value); if (v != null) applyUnits(u121, { rpic:u124.rpic, vo:u124.vo, extra:(u124.extra||[]).concat([v]) }); },
             [h("option", { key:"_", value:"" }, "+ Add crew…")].concat(
-              sortAvail(memberOptions(crew, [LEAD_PILOT_ID].concat(usedBy121).concat(used124self))).map(crewOption))))
+              sortAvail(memberOptions(activeCrew, [LEAD_PILOT_ID].concat(usedBy121).concat(used124self))).map(crewOption))))
       ) : null
     );
 
