@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "5.1";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "5.2";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -802,6 +802,104 @@
                 new Date(e.time).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", timeZone:"America/Chicago" }) + " CST"))));
   }
 
+  function CrewMgmtView(props) {
+    const { crew, saveCrew, flash } = props;
+    const PALETTE = ["#4A90D9","#E67E22","#7D3C98","#C0392B","#16A085","#2980B9","#D35400","#27AE60","#8E44AD","#C8A84B"];
+    const [showAdd, setShowAdd]           = useState(false);
+    const [showArchived, setShowArchived] = useState(false);
+    const [busy, setBusy]                 = useState(false);
+    const [fName, setFName]   = useState("");
+    const [fInit, setFInit]   = useState("");
+    const [fColor, setFColor] = useState(PALETTE[0]);
+    const [fRole, setFRole]   = useState("RPIC");
+    const [fReserve, setFReserve] = useState(false);
+
+    const activeList   = crew.filter(c => !c.archived);
+    const archivedList = crew.filter(c => c.archived);
+    const fmtCert = (s) => { try { return new Date(s).toLocaleDateString("en-US", { month:"short", year:"numeric", timeZone:"UTC" }); } catch (e) { return s; } };
+
+    const doSave = async (updated, msg) => {
+      setBusy(true);
+      const res = await saveCrew(updated);
+      setBusy(false);
+      if (res && res.ok && msg) flash(msg);
+      return res;
+    };
+    const setRole       = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, role: x.role === "RPIC" ? "VO" : "RPIC" } : x));
+    const toggleReserve = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, reserve: !x.reserve } : x), c.reserve ? c.name + " → Active" : c.name + " → Reserve");
+    const archive       = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, archived: true } : x), c.name + " archived");
+    const unarchive     = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, archived: false } : x), c.name + " restored");
+    const addPilot = async () => {
+      const name = fName.trim();
+      if (!name) return;
+      const init = (fInit.trim() || name.slice(0, 2)).toUpperCase().slice(0, 3);
+      const member = { id: Date.now(), name, role: fRole, tier: "staff", pin: null, color: fColor, initials: init, part107: null, reserve: fReserve, archived: false, availMonths: {} };
+      const res = await doSave([...crew, member], "Added " + name);
+      if (res && res.ok) { setShowAdd(false); setFName(""); setFInit(""); setFColor(PALETTE[0]); setFRole("RPIC"); setFReserve(false); }
+    };
+
+    const pillBtn = (on) => ({ fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?C.accent:C.border), background: on?"rgba(255,107,53,0.14)":C.panel2, color: on?C.accent:C.dim, cursor:"pointer" });
+
+    const memberRow = (c) => h("div", { key:c.id, style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8, opacity: c.archived ? 0.6 : 1 } },
+      h("div", { style:{ display:"flex", alignItems:"center", gap:8, marginBottom:8 } },
+        h("span", { style:{ width:12, height:12, borderRadius:"50%", background:c.color, flexShrink:0 } }),
+        h("span", { style:{ fontSize:14, color:C.text, fontWeight:500 } }, c.name),
+        h("span", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, c.initials),
+        h("span", { style:{ marginLeft:"auto", fontSize:9, letterSpacing:1, padding:"1px 6px", borderRadius:10, border:"1px solid "+C.border, color: c.tier === "staff" ? C.dim : C.accent } }, c.tier === "staff" ? "STAFF" : "ADMIN")),
+      c.archived
+        ? h("div", { style:{ display:"flex", alignItems:"center" } },
+            h("span", { style:{ fontSize:11, color:C.dim } }, "Archived · history kept"),
+            h("button", { onClick: () => unarchive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.green, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Restore"))
+        : h("div", { style:{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" } },
+            h("button", { onClick: () => setRole(c), disabled:busy, style: pillBtn(c.role === "RPIC") }, c.role),
+            h("button", { onClick: () => toggleReserve(c), disabled:busy, style: pillBtn(!c.reserve) }, c.reserve ? "RESERVE" : "ACTIVE"),
+            h("span", { style:{ fontSize:11, color: c.part107 ? C.dim : C.amber } }, c.part107 ? "107 exp " + fmtCert(c.part107) : "no 107"),
+            h("button", { onClick: () => archive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.red, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Archive")));
+
+    const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:5, marginTop:10 } }, t);
+    const textInput = (val, set, ph, max) => h("input", { value:val, onChange: e => set(e.target.value), placeholder:ph, maxLength: max || null,
+      style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark" } });
+
+    return h("div", null,
+      h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
+        h("div", { style:{ fontSize:11, color:C.dim, letterSpacing:1 } }, "CREW ROSTER · " + activeList.length + (activeList.length === 1 ? " PILOT" : " PILOTS")),
+        h("button", { onClick: () => setShowAdd(true), style:{ fontSize:12, color:C.accent, background:"rgba(255,107,53,0.14)", border:"1px solid "+C.accent, borderRadius:8, padding:"6px 12px", cursor:"pointer" } }, "+ Add Pilot")),
+
+      activeList.map(memberRow),
+
+      archivedList.length
+        ? h("div", { style:{ marginTop:8 } },
+            h("button", { onClick: () => setShowArchived(s => !s), style:{ fontSize:11, color:C.dim, background:"none", border:"none", cursor:"pointer", padding:"4px 0", textDecoration:"underline" } },
+              (showArchived ? "Hide" : "Show") + " archived (" + archivedList.length + ")"),
+            showArchived ? h("div", { style:{ marginTop:8 } }, archivedList.map(memberRow)) : null)
+        : null,
+
+      showAdd ? h("div", { onClick: () => setShowAdd(false), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
+        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:360, maxHeight:"88vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
+          h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, "ADD PILOT"),
+          h("div", { style:{ fontSize:11, color:C.dim } }, "New pilots start as STAFF with no PIN — set those in PIN management."),
+          fieldLabel("Name"),
+          textInput(fName, setFName, "Last name", 24),
+          fieldLabel("Initials"),
+          textInput(fInit, setFInit, fName.trim() ? fName.trim().slice(0, 2).toUpperCase() : "e.g. JD", 3),
+          fieldLabel("Color"),
+          h("div", { style:{ display:"flex", gap:8, flexWrap:"wrap" } }, PALETTE.map(col => h("button", { key:col, onClick: () => setFColor(col),
+            style:{ width:26, height:26, borderRadius:"50%", background:col, border: fColor === col ? "2px solid "+C.text : "2px solid transparent", cursor:"pointer" } }))),
+          fieldLabel("Role"),
+          h("div", { style:{ display:"flex", gap:8 } },
+            h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC") }, "RPIC"),
+            h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO") }, "VO")),
+          fieldLabel("Status"),
+          h("div", { style:{ display:"flex", gap:8 } },
+            h("button", { onClick: () => setFReserve(false), style: pillBtn(!fReserve) }, "ACTIVE"),
+            h("button", { onClick: () => setFReserve(true), style: pillBtn(fReserve) }, "RESERVE")),
+          h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
+            h("button", { onClick: () => setShowAdd(false), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
+            h("button", { onClick: addPilot, disabled: busy || !fName.trim(),
+              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: fName.trim() ? "rgba(255,107,53,0.16)" : C.panel2, border:"1px solid "+(fName.trim()?C.accent:C.border), color: fName.trim()?C.accent:C.dim, cursor: fName.trim()?"pointer":"default" } }, busy ? "…" : "Add Pilot")))) : null
+    );
+  }
+
   function App() {
     const [defaults, setDefaults]   = useState(null);
     const [dataSource, setDataSource] = useState("loading");
@@ -892,6 +990,13 @@
       return res;
     };
 
+    const saveCrew = async (updated) => {
+      const res = await writeCrewDoc(updated);
+      if (res.ok) setCrew(updated);
+      else setLastErr("Crew save failed (" + res.status + "): " + res.detail);
+      return res;
+    };
+
     const k = monthKey(vYear, vMonth);
     const locked = !!(locks[k] && locks[k].locked);
 
@@ -946,18 +1051,20 @@
           h("b", null, dataSource === "json" ? "crew_defaults.json" : dataSource === "fallback" ? "embedded fallback (json not found)" : "loading…")),
 
         // Tabs
-        h("div", { style:{ display:"flex", gap:8, marginBottom:12 } }, tabBtn("avail", "AVAILABILITY"), tabBtn("sched", "SCHEDULE")),
+        h("div", { style:{ display:"flex", gap:8, marginBottom:12 } }, tabBtn("avail", "AVAILABILITY"), tabBtn("sched", "SCHEDULE"), canEdit ? tabBtn("crew", "CREW") : null),
 
-        // Shared month nav
-        h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
+        // Shared month nav (hidden on the crew tab — not month-scoped)
+        tab !== "crew" ? h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
           h("button", { onClick: () => navMonth(-1), style: navBtn() }, "‹"),
           h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1 } }, MONTHS[vMonth] + " " + vYear),
-          h("button", { onClick: () => navMonth(1), style: navBtn() }, "›")),
+          h("button", { onClick: () => navMonth(1), style: navBtn() }, "›")) : null,
 
         // Active view
         tab === "avail"
           ? h(AvailabilityView, { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr, canEdit, me })
-          : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr, canEdit }),
+          : (tab === "crew" && canEdit)
+            ? h(CrewMgmtView, { crew, saveCrew, flash })
+            : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr, canEdit }),
 
         // Dev controls (manager-only: Lock is operational, Seed is a sandbox tool)
         canEdit ? h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
