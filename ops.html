@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "5.2";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "5.2.1";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -231,7 +231,7 @@
   // ── Theme ────────────────────────────────────────────────────────────────────
   const C = {
     bg:"#0D1117", panel:"#161B22", panel2:"#1C2230", border:"#30363D",
-    text:"#E6EDF3", dim:"#8B949E", accent:"#FF6B35",
+    text:"#E6EDF3", dim:"#8B949E", accent:"#FF6B35", blue:"#3B82F6",
     green:"#34C759", amber:"#FFC107", red:"#FF3B30"
   };
 
@@ -838,7 +838,7 @@
       if (res && res.ok) { setShowAdd(false); setFName(""); setFInit(""); setFColor(PALETTE[0]); setFRole("RPIC"); setFReserve(false); }
     };
 
-    const pillBtn = (on) => ({ fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?C.accent:C.border), background: on?"rgba(255,107,53,0.14)":C.panel2, color: on?C.accent:C.dim, cursor:"pointer" });
+    const pillBtn = (on) => ({ fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?C.blue:C.border), background: on?"rgba(59,130,246,0.14)":C.panel2, color: on?C.blue:C.dim, cursor:"pointer" });
 
     const memberRow = (c) => h("div", { key:c.id, style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8, opacity: c.archived ? 0.6 : 1 } },
       h("div", { style:{ display:"flex", alignItems:"center", gap:8, marginBottom:8 } },
@@ -863,7 +863,7 @@
     return h("div", null,
       h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
         h("div", { style:{ fontSize:11, color:C.dim, letterSpacing:1 } }, "CREW ROSTER · " + activeList.length + (activeList.length === 1 ? " PILOT" : " PILOTS")),
-        h("button", { onClick: () => setShowAdd(true), style:{ fontSize:12, color:C.accent, background:"rgba(255,107,53,0.14)", border:"1px solid "+C.accent, borderRadius:8, padding:"6px 12px", cursor:"pointer" } }, "+ Add Pilot")),
+        h("button", { onClick: () => setShowAdd(true), style:{ fontSize:12, color:C.blue, background:"rgba(59,130,246,0.14)", border:"1px solid "+C.blue, borderRadius:8, padding:"6px 12px", cursor:"pointer" } }, "+ Add Pilot")),
 
       activeList.map(memberRow),
 
@@ -896,7 +896,7 @@
           h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
             h("button", { onClick: () => setShowAdd(false), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
             h("button", { onClick: addPilot, disabled: busy || !fName.trim(),
-              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: fName.trim() ? "rgba(255,107,53,0.16)" : C.panel2, border:"1px solid "+(fName.trim()?C.accent:C.border), color: fName.trim()?C.accent:C.dim, cursor: fName.trim()?"pointer":"default" } }, busy ? "…" : "Add Pilot")))) : null
+              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: fName.trim() ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(fName.trim()?C.blue:C.border), color: fName.trim()?C.blue:C.dim, cursor: fName.trim()?"pointer":"default" } }, busy ? "…" : "Add Pilot")))) : null
     );
   }
 
@@ -1024,7 +1024,7 @@
     const syncColor = sync === "synced" ? C.green : C.amber;
     const wrap = { maxWidth: 520, margin: "0 auto", padding: "14px 14px 44px" };
     const tabBtn = (id, label) => h("button", { onClick: () => setTab(id),
-      style: { flex:1, padding:"10px 0", fontSize:12, letterSpacing:1, borderRadius:9, border:"1px solid "+(tab===id?C.accent:C.border), background: tab===id?"rgba(255,107,53,0.16)":C.panel, color: tab===id?C.accent:C.dim } }, label);
+      style: { flex:1, padding:"10px 0", fontSize:12, letterSpacing:1, borderRadius:9, border:"1px solid "+(tab===id?C.blue:C.border), background: tab===id?"rgba(59,130,246,0.16)":C.panel, color: tab===id?C.blue:C.dim } }, label);
 
     return h("div", { style:{ minHeight:"100vh" } },
       h("div", { style: wrap },
