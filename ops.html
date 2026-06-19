@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "5.3.2";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "5.4";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -804,7 +804,7 @@
   }
 
   function CrewMgmtView(props) {
-    const { crew, saveCrew, flash } = props;
+    const { crew, saveCrew, flash, isOwner, myId } = props;
     const PALETTE = [
       "#7B1E17","#C0392B","#E74C3C","#FF7066",              // reds
       "#A84300","#D35400","#E67E22","#F39C12",              // oranges
@@ -825,6 +825,9 @@
     const [fRole, setFRole]   = useState("RPIC");
     const [certEdit, setCertEdit] = useState(null);   // pilot whose 107 is being edited
     const [certInput, setCertInput] = useState("");   // entered completion / issue date
+    const [accessEdit, setAccessEdit] = useState(null); // owner-only: pilot whose PIN / tier is being edited
+    const [tierDraft, setTierDraft]   = useState("staff");
+    const [pinDraft, setPinDraft]     = useState("");
 
     const activeList   = crew.filter(c => !c.archived);
     const archivedList = crew.filter(c => c.archived);
@@ -865,6 +868,17 @@
       const res = await doSave(crew.map(x => x.id === certEdit.id ? { ...x, part107: null } : x), certEdit.name + " 107 cleared");
       if (res && res.ok) { setCertEdit(null); setCertInput(""); }
     };
+    const tierLabel = (t) => t === "owner" ? "Owner" : t === "admin" ? "Admin" : "Staff";
+    const tierHint  = (t) => t === "owner" ? "Full control, including access and PINs." : t === "admin" ? "Edits schedule and crew — no access or PIN control." : "Own availability only — no editing.";
+    const openAccess = (c) => { setTierDraft(c.tier || "staff"); setPinDraft(c.pin || ""); setAccessEdit(c); };
+    const pinClash = () => { const p = pinDraft.trim(); if (!p || !accessEdit) return null; return crew.find(x => x.id !== accessEdit.id && x.pin && x.pin === p) || null; };
+    const saveAccess = async () => {
+      if (!accessEdit || pinClash()) return;
+      const isSelf  = myId != null && accessEdit.id === myId;
+      const newTier = isSelf ? accessEdit.tier : tierDraft;   // own tier is locked to prevent self-lockout
+      const res = await doSave(crew.map(x => x.id === accessEdit.id ? { ...x, tier: newTier, pin: pinDraft.trim() || null } : x), accessEdit.name + " access updated");
+      if (res && res.ok) { setAccessEdit(null); setPinDraft(""); }
+    };
 
     const pillBtn = (on, hue) => { const col = hue || C.blue; return { fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?col:C.border), background: on?(col+"24"):C.panel2, color: on?col:C.dim, cursor:"pointer" }; };
     const openAdd = () => { setFColor(availColors[0] || PALETTE[0]); setShowAdd(true); };
@@ -874,7 +888,9 @@
         h("span", { style:{ width:12, height:12, borderRadius:"50%", background:c.color, flexShrink:0 } }),
         h("span", { style:{ fontSize:14, color:C.text, fontWeight:500 } }, c.name),
         h("span", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, c.initials),
-        h("span", { style:{ marginLeft:"auto", fontSize:9, letterSpacing:1, padding:"1px 6px", borderRadius:10, border:"1px solid "+C.border, color: c.tier === "staff" ? C.dim : C.accent } }, c.tier === "staff" ? "STAFF" : "ADMIN")),
+        isOwner
+          ? h("button", { onClick: () => openAccess(c), style:{ marginLeft:"auto", fontSize:9, letterSpacing:1, padding:"2px 7px", borderRadius:10, border:"1px solid "+C.border, background:C.panel2, color: c.tier === "staff" ? C.dim : C.accent, cursor:"pointer" } }, (c.tier === "staff" ? "STAFF" : "ADMIN") + " ▸")
+          : h("span", { style:{ marginLeft:"auto", fontSize:9, letterSpacing:1, padding:"1px 6px", borderRadius:10, border:"1px solid "+C.border, color: c.tier === "staff" ? C.dim : C.accent } }, c.tier === "staff" ? "STAFF" : "ADMIN")),
       c.archived
         ? h("div", { style:{ display:"flex", alignItems:"center" } },
             h("span", { style:{ fontSize:11, color:C.dim } }, "Archived · history kept"),
@@ -888,6 +904,8 @@
     const textInput = (val, set, ph, max) => h("input", { value:val, onChange: e => set(e.target.value), placeholder:ph, maxLength: max || null,
       style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark" } });
 
+    const clash   = pinClash();
+    const accSelf = accessEdit && myId != null && accessEdit.id === myId;
     return h("div", null,
       h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
         h("div", { style:{ fontSize:11, color:C.dim, letterSpacing:1 } }, "CREW ROSTER · " + activeList.length + (activeList.length === 1 ? " PILOT" : " PILOTS")),
@@ -905,7 +923,7 @@
       showAdd ? h("div", { onClick: () => setShowAdd(false), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
         h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:360, maxHeight:"88vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
           h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, "ADD PILOT"),
-          h("div", { style:{ fontSize:11, color:C.dim } }, "New pilots start as STAFF with no PIN — set those in PIN management."),
+          h("div", { style:{ fontSize:11, color:C.dim } }, "New pilots start as Staff with no PIN. The owner sets PIN and tier from the badge on each row."),
           fieldLabel("Name"),
           textInput(fName, setFName, "Last name", 24),
           fieldLabel("Initials"),
@@ -934,7 +952,32 @@
             certEdit.part107 ? h("button", { onClick: clearCert, disabled:busy, style:{ borderRadius:8, padding:"9px 12px", fontSize:13, background:"none", border:"1px solid "+C.border, color:C.red, cursor:"pointer" } }, "Clear") : null,
             h("button", { onClick: () => setCertEdit(null), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
             h("button", { onClick: saveCert, disabled: busy || !certInput,
-              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: certInput ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(certInput?C.blue:C.border), color: certInput?C.blue:C.dim, cursor: certInput?"pointer":"default" } }, busy ? "…" : "Save")))) : null
+              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: certInput ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(certInput?C.blue:C.border), color: certInput?C.blue:C.dim, cursor: certInput?"pointer":"default" } }, busy ? "…" : "Save")))) : null,
+
+      accessEdit ? h("div", { onClick: () => setAccessEdit(null), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
+        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:340, background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
+          h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, "ACCESS · " + accessEdit.name),
+          h("div", { style:{ fontSize:11, color:C.dim } }, tierLabel(accessEdit.tier) + (accessEdit.pin ? " · PIN on file" : " · no PIN")),
+          fieldLabel("Tier"),
+          accSelf
+            ? h("div", { style:{ fontSize:12, color:C.dim, padding:"4px 0" } }, "Owner (you) — your own tier can't be changed here.")
+            : h("div", null,
+                h("div", { style:{ display:"flex", gap:8 } },
+                  h("button", { onClick: () => setTierDraft("owner"), style: pillBtn(tierDraft === "owner") }, "OWNER"),
+                  h("button", { onClick: () => setTierDraft("admin"), style: pillBtn(tierDraft === "admin") }, "ADMIN"),
+                  h("button", { onClick: () => setTierDraft("staff"), style: pillBtn(tierDraft === "staff") }, "STAFF")),
+                h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, tierHint(tierDraft))),
+          fieldLabel("Sign-in PIN"),
+          h("input", { value:pinDraft, onChange: e => setPinDraft(e.target.value), inputMode:"numeric", placeholder:"Blank = no sign-in", maxLength:12,
+            style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+(clash?C.red:C.border), borderRadius:8, padding:"9px 11px", fontSize:14, letterSpacing:3, colorScheme:"dark" } }),
+          clash
+            ? h("div", { style:{ fontSize:12, color:C.red, marginTop:6 } }, "PIN already used by " + clash.name)
+            : h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, "Pilots sign in with this. Blank means no access."),
+          h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
+            (accessEdit.pin || pinDraft) ? h("button", { onClick: () => setPinDraft(""), style:{ borderRadius:8, padding:"9px 12px", fontSize:13, background:"none", border:"1px solid "+C.border, color:C.red, cursor:"pointer" } }, "Clear") : null,
+            h("button", { onClick: () => setAccessEdit(null), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
+            h("button", { onClick: saveAccess, disabled: busy || !!clash,
+              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: clash ? C.panel2 : "rgba(59,130,246,0.16)", border:"1px solid "+(clash?C.border:C.blue), color: clash?C.dim:C.blue, cursor: clash?"default":"pointer" } }, busy ? "…" : "Save")))) : null
     );
   }
 
@@ -1101,7 +1144,7 @@
         tab === "avail"
           ? h(AvailabilityView, { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr, canEdit, me })
           : (tab === "crew" && canEdit)
-            ? h(CrewMgmtView, { crew, saveCrew, flash })
+            ? h(CrewMgmtView, { crew, saveCrew, flash, isOwner, myId: me ? me.id : null })
             : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr, canEdit }),
 
         // Dev controls (manager-only: Lock is operational, Seed is a sandbox tool)
