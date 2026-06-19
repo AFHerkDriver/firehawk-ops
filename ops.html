@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "4.1c";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "4.4.1";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -758,6 +758,29 @@
   // ════════════════════════════════════════════════════════════════════════════
   // APP  (shared state + tabs + month nav + dev controls)
   // ════════════════════════════════════════════════════════════════════════════
+  function AccessLogPanel() {
+    const [entries, setEntries] = useState([]);
+    const [loading, setLoading] = useState(true);
+    useEffect(() => {
+      fsGet(DEV_COL, "access_log").then(log => {
+        setEntries((log && Array.isArray(log.entries)) ? log.entries : []);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    }, []);
+    return h("div", { style:{ background:"rgba(255,193,7,0.06)", border:"1px solid rgba(255,193,7,0.25)", borderRadius:12, padding:"12px 14px", marginTop:14, marginBottom:10 } },
+      h("div", { style:{ fontSize:9, color:C.amber, letterSpacing:2, marginBottom:10 } }, "🔒 ACCESS LOG"),
+      loading
+        ? h("div", { style:{ fontSize:11, color:C.dim } }, "Loading…")
+        : entries.length === 0
+          ? h("div", { style:{ fontSize:11, color:C.dim } }, "No sign-ins recorded yet.")
+          : entries.slice(0, 10).map((e, i) => h("div", { key:i,
+              style:{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:"1px solid rgba(255,255,255,0.04)", fontSize:11 } },
+              h("span", { style:{ color:C.text } }, e.name,
+                e.tier ? h("span", { style:{ fontSize:9, letterSpacing:1, color: e.tier === "staff" ? C.dim : C.accent, marginLeft:6 } }, e.tier === "staff" ? "STAFF" : "ADMIN") : null),
+              h("span", { style:{ color:C.dim, fontSize:10 } },
+                new Date(e.time).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", timeZone:"America/Chicago" }) + " CST"))));
+  }
+
   function App() {
     const [defaults, setDefaults]   = useState(null);
     const [dataSource, setDataSource] = useState("loading");
@@ -789,7 +812,16 @@
     const submitPin = () => {
       const entered = pinInput.trim();
       const found = entered ? crew.find(c => c.pin && c.pin === entered) : null;
-      if (found) { setAuthId(found.id); setShowPin(false); setPinInput(""); setPinError(false); }
+      if (found) {
+        setAuthId(found.id); setShowPin(false); setPinInput(""); setPinError(false);
+        const now = new Date();
+        const entry = { name: found.name, tier: found.tier, time: now.toISOString(), ts: now.getTime() };
+        fsGet(DEV_COL, "access_log").then(log => {
+          const entries = (log && Array.isArray(log.entries)) ? log.entries : [];
+          entries.unshift(entry);
+          fsSet(DEV_COL, "access_log", { entries: entries.slice(0, 10) });
+        }).catch(() => {});
+      }
       else { setPinError(true); }
     };
     const logout = () => { setAuthId(null); };
@@ -902,6 +934,9 @@
           h("div", { style:{ display:"flex", gap:8 } },
             h("button", { onClick: seed, disabled: busy, style: ghostBtn(busy) }, "Seed / Reset Roster"),
             h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] + " Avail" : "Lock " + MONTHS[vMonth] + " Avail"))) : null,
+
+        // Access log (owner-only)
+        isOwner ? h(AccessLogPanel, null) : null,
 
         // Error line
         lastErr ? h("div", { style:{ background:"rgba(255,59,48,0.12)", border:"1px solid "+C.red, borderRadius:8, padding:"9px 11px", fontSize:11, color:C.red, marginBottom:10, lineHeight:1.5, wordBreak:"break-word" } }, "⚠ " + lastErr) : null,
