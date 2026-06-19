@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "2.1";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "3.0";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (bright green); UAV121 = #4A90D9 (blue)
   const FS_PROJECT = "firehawk-scheduler";
   const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
@@ -324,13 +324,14 @@
     const [selDay, setSelDay]       = useState(null);
     const [saving, setSaving]       = useState(false);
     const [savedAt, setSavedAt]     = useState(0);
+    const [proposal, setProposal]   = useState(null);   // increment 3: pending smart-assignment draft
     const daysRef  = useRef(monthDays); daysRef.current = monthDays;
     const saveTimer = useRef(null);
 
     // Load this month's schedule once per month (manager is the single editor;
     // a one-time read + auto-save avoids a poll clobbering an in-progress edit).
     useEffect(() => {
-      let alive = true; setLoaded(false);
+      let alive = true; setLoaded(false); setProposal(null);
       fsGetPath(DEV_COL + "/schedule_" + vYear + "_" + vMonth).then(r => {
         if (!alive) return;
         setMonthDays((r && r.days) ? r.days : {});
@@ -366,6 +367,53 @@
 
     // Calendar grid
     const lead = firstWeekday(vYear, vMonth), dim = daysInMonth(vYear, vMonth);
+
+    // ── Smart assignment (increment 3) ──────────────────────────────────────
+    // One unit per open day, RPIC only, balanced across eligible pilots.
+    const certValid = (p) => { const dl = daysUntil(p); return dl !== null && dl >= 0; };
+    const availOn = (id, dnum) => { const m = crewById(id); const rec = m && m.availMonths && m.availMonths[monthKey(vYear, vMonth)]; return !!(rec && Array.isArray(rec.days) && rec.days.indexOf(dnum) !== -1); };
+    const dayOccupied = (dd) => { if (!dd) return false; const du = decodeDay(dd, crew); return du.u121.active || du.u124.rpic != null; };
+    const isOpen = (dnum) => { const dd = monthDays[dnum]; return !dayOccupied(dd) && !(dd && dd.confirmed); };
+
+    const proposeMonth = () => {
+      const counts = {}; crew.forEach(c => counts[c.id] = 0);
+      for (let d = 1; d <= dim; d++) {                 // seed balance from duty already on the board
+        const du = monthDays[d] ? decodeDay(monthDays[d], crew) : null;
+        if (du && du.u121.active) counts[LEAD_PILOT_ID]++;
+        if (du && du.u124.rpic != null) counts[du.u124.rpic] = (counts[du.u124.rpic] || 0) + 1;
+      }
+      const prop = {};
+      for (let d = 1; d <= dim; d++) {
+        if (!isOpen(d)) continue;                       // skip manager-set & finalized days
+        const elig = crew.filter(c => c.role === "RPIC" && certValid(c.part107) && availOn(c.id, d));
+        const active = elig.filter(c => !c.reserve);
+        const pool = active.length ? active : elig;     // reserves only when no active pilot is free
+        if (!pool.length) continue;                     // nobody available → leave OOS
+        pool.sort((a, b) => (counts[a.id] - counts[b.id]) || (a.id - b.id));
+        const pick = pool[0];
+        counts[pick.id]++;
+        prop[d] = { rpic: pick.id };
+      }
+      setProposal(prop);
+    };
+
+    const applyProposal = () => {
+      if (!proposal) return;
+      const prev = daysRef.current; const next = { ...prev };
+      Object.keys(proposal).forEach(k => {
+        const id = proposal[k].rpic;
+        const enc = id === LEAD_PILOT_ID
+          ? encodeDay({ active: true, vo: null }, { rpic: null, vo: null, extra: [] })
+          : encodeDay({ active: false, vo: null }, { rpic: id, vo: null, extra: [] });
+        next[k] = { ...(next[k] || emptyDay()), ...enc, lastEditedBy: "UAS Manager", lastEditedAt: new Date().toISOString() };
+      });
+      setMonthDays(next); scheduleSave(next); setProposal(null);
+    };
+
+    const proposalCount = proposal ? Object.keys(proposal).length : 0;
+    let openCount = 0; for (let _d = 1; _d <= dim; _d++) if (isOpen(_d)) openCount++;
+    const uncoverable = proposal ? Math.max(0, openCount - proposalCount) : 0;
+
     const cells = [];
     for (let i = 0; i < lead; i++) cells.push(h("div", { key:"b"+i }));
     for (let d = 1; d <= dim; d++) {
@@ -378,23 +426,29 @@
       const manned = a121 || a124;
       const conf = !!(dd && dd.confirmed);
       const hasOOS = dd && dd.oos && dd.oos.length;
-      // Coverage coloring: green = manned + confirmed, amber = manned but unconfirmed, red = no coverage
-      const cov = !manned
-        ? { bg:"rgba(255,59,48,0.13)",  border:"rgba(255,59,48,0.42)" }
-        : (conf ? { bg:"rgba(52,199,89,0.13)", border:"rgba(52,199,89,0.42)" }
-                : { bg:"rgba(255,193,7,0.10)", border:"rgba(255,193,7,0.34)" });
+      const prop = (proposal && isOpen(d)) ? (proposal[d] || null) : null;   // draft for this open day
+      const pUnit = prop ? unitFor(prop.rpic) : null;
+      // Coloring: dashed accent = proposed draft, green = confirmed, amber = unconfirmed, red = no coverage
+      const cov = prop
+        ? { bg:"rgba(255,107,53,0.07)", border:"rgba(255,107,53,0.6)", dashed:true }
+        : (!manned
+            ? { bg:"rgba(255,59,48,0.13)",  border:"rgba(255,59,48,0.42)" }
+            : (conf ? { bg:"rgba(52,199,89,0.13)", border:"rgba(52,199,89,0.42)" }
+                    : { bg:"rgba(255,193,7,0.10)", border:"rgba(255,193,7,0.34)" }));
       cells.push(h("button", {
         key:"d"+d, onClick: () => setSelDay(d),
-        style: { minHeight:62, borderRadius:8, border:"1px solid "+cov.border, background:cov.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1 }
+        style: { minHeight:62, borderRadius:8, border:(cov.dashed?"1px dashed ":"1px solid ")+cov.border, background:cov.bg, color:C.text, padding:"4px 3px 3px", display:"flex", flexDirection:"column", alignItems:"stretch", gap:1 }
       },
         h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center" } },
           h("span", { style:{ fontSize:11, color:C.dim } }, d),
           h("span", { style:{ fontSize:9, fontWeight:500, color:sc.color } }, sh)),
         h("div", { style:{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1 } },
-          a121 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:"#4A90D9", lineHeight:1.15 } }, "121·AS") : null,
-          a124 ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:U124, lineHeight:1.15 } }, "124·" + initialsFor(du.u124.rpic)) : null,
-          !manned ? h("span", { style:{ fontSize:11, fontWeight:600, color:C.red, letterSpacing:1 } }, "OOS") : null),
+          prop ? h("span", { style:{ fontSize:10.5, fontWeight:500, color: pUnit === UNIT_LEAD ? "#4A90D9" : U124, lineHeight:1.15 } }, (pUnit === UNIT_LEAD ? "121·" : "124·") + initialsFor(prop.rpic)) : null,
+          (!prop && a121) ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:"#4A90D9", lineHeight:1.15 } }, "121·AS") : null,
+          (!prop && a124) ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:U124, lineHeight:1.15 } }, "124·" + initialsFor(du.u124.rpic)) : null,
+          (!prop && !manned) ? h("span", { style:{ fontSize:11, fontWeight:600, color:C.red, letterSpacing:1 } }, "OOS") : null),
         h("div", { style:{ display:"flex", justifyContent:"center", gap:4, height:10, fontSize:9 } },
+          prop ? h("span", { style:{ color:C.accent, fontSize:8, letterSpacing:1 } }, "◇ DRAFT") : null,
           hasOOS ? h("span", { style:{ color:C.amber } }, "◷") : null)
       ));
     }
@@ -501,6 +555,19 @@
         h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 } },
           h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, "TAP A DAY TO ASSIGN CREW"),
           h("div", { style:{ fontSize:10, color: saving ? C.amber : C.dim } }, saving ? "Saving…" : (savedAt ? "Auto-saved" : (loaded ? "" : "Loading…")))),
+
+        // Propose / apply bar (increment 3 — smart assignment)
+        proposal
+          ? h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10, background:"rgba(255,107,53,0.08)", border:"1px dashed "+C.accent, borderRadius:8, padding:"8px 11px" } },
+              h("div", { style:{ fontSize:11, color:C.text } },
+                h("b", { style:{ color:C.accent } }, "Draft · "), proposalCount + " day" + (proposalCount === 1 ? "" : "s") + " proposed",
+                uncoverable ? h("span", { style:{ color:C.amber } }, " · " + uncoverable + " left OOS") : null),
+              h("div", { style:{ display:"flex", gap:8 } },
+                h("button", { onClick: () => setProposal(null), style:{ borderRadius:7, padding:"6px 12px", fontSize:11, background:C.panel2, border:"1px solid "+C.border, color:C.dim } }, "Discard"),
+                h("button", { onClick: applyProposal, style:{ borderRadius:7, padding:"6px 14px", fontSize:11, background:"rgba(52,199,89,0.16)", border:"1px solid "+C.green, color:C.green, fontWeight:500 } }, "Apply")))
+          : h("button", { onClick: proposeMonth, disabled: openCount === 0,
+              style:{ width:"100%", marginBottom:10, borderRadius:8, padding:"10px 0", fontSize:12, letterSpacing:0.5, background:"rgba(255,107,53,0.14)", border:"1px solid "+C.accent, color:C.accent, opacity: openCount === 0 ? 0.4 : 1 } },
+              openCount === 0 ? "Propose Month — no open days" : "✨ Propose Month from Availability"),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6, marginBottom:6 } },
           DOW.map(d => h("div", { key:d, style:{ textAlign:"center", fontSize:10, color:C.dim, letterSpacing:1 } }, d))),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 } }, cells),
