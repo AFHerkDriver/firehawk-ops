@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "5.2.2";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "5.2.4";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -438,6 +438,7 @@
     const otherRPIC = activeCrew.filter(c => c.role === "RPIC" && c.id !== LEAD_PILOT_ID);
     const crewById = (id) => crew.find(c => c.id === id) || null;
     const initialsFor = (id) => { const m = crewById(id); return m ? m.initials : "—"; };
+    const colorFor = (id) => { const m = crewById(id); return m ? m.color : C.dim; };
     const nameFor = (id) => { const m = crewById(id); return m ? m.name : "—"; };
 
     // Calendar grid
@@ -537,9 +538,9 @@
           h("span", { style:{ fontSize:9, fontWeight:500, color:sc.color } }, sh)),
         holiday ? h("div", { style:{ fontSize:6.5, color:"#D4AF37", lineHeight:1.1, marginTop:1, fontWeight:600, textAlign:"center", overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" } }, holiday) : null,
         h("div", { style:{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1 } },
-          prop ? h("span", { style:{ fontSize:10.5, fontWeight:500, color: pUnit === UNIT_LEAD ? U121 : U124, lineHeight:1.15 } }, (pUnit === UNIT_LEAD ? "121·" : "124·") + initialsFor(prop.rpic)) : null,
-          (!prop && a121) ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:U121, lineHeight:1.15 } }, "121·AS") : null,
-          (!prop && a124) ? h("span", { style:{ fontSize:10.5, fontWeight:500, color:U124, lineHeight:1.15 } }, "124·" + initialsFor(du.u124.rpic)) : null,
+          prop ? h("span", { style:{ fontSize:10.5, fontWeight:500, lineHeight:1.15 } }, h("span", { style:{ color: pUnit === UNIT_LEAD ? U121 : U124 } }, pUnit === UNIT_LEAD ? "121·" : "124·"), h("span", { style:{ color: colorFor(prop.rpic) } }, initialsFor(prop.rpic))) : null,
+          (!prop && a121) ? h("span", { style:{ fontSize:10.5, fontWeight:500, lineHeight:1.15 } }, h("span", { style:{ color:U121 } }, "121·"), h("span", { style:{ color: colorFor(LEAD_PILOT_ID) } }, initialsFor(LEAD_PILOT_ID))) : null,
+          (!prop && a124) ? h("span", { style:{ fontSize:10.5, fontWeight:500, lineHeight:1.15 } }, h("span", { style:{ color:U124 } }, "124·"), h("span", { style:{ color: colorFor(du.u124.rpic) } }, initialsFor(du.u124.rpic))) : null,
           (!prop && !manned) ? h("span", { style:{ fontSize:11, fontWeight:600, color:C.red, letterSpacing:1 } }, "OOS") : null),
         h("div", { style:{ display:"flex", justifyContent:"center", gap:4, height:10, fontSize:9 } },
           prop ? h("span", { style:{ color:C.accent, fontSize:8, letterSpacing:1 } }, "◇ DRAFT") : null,
@@ -826,6 +827,8 @@
     const availColors  = PALETTE.filter(col => usedColors.indexOf(col) === -1);
     const swatchColors = availColors.length ? availColors : PALETTE;            // fallback if every color is taken
     const fmtCert = (s) => { try { return new Date(s).toLocaleDateString("en-US", { month:"short", year:"numeric", timeZone:"UTC" }); } catch (e) { return s; } };
+    const certDays = (s) => { if (!s) return null; return (new Date(s + "T00:00:00Z").getTime() - Date.now()) / 86400000; };
+    const certColor = (s) => { const d = certDays(s); if (d == null) return C.amber; if (d < 30) return C.red; if (d < 90) return C.amber; return C.green; };
 
     const doSave = async (updated, msg) => {
       setBusy(true);
@@ -847,7 +850,7 @@
       if (res && res.ok) { setShowAdd(false); setFName(""); setFInit(""); setFColor(PALETTE[0]); setFRole("RPIC"); setFReserve(false); }
     };
 
-    const pillBtn = (on) => ({ fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?C.blue:C.border), background: on?"rgba(59,130,246,0.14)":C.panel2, color: on?C.blue:C.dim, cursor:"pointer" });
+    const pillBtn = (on, hue) => { const col = hue || C.blue; return { fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?col:C.border), background: on?(col+"24"):C.panel2, color: on?col:C.dim, cursor:"pointer" }; };
     const openAdd = () => { setFColor(availColors[0] || PALETTE[0]); setShowAdd(true); };
 
     const memberRow = (c) => h("div", { key:c.id, style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8, opacity: c.archived ? 0.6 : 1 } },
@@ -862,8 +865,8 @@
             h("button", { onClick: () => unarchive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.green, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Restore"))
         : h("div", { style:{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" } },
             h("button", { onClick: () => setRole(c), disabled:busy, style: pillBtn(c.role === "RPIC") }, c.role),
-            h("button", { onClick: () => toggleReserve(c), disabled:busy, style: pillBtn(!c.reserve) }, c.reserve ? "RESERVE" : "ACTIVE"),
-            h("span", { style:{ fontSize:11, color: c.part107 ? C.dim : C.amber } }, c.part107 ? "107 exp " + fmtCert(c.part107) : "no 107"),
+            h("button", { onClick: () => toggleReserve(c), disabled:busy, style: pillBtn(!c.reserve, C.green) }, c.reserve ? "RESERVE" : "ACTIVE"),
+            h("span", { style:{ fontSize:11, color: certColor(c.part107) } }, c.part107 ? ((certDays(c.part107) < 0 ? "107 expired " : "107 exp ") + fmtCert(c.part107)) : "no 107"),
             h("button", { onClick: () => archive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.red, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Archive")));
 
     const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:5, marginTop:10 } }, t);
@@ -901,7 +904,7 @@
             h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO") }, "VO")),
           fieldLabel("Status"),
           h("div", { style:{ display:"flex", gap:8 } },
-            h("button", { onClick: () => setFReserve(false), style: pillBtn(!fReserve) }, "ACTIVE"),
+            h("button", { onClick: () => setFReserve(false), style: pillBtn(!fReserve, C.green) }, "ACTIVE"),
             h("button", { onClick: () => setFReserve(true), style: pillBtn(fReserve) }, "RESERVE")),
           h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
             h("button", { onClick: () => setShowAdd(false), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
