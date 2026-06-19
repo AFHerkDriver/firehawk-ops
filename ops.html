@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "4.4.1";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "5.1";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -239,11 +239,32 @@
   function writeCrewDoc(crewArr) {
     return fsSet(DEV_COL, "crew", {
       members: crewArr.map(c => ({
-        id: c.id, name: c.name, role: c.role, color: c.color,
-        initials: c.initials, part107: c.part107 == null ? null : c.part107,
-        reserve: !!c.reserve, availMonths: c.availMonths || {}
+        id: c.id, name: c.name, role: c.role, tier: c.tier || "staff",
+        pin: (c.pin == null ? null : c.pin), color: c.color,
+        initials: c.initials, part107: (c.part107 == null ? null : c.part107),
+        reserve: !!c.reserve, archived: !!c.archived, availMonths: c.availMonths || {}
       }))
     });
+  }
+
+  // Normalize a raw member (from Firebase or the seed roster) into a full crew record.
+  // Missing tier/pin fall back to the embedded roster so auth can't break mid-migration;
+  // an explicit null from Firebase (e.g. a cleared PIN) is respected.
+  function normalizeMember(src) {
+    const fb = FALLBACK_ROSTER.find(x => x.id === src.id) || {};
+    return {
+      id: src.id,
+      name: src.name || fb.name || ("Pilot " + src.id),
+      role: src.role || fb.role || "VO",
+      tier: src.tier || fb.tier || "staff",
+      pin: (src.pin !== undefined ? src.pin : (fb.pin != null ? fb.pin : null)),
+      color: src.color || fb.color || "#888",
+      initials: src.initials || fb.initials || "",
+      part107: (src.part107 !== undefined ? src.part107 : (fb.part107 !== undefined ? fb.part107 : null)),
+      reserve: !!src.reserve,
+      archived: !!src.archived,
+      availMonths: (src.availMonths && typeof src.availMonths === "object") ? src.availMonths : {}
+    };
   }
 
   function emptyDay() { return { rpic:null, vo:null, vo2:null, extra:[], oos:[], confirmed:false }; }
@@ -786,6 +807,7 @@
     const [dataSource, setDataSource] = useState("loading");
     const [crew, setCrew]           = useState([]);
     const [crewLoaded, setCrewLoaded] = useState(false);
+    const migratedRef = useRef(false);   // guards the one-time roster → Firebase migration write
     const [locks, setLocks]         = useState({});
     const [sync, setSync]           = useState("connecting");
     const [tab, setTab]             = useState("avail");
@@ -836,12 +858,21 @@
     useEffect(() => {
       if (!defaults) return;
       const unsubCrew = fsListen(DEV_COL, "crew", data => {
-        const members = (data && Array.isArray(data.members)) ? data.members : [];
-        setCrew(defaults.map(d => {
-          const m = members.find(x => x.id === d.id);
-          const fb = FALLBACK_ROSTER.find(x => x.id === d.id) || {};   // embedded tier/pin survive a stale/old crew_defaults.json
-          return { ...d, tier: d.tier || fb.tier || null, pin: d.pin || fb.pin || null, availMonths: (m && typeof m.availMonths === "object" && m.availMonths) || {} };
-        }));
+        const fbMembers = (data && Array.isArray(data.members)) ? data.members : [];
+        // Full new schema is present once every member carries name + tier; older docs have name but no tier.
+        const fbCurrent = fbMembers.length > 0 && fbMembers.every(m => m && m.name && m.tier);
+        if (fbCurrent) {
+          setCrew(fbMembers.map(m => normalizeMember(m)));   // Firebase crew doc is the source of truth
+        } else {
+          // One-time migration: defaults order, overlay existing Firebase data (availability), backfill tier/pin, write full records back.
+          const seeded = defaults.map(d => normalizeMember({ ...d, ...(fbMembers.find(x => x.id === d.id) || {}) }));
+          fbMembers.forEach(m => { if (!defaults.find(d => d.id === m.id)) seeded.push(normalizeMember(m)); });
+          setCrew(seeded);
+          if (!migratedRef.current) {
+            migratedRef.current = true;
+            writeCrewDoc(seeded).then(r => { if (r && r.ok) flash("Roster migrated to Firebase"); });
+          }
+        }
         setCrewLoaded(true); setSync("synced");
       });
       const unsubLocks = fsListen(DEV_COL, "availability_locks", data => { setLocks((data && typeof data === "object") ? data : {}); });
