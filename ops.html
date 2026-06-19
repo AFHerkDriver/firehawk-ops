@@ -32,7 +32,7 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "3.5";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "4.1a.2";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
@@ -220,12 +220,12 @@
 
   // ── Fallback roster (used only if crew_defaults.json fails to load) ──────────
   const FALLBACK_ROSTER = [
-    { id:1, name:"Sanchez",   role:"RPIC", color:"#4A90D9", initials:"AS", part107:"2026-11-01", reserve:false },
-    { id:3, name:"Bauchman",  role:"RPIC", color:"#E67E22", initials:"RB", part107:"2027-05-06", reserve:false },
-    { id:4, name:"Thomas",    role:"RPIC", color:"#7D3C98", initials:"MT", part107:"2028-01-16", reserve:false },
-    { id:2, name:"Goddu",     role:"VO",   color:"#C0392B", initials:"BG", part107:null,         reserve:false },
-    { id:5, name:"Rodriguez", role:"VO",   color:"#C8A84B", initials:"JR", part107:null,         reserve:false },
-    { id:6, name:"Rait",      role:"RPIC", color:"#8B4513", initials:"CR", part107:"2027-05-31", reserve:true  }
+    { id:1, name:"Sanchez",   role:"RPIC", tier:"owner", pin:"241408", color:"#4A90D9", initials:"AS", part107:"2026-11-01", reserve:false },
+    { id:3, name:"Bauchman",  role:"RPIC", tier:"admin", pin:"0336",   color:"#E67E22", initials:"RB", part107:"2027-05-06", reserve:false },
+    { id:4, name:"Thomas",    role:"RPIC", tier:"staff", pin:"2085",   color:"#7D3C98", initials:"MT", part107:"2028-01-16", reserve:false },
+    { id:2, name:"Goddu",     role:"VO",   tier:"staff", pin:"2152",   color:"#C0392B", initials:"BG", part107:null,         reserve:false },
+    { id:5, name:"Rodriguez", role:"VO",   tier:"staff", pin:"2022",   color:"#C8A84B", initials:"JR", part107:null,         reserve:false },
+    { id:6, name:"Rait",      role:"RPIC", tier:"staff", pin:null,     color:"#8B4513", initials:"CR", part107:"2027-05-31", reserve:true  }
   ];
 
   // ── Theme ────────────────────────────────────────────────────────────────────
@@ -730,6 +730,26 @@
     const [busy, setBusy]           = useState(false);
     const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
 
+    // ── 4.1 access control: PIN → role detection (remember-login via localStorage) ──
+    const [authId, setAuthId]     = useState(() => { try { const s = localStorage.getItem("firehawk_dev_session"); return s ? Number(s) : null; } catch (e) { return null; } });
+    const [showPin, setShowPin]   = useState(false);
+    const [pinInput, setPinInput] = useState("");
+    const [pinError, setPinError] = useState(false);
+    useEffect(() => {
+      try { if (authId == null) localStorage.removeItem("firehawk_dev_session"); else localStorage.setItem("firehawk_dev_session", String(authId)); } catch (e) {}
+    }, [authId]);
+    const me        = crew.find(c => c.id === authId) || null;
+    const tier      = me ? me.tier : null;                  // "owner" | "admin" | "staff" | null
+    const canEdit   = tier === "owner" || tier === "admin"; // full edit — both ADMIN-level signers
+    const isOwner   = tier === "owner";                     // program owner (Sanchez) — additional permissions
+    const submitPin = () => {
+      const entered = pinInput.trim();
+      const found = entered ? crew.find(c => c.pin && c.pin === entered) : null;
+      if (found) { setAuthId(found.id); setShowPin(false); setPinInput(""); setPinError(false); }
+      else { setPinError(true); }
+    };
+    const logout = () => { setAuthId(null); };
+
     useEffect(() => {
       fetch("crew_defaults.json")
         .then(r => { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
@@ -801,9 +821,16 @@
           h("div", null,
             h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:30, letterSpacing:1, lineHeight:1, color:C.text } }, "FIREHAWK OPS"),
             h("div", { style:{ fontSize:11, color:C.accent, letterSpacing:2, marginTop:2 } }, "DEV SANDBOX")),
-          h("div", { style:{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:C.dim } },
-            h("span", { style:{ width:8, height:8, borderRadius:"50%", background:syncColor, display:"inline-block" } }),
-            sync === "synced" ? "SYNCED" : "CONNECTING")),
+          h("div", { style:{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 } },
+            h("div", { style:{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:C.dim } },
+              h("span", { style:{ width:8, height:8, borderRadius:"50%", background:syncColor, display:"inline-block" } }),
+              sync === "synced" ? "SYNCED" : "CONNECTING"),
+            me
+              ? h("div", { style:{ display:"flex", alignItems:"center", gap:6 } },
+                  h("span", { style:{ fontSize:11, color:C.text } }, me.name),
+                  h("span", { style:{ fontSize:9, letterSpacing:1, padding:"1px 6px", borderRadius:10, border:"1px solid "+C.border, color: tier==="staff" ? C.dim : C.accent } }, tier === "staff" ? "STAFF" : "ADMIN"),
+                  h("button", { onClick: logout, style:{ fontSize:10, color:C.dim, background:"none", border:"none", textDecoration:"underline", cursor:"pointer", padding:0 } }, "Sign Out"))
+              : h("button", { onClick: () => { setPinInput(""); setPinError(false); setShowPin(true); }, style:{ fontSize:11, color:C.accent, background:"rgba(255,107,53,0.12)", border:"1px solid "+C.border, borderRadius:8, padding:"3px 10px", cursor:"pointer" } }, "\uD83D\uDD12 Sign In"))),
 
         // Sandbox banner
         h("div", { style:{ background:"rgba(255,193,7,0.10)", border:"1px solid rgba(255,193,7,0.35)", borderRadius:8, padding:"8px 11px", fontSize:11, color:C.amber, marginBottom:14, lineHeight:1.5 } },
@@ -839,7 +866,21 @@
           "increment ", h("b", null, APP_VERSION), " · collection ", h("b", null, DEV_COL)),
 
         // Toast
-        toast ? h("div", { style:{ position:"fixed", left:"50%", bottom:24, transform:"translateX(-50%)", background:C.panel2, border:"1px solid "+C.accent, color:C.text, padding:"9px 16px", borderRadius:20, fontSize:12, boxShadow:"0 6px 24px rgba(0,0,0,0.5)", zIndex:60 } }, toast) : null
+        toast ? h("div", { style:{ position:"fixed", left:"50%", bottom:24, transform:"translateX(-50%)", background:C.panel2, border:"1px solid "+C.accent, color:C.text, padding:"9px 16px", borderRadius:20, fontSize:12, boxShadow:"0 6px 24px rgba(0,0,0,0.5)", zIndex:60 } }, toast) : null,
+
+        // PIN modal (4.1 access control)
+        showPin ? h("div", { style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:80, padding:16 } },
+          h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:14, padding:18, width:"100%", maxWidth:300, boxShadow:"0 10px 40px rgba(0,0,0,0.6)" } },
+            h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:20, letterSpacing:1, color:C.text, marginBottom:4 } }, "SIGN IN"),
+            h("div", { style:{ fontSize:11, color:C.dim, marginBottom:12 } }, "Enter your PIN"),
+            h("input", { type:"password", inputMode:"numeric", autoFocus:true, value:pinInput,
+              onChange: e => { setPinInput(e.target.value); setPinError(false); },
+              onKeyDown: e => { if (e.key === "Enter") submitPin(); },
+              style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+(pinError?C.red:C.border), borderRadius:8, padding:"10px 12px", fontSize:18, letterSpacing:3, textAlign:"center", colorScheme:"dark" } }),
+            pinError ? h("div", { style:{ fontSize:11, color:C.red, marginTop:8 } }, "PIN not recognized") : null,
+            h("div", { style:{ display:"flex", gap:8, marginTop:14 } },
+              h("button", { onClick: () => { setShowPin(false); setPinInput(""); setPinError(false); }, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim } }, "Cancel"),
+              h("button", { onClick: submitPin, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:"rgba(255,107,53,0.16)", border:"1px solid "+C.accent, color:C.accent } }, "Sign In")))) : null
       )
     );
   }
