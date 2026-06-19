@@ -32,11 +32,11 @@
 
   // ── Config ────────────────────────────────────────────────────────────────
   const DEV_COL    = "firehawk_dev";          // <-- sandbox. Flip to "firehawk" only at cutover.
-  const APP_VERSION = "5.2.5";                  // bump on EVERY change so the footer shows what's live
+  const APP_VERSION = "5.3.1";                  // bump on EVERY change so the footer shows what's live
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
-  const isActive  = (c) => !c.reserve && !c.archived;  // reserves/archived are benched: not solicited, not auto-assigned
+  const isActive  = (c) => !c.archived;  // archived pilots are benched: not solicited, not auto-assigned
   const FS_PROJECT = "firehawk-scheduler";
   const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
   const FS_BASE    = "https://firestore.googleapis.com/v1/projects/" + FS_PROJECT + "/databases/(default)/documents";
@@ -806,15 +806,15 @@
   function CrewMgmtView(props) {
     const { crew, saveCrew, flash } = props;
     const PALETTE = [
-      "#C0392B","#E74C3C",                                  // reds
-      "#D35400","#E67E22","#E17055","#F39C12",              // oranges
-      "#B7791F","#C8A84B","#F1C40F","#FDCB6E",              // yellows / golds
-      "#27AE60","#00B894","#2ECC71","#55EFC4",              // greens
-      "#16A085","#1ABC9C","#00CEC9",                        // teals / cyan
-      "#2980B9","#0984E3","#4A90D9","#3498DB","#74B9FF",    // blues
-      "#7D3C98","#8E44AD","#6C5CE7","#9B59B6","#A29BFE",    // purples
-      "#E84393","#FD79A8",                                  // pinks
-      "#8B4513"                                             // brown
+      "#7B1E17","#C0392B","#E74C3C","#FF7066",              // reds
+      "#A84300","#D35400","#E67E22","#F39C12",              // oranges
+      "#B7791F","#C8A84B","#F1C40F","#FDE38A",              // yellows / golds
+      "#145A32","#27AE60","#2ECC71","#7BED9F",              // greens
+      "#0E6655","#16A085","#1ABC9C","#00CEC9",              // teals / cyan
+      "#1B4F72","#2980B9","#3498DB","#4A90D9","#74B9FF",    // blues
+      "#4A235A","#7D3C98","#8E44AD","#9B59B6","#C39BD3",    // purples
+      "#A32C6C","#E84393","#FD79A8",                        // pinks
+      "#5D4037","#8B4513"                                   // brown
     ];
     const [showAdd, setShowAdd]           = useState(false);
     const [showArchived, setShowArchived] = useState(false);
@@ -823,7 +823,8 @@
     const [fInit, setFInit]   = useState("");
     const [fColor, setFColor] = useState(PALETTE[0]);
     const [fRole, setFRole]   = useState("RPIC");
-    const [fReserve, setFReserve] = useState(false);
+    const [certEdit, setCertEdit] = useState(null);   // pilot whose 107 is being edited
+    const [certInput, setCertInput] = useState("");   // entered completion / issue date
 
     const activeList   = crew.filter(c => !c.archived);
     const archivedList = crew.filter(c => c.archived);
@@ -833,6 +834,7 @@
     const fmtCert = (s) => { try { return new Date(s).toLocaleDateString("en-US", { month:"short", year:"numeric", timeZone:"UTC" }); } catch (e) { return s; } };
     const certDays = (s) => { if (!s) return null; return (new Date(s + "T00:00:00Z").getTime() - Date.now()) / 86400000; };
     const certColor = (s) => { const d = certDays(s); if (d == null) return C.amber; if (d < 30) return C.red; if (d < 90) return C.amber; return C.green; };
+    const addYears = (s, n) => { try { const d = new Date(s + "T00:00:00Z"); d.setUTCFullYear(d.getUTCFullYear() + n); return d.toISOString().slice(0, 10); } catch (e) { return s; } };
 
     const doSave = async (updated, msg) => {
       setBusy(true);
@@ -842,16 +844,26 @@
       return res;
     };
     const setRole       = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, role: x.role === "RPIC" ? "VO" : "RPIC" } : x));
-    const toggleReserve = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, reserve: !x.reserve } : x), c.reserve ? c.name + " → Active" : c.name + " → Reserve");
     const archive       = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, archived: true } : x), c.name + " archived");
     const unarchive     = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, archived: false } : x), c.name + " restored");
     const addPilot = async () => {
       const name = fName.trim();
       if (!name) return;
       const init = (fInit.trim() || name.slice(0, 2)).toUpperCase().slice(0, 3);
-      const member = { id: Date.now(), name, role: fRole, tier: "staff", pin: null, color: fColor, initials: init, part107: null, reserve: fReserve, archived: false, availMonths: {} };
+      const member = { id: Date.now(), name, role: fRole, tier: "staff", pin: null, color: fColor, initials: init, part107: null, reserve: false, archived: false, availMonths: {} };
       const res = await doSave([...crew, member], "Added " + name);
-      if (res && res.ok) { setShowAdd(false); setFName(""); setFInit(""); setFColor(PALETTE[0]); setFRole("RPIC"); setFReserve(false); }
+      if (res && res.ok) { setShowAdd(false); setFName(""); setFInit(""); setFColor(PALETTE[0]); setFRole("RPIC"); }
+    };
+    const openCert = (c) => { setCertInput(""); setCertEdit(c); };
+    const saveCert = async () => {
+      if (!certInput || !certEdit) return;
+      const res = await doSave(crew.map(x => x.id === certEdit.id ? { ...x, part107: addYears(certInput, 2) } : x), certEdit.name + " 107 updated");
+      if (res && res.ok) { setCertEdit(null); setCertInput(""); }
+    };
+    const clearCert = async () => {
+      if (!certEdit) return;
+      const res = await doSave(crew.map(x => x.id === certEdit.id ? { ...x, part107: null } : x), certEdit.name + " 107 cleared");
+      if (res && res.ok) { setCertEdit(null); setCertInput(""); }
     };
 
     const pillBtn = (on, hue) => { const col = hue || C.blue; return { fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?col:C.border), background: on?(col+"24"):C.panel2, color: on?col:C.dim, cursor:"pointer" }; };
@@ -869,8 +881,7 @@
             h("button", { onClick: () => unarchive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.green, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Restore"))
         : h("div", { style:{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" } },
             h("button", { onClick: () => setRole(c), disabled:busy, style: pillBtn(c.role === "RPIC") }, c.role),
-            h("button", { onClick: () => toggleReserve(c), disabled:busy, style: pillBtn(!c.reserve, C.green) }, c.reserve ? "RESERVE" : "ACTIVE"),
-            h("span", { style:{ fontSize:11, color: certColor(c.part107) } }, c.part107 ? ((certDays(c.part107) < 0 ? "107 expired " : "107 exp ") + fmtCert(c.part107)) : "no 107"),
+            h("button", { onClick: () => openCert(c), style: pillBtn(true, c.part107 ? certColor(c.part107) : (c.role === "RPIC" ? C.amber : C.dim)) }, c.part107 ? ((certDays(c.part107) < 0 ? "107 expired " : "107 exp ") + fmtCert(c.part107)) : "no 107"),
             h("button", { onClick: () => archive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.red, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Archive")));
 
     const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:5, marginTop:10 } }, t);
@@ -906,14 +917,24 @@
           h("div", { style:{ display:"flex", gap:8 } },
             h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC") }, "RPIC"),
             h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO") }, "VO")),
-          fieldLabel("Status"),
-          h("div", { style:{ display:"flex", gap:8 } },
-            h("button", { onClick: () => setFReserve(false), style: pillBtn(!fReserve, C.green) }, "ACTIVE"),
-            h("button", { onClick: () => setFReserve(true), style: pillBtn(fReserve) }, "RESERVE")),
           h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
             h("button", { onClick: () => setShowAdd(false), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
             h("button", { onClick: addPilot, disabled: busy || !fName.trim(),
-              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: fName.trim() ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(fName.trim()?C.blue:C.border), color: fName.trim()?C.blue:C.dim, cursor: fName.trim()?"pointer":"default" } }, busy ? "…" : "Add Pilot")))) : null
+              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: fName.trim() ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(fName.trim()?C.blue:C.border), color: fName.trim()?C.blue:C.dim, cursor: fName.trim()?"pointer":"default" } }, busy ? "…" : "Add Pilot")))) : null,
+
+      certEdit ? h("div", { onClick: () => setCertEdit(null), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
+        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:340, background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
+          h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, "PART 107 · " + certEdit.name),
+          h("div", { style:{ fontSize:11, color: certEdit.part107 ? certColor(certEdit.part107) : C.dim } }, certEdit.part107 ? ((certDays(certEdit.part107) < 0 ? "Currently expired — was valid to " : "Current — valid to ") + fmtCert(certEdit.part107)) : "Not on file"),
+          fieldLabel("Completion / issue date"),
+          h("input", { type:"date", value:certInput, onChange: e => setCertInput(e.target.value),
+            style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark" } }),
+          certInput ? h("div", { style:{ fontSize:12, color:C.green, marginTop:8 } }, "→ Expires " + fmtCert(addYears(certInput, 2)) + "  (24 months)") : null,
+          h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
+            certEdit.part107 ? h("button", { onClick: clearCert, disabled:busy, style:{ borderRadius:8, padding:"9px 12px", fontSize:13, background:"none", border:"1px solid "+C.border, color:C.red, cursor:"pointer" } }, "Clear") : null,
+            h("button", { onClick: () => setCertEdit(null), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
+            h("button", { onClick: saveCert, disabled: busy || !certInput,
+              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: certInput ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(certInput?C.blue:C.border), color: certInput?C.blue:C.dim, cursor: certInput?"pointer":"default" } }, busy ? "…" : "Save")))) : null
     );
   }
 
