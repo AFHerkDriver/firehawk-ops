@@ -49,17 +49,18 @@
 <script>
   var KEY  = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
   var BASE = "https://firestore.googleapis.com/v1/projects/firehawk-scheduler/databases/(default)/documents";
-  var MONTHS = ["01","02","03","04","05","06"].map(function(m){ return "2026_" + m; });
-  var MONTH_NAMES = { "01":"January","02":"February","03":"March","04":"April","05":"May","06":"June" };
+  // App stores months 0-indexed (getMonth): January = 0 ... June = 5
+  var MONTHS = [0,1,2,3,4,5].map(function(n){ return "2026_" + n; });
+  var MNAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
   var btn = document.getElementById("go");
   var log = document.getElementById("log");
 
   function addRow(monthKey, statusText, cls) {
-    var mm = monthKey.split("_")[1];
+    var num = parseInt(monthKey.split("_")[1], 10);
     var row = document.createElement("div");
     row.className = "row";
-    row.innerHTML = '<span class="m">' + (MONTH_NAMES[mm] || monthKey) + ' 2026</span>' +
+    row.innerHTML = '<span class="m">' + (MNAMES[num] || monthKey) + ' 2026</span>' +
                     '<span class="' + cls + '">' + statusText + '</span>';
     log.appendChild(row);
   }
