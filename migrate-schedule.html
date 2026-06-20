@@ -48,6 +48,10 @@
     <div style="height:18px"></div>
     <button id="scan" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);">Scan Live Board (Find All Months)</button>
     <div id="scanlog"></div>
+
+    <div style="height:18px"></div>
+    <button id="cols" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);">List All Collections (Find Historic Data)</button>
+    <div id="colslog"></div>
   </div>
 
 <script>
@@ -142,6 +146,40 @@
       scanLog.innerHTML = '<div class="row"><span class="fail">Scan error: ' + e.message + '</span></div>';
     }
     scanBtn.textContent = "Scan Again"; scanBtn.disabled = false;
+  });
+
+  var colsBtn = document.getElementById("cols");
+  var colsLog = document.getElementById("colslog");
+  colsBtn.addEventListener("click", async function () {
+    colsBtn.disabled = true; colsBtn.textContent = "Listing…"; colsLog.innerHTML = "";
+    try {
+      var r = await fetch(BASE + ":listCollectionIds?key=" + KEY, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageSize: 200 })
+      });
+      if (!r.ok) {
+        var t = await r.text();
+        colsLog.innerHTML = '<div class="row"><span class="fail">List failed (' + r.status + '). ' + t.slice(0,120).replace(/</g,"&lt;") + '</span></div>';
+      } else {
+        var j = await r.json();
+        var ids = j.collectionIds || [];
+        if (!ids.length) { colsLog.innerHTML = '<div class="row"><span class="skip">No collections returned.</span></div>'; }
+        else {
+          ids.sort().forEach(function(id){
+            var row = document.createElement("div"); row.className = "row";
+            row.innerHTML = '<span class="m">' + id + '</span><span class="ok">collection</span>';
+            colsLog.appendChild(row);
+          });
+          var sum = document.createElement("div"); sum.className = "summary";
+          sum.innerHTML = "<strong>" + ids.length + " collection(s).</strong> <span class='muted'>Tell me which one holds the historic schedule and I'll point the copy at it.</span>";
+          colsLog.appendChild(sum);
+        }
+      }
+    } catch (e) {
+      colsLog.innerHTML = '<div class="row"><span class="fail">Error: ' + e.message + '</span></div>';
+    }
+    colsBtn.textContent = "List Again"; colsBtn.disabled = false;
   });
 </script>
 </body>
