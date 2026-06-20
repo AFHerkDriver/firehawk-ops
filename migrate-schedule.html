@@ -44,6 +44,10 @@
 
     <button id="go">Copy Jan–June To Dev</button>
     <div id="log"></div>
+
+    <div style="height:18px"></div>
+    <button id="scan" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);">Scan Live Board (Find All Months)</button>
+    <div id="scanlog"></div>
   </div>
 
 <script>
@@ -97,6 +101,47 @@
     log.appendChild(summary);
     btn.textContent = "Run Again";
     btn.disabled = false;
+  });
+
+  var scanBtn = document.getElementById("scan");
+  var scanLog = document.getElementById("scanlog");
+  var MN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  scanBtn.addEventListener("click", async function () {
+    scanBtn.disabled = true; scanBtn.textContent = "Scanning…"; scanLog.innerHTML = "";
+    try {
+      var url = BASE + "/firehawk?key=" + KEY + "&pageSize=300";
+      var docs = [], token = "";
+      do {
+        var u = url + (token ? "&pageToken=" + token : "");
+        var r = await fetch(u);
+        var j = await r.json();
+        (j.documents || []).forEach(function(d){ docs.push(d); });
+        token = j.nextPageToken || "";
+      } while (token);
+
+      var sched = docs.map(function(d){ return d.name.split("/").pop(); })
+                      .filter(function(id){ return id.indexOf("schedule") === 0; })
+                      .sort();
+      if (!sched.length) {
+        scanLog.innerHTML = '<div class="row"><span class="fail">No schedule_* docs found in firehawk.</span></div>';
+      } else {
+        sched.forEach(function(id){
+          // try to humanize schedule_YYYY_M (0-indexed month)
+          var parts = id.split("_"); var human = "";
+          if (parts.length === 3) { var mi = parseInt(parts[2],10); human = (MN[mi]||"?") + " " + parts[1]; }
+          var row = document.createElement("div"); row.className = "row";
+          row.innerHTML = '<span class="m">' + id + '</span><span class="ok">' + human + '</span>';
+          scanLog.appendChild(row);
+        });
+        var sum = document.createElement("div"); sum.className = "summary";
+        sum.innerHTML = "<strong>" + sched.length + " schedule doc(s) live.</strong> <span class='muted'>The left column is the exact document name; right is my best guess at the month.</span>";
+        scanLog.appendChild(sum);
+      }
+    } catch (e) {
+      scanLog.innerHTML = '<div class="row"><span class="fail">Scan error: ' + e.message + '</span></div>';
+    }
+    scanBtn.textContent = "Scan Again"; scanBtn.disabled = false;
   });
 </script>
 </body>
