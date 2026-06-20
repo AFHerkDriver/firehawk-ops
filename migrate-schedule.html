@@ -124,22 +124,23 @@
         token = j.nextPageToken || "";
       } while (token);
 
-      var sched = docs.map(function(d){ return d.name.split("/").pop(); })
-                      .filter(function(id){ return id.indexOf("schedule") === 0; })
-                      .sort();
+      var sched = docs.map(function(d){ return d.name.split("/").pop(); }).sort();
       if (!sched.length) {
-        scanLog.innerHTML = '<div class="row"><span class="fail">No schedule_* docs found in firehawk.</span></div>';
+        scanLog.innerHTML = '<div class="row"><span class="fail">No documents found in firehawk.</span></div>';
       } else {
         sched.forEach(function(id){
           // try to humanize schedule_YYYY_M (0-indexed month)
           var parts = id.split("_"); var human = "";
-          if (parts.length === 3) { var mi = parseInt(parts[2],10); human = (MN[mi]||"?") + " " + parts[1]; }
+          if (parts.length >= 2) {
+            var mraw = parts[parts.length-1], yraw = parts[parts.length-2], mi = parseInt(mraw,10);
+            if (/^20[0-9][0-9]$/.test(yraw) && mi >= 0 && mi <= 11) human = (MN[mi]||"?") + " " + yraw;
+          }
           var row = document.createElement("div"); row.className = "row";
           row.innerHTML = '<span class="m">' + id + '</span><span class="ok">' + human + '</span>';
           scanLog.appendChild(row);
         });
         var sum = document.createElement("div"); sum.className = "summary";
-        sum.innerHTML = "<strong>" + sched.length + " schedule doc(s) live.</strong> <span class='muted'>The left column is the exact document name; right is my best guess at the month.</span>";
+        sum.innerHTML = "<strong>" + sched.length + " document(s) in firehawk.</strong> <span class='muted'>Look for the historic months; send me any names that look like schedule data.</span>";
         scanLog.appendChild(sum);
       }
     } catch (e) {
