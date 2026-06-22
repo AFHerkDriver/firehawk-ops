@@ -5332,9 +5332,6 @@ function SARModal({
       bulOpen ? h(BulletinBoard, { me, onClose: () => setBulOpen(false) }) : null,
       thermOpen ? h(ThermalModal, { onClose: () => setThermOpen(false) }) : null,
       sarOpen ? h(SARModal, { onClose: () => setSarOpen(false), onOpenThermal: () => { setSarOpen(false); setThermOpen(true); } }) : null,
-      h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:2, marginBottom:12 } },
-        (DAYS_SHORT[nowD.getDay()] + ", " + MONTHS[nowD.getMonth()] + " " + nowD.getDate() + ", " + nowD.getFullYear()).toUpperCase()),
-
       navRow("🌤️", "PREFLIGHT WX", "GPS WX", C.blue, () => setWxOpen(true)),
       navRow("✈️", "AIRSPACE", "GPS ADS-B, LAANC, Airports", C.green, () => setAirOpen(true)),
       navRow("🌡️", "THERMAL CONFIG", "Mission Specific Settings", C.accent, () => setThermOpen(true)),
