@@ -44,6 +44,7 @@
   const FS_PROJECT = "firehawk-scheduler";
   const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
   const FS_BASE    = "https://firestore.googleapis.com/v1/projects/" + FS_PROJECT + "/databases/(default)/documents";
+  const AUTH = "https://firehawk-auth.usafsentinel-45e.workers.dev";
 
   // ── Firestore REST (lifted verbatim from index.html — proven encoding) ──────
   function fromFSVal(v) {
@@ -230,12 +231,12 @@
 
   // ── Default roster — canonical crew; seeds the Firebase crew doc only if it is ever empty ──
   const FALLBACK_ROSTER = [
-    { id:1, name:"Sanchez",   role:"RPIC", tier:"owner", pin:"241408", color:"#4A90D9", initials:"AS", part107:"2026-11-01", reserve:false },
-    { id:3, name:"Bauchman",  role:"RPIC", tier:"admin", pin:"0336",   color:"#E67E22", initials:"RB", part107:"2027-05-06", reserve:false },
-    { id:4, name:"Thomas",    role:"RPIC", tier:"staff", pin:"2085",   color:"#7D3C98", initials:"MT", part107:"2028-01-16", reserve:false },
-    { id:2, name:"Goddu",     role:"VO",   tier:"staff", pin:"2152",   color:"#C0392B", initials:"BG", part107:null,         reserve:false },
-    { id:5, name:"Rodriguez", role:"VO",   tier:"staff", pin:"2022",   color:"#C8A84B", initials:"JR", part107:null,         reserve:false },
-    { id:6, name:"Rait",      role:"RPIC", tier:"staff", pin:null,     color:"#8B4513", initials:"CR", part107:"2027-05-31", reserve:false, archived:true }
+    { id:1, name:"Sanchez",   role:"RPIC", tier:"owner", hasPin:true, color:"#4A90D9", initials:"AS", part107:"2026-11-01", reserve:false },
+    { id:3, name:"Bauchman",  role:"RPIC", tier:"admin", hasPin:true,   color:"#E67E22", initials:"RB", part107:"2027-05-06", reserve:false },
+    { id:4, name:"Thomas",    role:"RPIC", tier:"staff", hasPin:true,   color:"#7D3C98", initials:"MT", part107:"2028-01-16", reserve:false },
+    { id:2, name:"Goddu",     role:"VO",   tier:"staff", hasPin:true,   color:"#C0392B", initials:"BG", part107:null,         reserve:false },
+    { id:5, name:"Rodriguez", role:"VO",   tier:"staff", hasPin:true,   color:"#C8A84B", initials:"JR", part107:null,         reserve:false },
+    { id:6, name:"Rait",      role:"RPIC", tier:"staff", hasPin:false,     color:"#8B4513", initials:"CR", part107:"2027-05-31", reserve:false, archived:true }
   ];
 
   // ── Theme ────────────────────────────────────────────────────────────────────
@@ -255,7 +256,7 @@
     return fsSet(DEV_COL, "crew", {
       members: crewArr.map(c => ({
         id: c.id, name: c.name, role: c.role, tier: c.tier || "staff",
-        pin: (c.pin == null ? null : c.pin), color: c.color,
+        hasPin: !!c.hasPin, color: c.color,
         initials: c.initials, part107: (c.part107 == null ? null : c.part107),
         reserve: !!c.reserve, archived: !!c.archived, availMonths: c.availMonths || {}
       }))
@@ -272,7 +273,7 @@
       name: src.name || fb.name || ("Pilot " + src.id),
       role: src.role || fb.role || "VO",
       tier: src.tier || fb.tier || "staff",
-      pin: (src.pin !== undefined ? src.pin : (fb.pin != null ? fb.pin : null)),
+      hasPin: (src.hasPin !== undefined ? !!src.hasPin : (src.pin != null ? true : (fb.hasPin !== undefined ? !!fb.hasPin : !!(fb.pin != null)))),
       color: src.color || fb.color || "#888",
       initials: src.initials || fb.initials || "",
       part107: (src.part107 !== undefined ? src.part107 : (fb.part107 !== undefined ? fb.part107 : null)),
@@ -867,7 +868,7 @@
   }
 
   function CrewMgmtView(props) {
-    const { crew, saveCrew, flash, isOwner, myId } = props;
+    const { crew, saveCrew, flash, isOwner, myId, sessionPin } = props;
     const PALETTE = [
       "#7B1E17","#C0392B","#E74C3C","#FF7066",              // reds
       "#A84300","#D35400","#E67E22","#F39C12",              // oranges
@@ -891,6 +892,7 @@
     const [accessEdit, setAccessEdit] = useState(null); // owner-only: pilot whose PIN / tier is being edited
     const [tierDraft, setTierDraft]   = useState("staff");
     const [pinDraft, setPinDraft]     = useState("");
+    const [clearPin, setClearPin]     = useState(false);
 
     const activeList   = crew.filter(c => !c.archived);
     const archivedList = crew.filter(c => c.archived);
@@ -913,7 +915,7 @@
       const name = fName.trim();
       if (!name) return;
       const init = (fInit.trim() || name.slice(0, 2)).toUpperCase().slice(0, 3);
-      const member = { id: Date.now(), name, role: fRole, tier: "staff", pin: null, color: fColor, initials: init, part107: null, reserve: false, archived: false, availMonths: {} };
+      const member = { id: Date.now(), name, role: fRole, tier: "staff", hasPin: false, color: fColor, initials: init, part107: null, reserve: false, archived: false, availMonths: {} };
       const res = await doSave([...crew, member], "Added " + name);
       if (res && res.ok) { setShowAdd(false); setFName(""); setFInit(""); setFColor(PALETTE[0]); setFRole("RPIC"); }
     };
@@ -930,14 +932,31 @@
     };
     const tierLabel = (t) => t === "owner" ? "Owner" : t === "admin" ? "Admin" : "Staff";
     const tierHint  = (t) => t === "owner" ? "Full control, including access and PINs." : t === "admin" ? "Edits schedule and crew — no access or PIN control." : "Own availability only — no editing.";
-    const openAccess = (c) => { setTierDraft(c.tier || "staff"); setPinDraft(c.pin || ""); setAccessEdit(c); };
+    const openAccess = (c) => { setTierDraft(c.tier || "staff"); setPinDraft(""); setClearPin(false); setAccessEdit(c); };
     const pinClash = () => { const p = pinDraft.trim(); if (!p || !accessEdit) return null; return crew.find(x => x.id !== accessEdit.id && x.pin && x.pin === p) || null; };
     const saveAccess = async () => {
-      if (!accessEdit || pinClash()) return;
+      if (!accessEdit) return;
       const isSelf  = myId != null && accessEdit.id === myId;
       const newTier = isSelf ? accessEdit.tier : tierDraft;   // own tier is locked to prevent self-lockout
-      const res = await doSave(crew.map(x => x.id === accessEdit.id ? { ...x, tier: newTier, pin: pinDraft.trim() || null } : x), accessEdit.name + " access updated");
-      if (res && res.ok) { setAccessEdit(null); setPinDraft(""); }
+      const np = pinDraft.trim();
+      let hp = !!accessEdit.hasPin;
+      if (np) {
+        try {
+          const r = await fetch(AUTH + "/set-pin", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ authPin: sessionPin, id: accessEdit.id, newPin: np, tier: newTier }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.ok) { flash(r.status === 403 ? "Not authorized to set PINs" : "Could not save PIN"); return; }
+          hp = true;
+        } catch (e) { flash("Server unreachable \u2014 PIN not saved"); return; }
+      } else if (clearPin && accessEdit.hasPin) {
+        try {
+          const r = await fetch(AUTH + "/remove-pin", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ authPin: sessionPin, id: accessEdit.id }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.ok) { flash("Could not remove PIN"); return; }
+          hp = false;
+        } catch (e) { flash("Server unreachable \u2014 PIN not changed"); return; }
+      }
+      const res = await doSave(crew.map(x => x.id === accessEdit.id ? { ...x, tier: newTier, hasPin: hp } : x), accessEdit.name + " access updated");
+      if (res && res.ok) { setAccessEdit(null); setPinDraft(""); setClearPin(false); }
     };
 
     const pillBtn = (on, hue) => { const col = hue || C.blue; return { fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?col:C.border), background: on?(col+"24"):C.panel2, color: on?col:C.dim, cursor:"pointer" }; };
@@ -964,7 +983,7 @@
     const textInput = (val, set, ph, max) => h("input", { value:val, onChange: e => set(e.target.value), placeholder:ph, maxLength: max || null,
       style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark" } });
 
-    const clash   = pinClash();
+    const clash   = null;   // PIN collision can no longer be checked client-side
     const accSelf = accessEdit && myId != null && accessEdit.id === myId;
     return h("div", null,
       h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
@@ -1017,7 +1036,7 @@
       accessEdit ? h("div", { onClick: () => setAccessEdit(null), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
         h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:340, background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
           h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, "ACCESS · " + accessEdit.name),
-          h("div", { style:{ fontSize:11, color:C.dim } }, tierLabel(accessEdit.tier) + (accessEdit.pin ? " · PIN on file" : " · no PIN")),
+          h("div", { style:{ fontSize:11, color:C.dim } }, tierLabel(accessEdit.tier) + (accessEdit.hasPin ? " · PIN on file" : " · no PIN")),
           fieldLabel("Tier"),
           accSelf
             ? h("div", { style:{ fontSize:12, color:C.dim, padding:"4px 0" } }, "Owner (you) — your own tier can't be changed here.")
@@ -1028,13 +1047,13 @@
                   h("button", { onClick: () => setTierDraft("staff"), style: pillBtn(tierDraft === "staff") }, "STAFF")),
                 h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, tierHint(tierDraft))),
           fieldLabel("Sign-in PIN"),
-          h("input", { value:pinDraft, onChange: e => setPinDraft(e.target.value), inputMode:"numeric", placeholder:"Blank = no sign-in", maxLength:12,
+          h("input", { value:pinDraft, onChange: e => { setPinDraft(e.target.value); if (e.target.value.trim()) setClearPin(false); }, inputMode:"numeric", placeholder: accessEdit.hasPin ? "Leave blank to keep current" : "Blank = no sign-in", maxLength:12,
             style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+(clash?C.red:C.border), borderRadius:8, padding:"9px 11px", fontSize:14, letterSpacing:3, colorScheme:"dark" } }),
           clash
             ? h("div", { style:{ fontSize:12, color:C.red, marginTop:6 } }, "PIN already used by " + clash.name)
-            : h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, "Pilots sign in with this. Blank means no access."),
+            : h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, "Type a new PIN to set or replace it. Use Clear to remove sign-in."),
           h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
-            (accessEdit.pin || pinDraft) ? h("button", { onClick: () => setPinDraft(""), style:{ borderRadius:8, padding:"9px 12px", fontSize:13, background:"none", border:"1px solid "+C.border, color:C.red, cursor:"pointer" } }, "Clear") : null,
+            (accessEdit.hasPin || pinDraft) ? h("button", { onClick: () => { setPinDraft(""); setClearPin(true); }, style:{ borderRadius:8, padding:"9px 12px", fontSize:13, background:"none", border:"1px solid "+C.border, color:C.red, cursor:"pointer" } }, "Clear") : null,
             h("button", { onClick: () => setAccessEdit(null), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
             h("button", { onClick: saveAccess, disabled: busy || !!clash,
               style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: clash ? C.panel2 : "rgba(59,130,246,0.16)", border:"1px solid "+(clash?C.border:C.blue), color: clash?C.dim:C.blue, cursor: clash?"default":"pointer" } }, busy ? "…" : "Save")))) : null
@@ -5406,6 +5425,7 @@ function SARModal({
     const [crew, setCrew]           = useState([]);
     const [crewLoaded, setCrewLoaded] = useState(false);
     const migratedRef = useRef(false);   // guards the one-time roster → Firebase migration write
+    const purgedRef = useRef(false);   // guards the one-time PIN purge from the crew doc
     const [locks, setLocks]         = useState({});
     const [sync, setSync]           = useState("connecting");
     const [tab, setTab]             = useState("sched");   // schedule sub-tab: sched | crew | avail
@@ -5426,13 +5446,14 @@ function SARModal({
     const [showPin, setShowPin]   = useState(false);
     const [pinInput, setPinInput] = useState("");
     const [pinError, setPinError] = useState(false);
+    const [sessionPin, setSessionPin] = useState("");   // manager's own PIN, held in memory this session to authorize PIN changes
+    const pinTimer = useRef(null);
     useEffect(() => {
       try { if (authId == null) localStorage.removeItem("firehawk_dev_session"); else localStorage.setItem("firehawk_dev_session", String(authId)); } catch (e) {}
     }, [authId]);
 
     // ── 7.1 live weather: Red Flag / Burn Ban / Flood via Cloudflare Worker (fail-silent) ──
     const WX = "https://firehawk-wx.usafsentinel-45e.workers.dev";
-    const AUTH = "https://firehawk-auth.usafsentinel-45e.workers.dev";
     useEffect(() => {   // burn ban — TFS, cached hourly
       const f = async () => { try { const r = await fetch(WX + "/burnban"); if (r.ok) setBurnBan(await r.json()); } catch (e) {} };
       f(); const t = setInterval(f, 3600000); return () => clearInterval(t);
@@ -5466,43 +5487,37 @@ function SARModal({
     const isOwner   = tier === "owner";                     // program owner (Sanchez) — additional permissions
     // Schedule sub-tabs only matter signed in; collapse to the read-only calendar when signed out (or on a now-invalid tab).
     const schedTab  = ((tab === "crew" && !canEdit) || (tab === "avail" && !me)) ? "sched" : tab;
-    const submitPin = async (val) => {
+    const submitPin = async (val, silent) => {
       const entered = (val != null ? val : pinInput).trim();
-      if (!entered) { setPinError(true); return; }
-      let found = null, via = "";
+      if (!entered) { if (!silent) setPinError(true); return; }
+      let found = null;
       try {
         const r = await fetch(AUTH + "/auth", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ pin: entered }) });
-        if (r.ok) { const j = await r.json(); if (j && j.ok) { found = crew.find(c => c.id === j.id) || null; via = "server"; } }
+        if (r.ok) { const j = await r.json(); if (j && j.ok) found = crew.find(c => c.id === j.id) || null; }
       } catch (e) {}
-      if (!found) {                                            // temporary local backup until cutover is confirmed
-        const local = crew.find(c => c.pin && c.pin === entered) || null;
-        if (local) { found = local; via = "backup"; }
-      }
-      if (found) {
-        setAuthId(found.id); setShowPin(false); setPinInput(""); setPinError(false);
-        flash(via === "server" ? "\u2713 Verified by server" : "\u26A0 Local backup \u2014 server unreachable");
-        const now = new Date();
-        const IDENTITY = {
-          Sanchez:   { first:"Aaron",   rank:"Capt", title:"Program Manager",     color:"#3B82F6" },
-          Bauchman:  { first:"Ryan",    rank:"FF",   title:"Program Coordinator", color:"#34C759" },
-          Thomas:    { first:"Michael", rank:"FF" },
-          Rodriguez: { first:"Joseph",  rank:"Lt" },
-          Goddu:     { first:"Blake",   rank:"FF" },
-          Rait:      { first:"Chris",   rank:"FF" }
-        };
-        const idn = IDENTITY[found.name] || {};
-        const second = idn.title || found.role;
-        const label = (idn.first ? idn.first + " " : "") + found.name + " (" + (idn.rank || found.role) + " - " + second + ")";
-        const entry = { name: label, color: idn.color || "#FFFFFF", time: now.toISOString(), ts: now.getTime() };
-        fsGet(DEV_COL, "access_log").then(log => {
-          const entries = (log && Array.isArray(log.entries)) ? log.entries : [];
-          entries.unshift(entry);
-          fsSet(DEV_COL, "access_log", { entries: entries.slice(0, 10) });
-        }).catch(() => {});
-      }
-      else { setPinError(true); }
+      if (!found) { if (!silent) setPinError(true); return; }
+      setSessionPin(entered);
+      setAuthId(found.id); setShowPin(false); setPinInput(""); setPinError(false);
+      const now = new Date();
+      const IDENTITY = {
+        Sanchez:   { first:"Aaron",   rank:"Capt", title:"Program Manager",     color:"#3B82F6" },
+        Bauchman:  { first:"Ryan",    rank:"FF",   title:"Program Coordinator", color:"#34C759" },
+        Thomas:    { first:"Michael", rank:"FF" },
+        Rodriguez: { first:"Joseph",  rank:"Lt" },
+        Goddu:     { first:"Blake",   rank:"FF" },
+        Rait:      { first:"Chris",   rank:"FF" }
+      };
+      const idn = IDENTITY[found.name] || {};
+      const second = idn.title || found.role;
+      const label = (idn.first ? idn.first + " " : "") + found.name + " (" + (idn.rank || found.role) + " - " + second + ")";
+      const entry = { name: label, color: idn.color || "#FFFFFF", time: now.toISOString(), ts: now.getTime() };
+      fsGet(DEV_COL, "access_log").then(log => {
+        const entries = (log && Array.isArray(log.entries)) ? log.entries : [];
+        entries.unshift(entry);
+        fsSet(DEV_COL, "access_log", { entries: entries.slice(0, 10) });
+      }).catch(() => {});
     };
-    const logout = () => { setAuthId(null); };
+    const logout = () => { setAuthId(null); setSessionPin(""); };
 
     useEffect(() => {
       setDefaults(FALLBACK_ROSTER); setDataSource("fallback");
@@ -5515,7 +5530,12 @@ function SARModal({
         // Full new schema is present once every member carries name + tier; older docs have name but no tier.
         const fbCurrent = fbMembers.length > 0 && fbMembers.every(m => m && m.name && m.tier);
         if (fbCurrent) {
-          setCrew(fbMembers.map(m => normalizeMember(m)));   // Firebase crew doc is the source of truth
+          const norm = fbMembers.map(m => normalizeMember(m));
+          setCrew(norm);   // Firebase crew doc is the source of truth
+          if (!purgedRef.current && fbMembers.some(m => m && m.pin != null)) {   // one-time: strip any plaintext PINs left in the DB
+            purgedRef.current = true;
+            writeCrewDoc(norm);
+          }
         } else {
           // One-time migration: defaults order, overlay existing Firebase data (availability), backfill tier/pin, write full records back.
           const seeded = defaults.map(d => normalizeMember({ ...d, ...(fbMembers.find(x => x.id === d.id) || {}) }));
@@ -5641,7 +5661,7 @@ function SARModal({
                 schedTab === "avail"
                   ? h(AvailabilityView, { crew, locks, vYear, vMonth, saveMemberMonth, flash, setLastErr, canEdit, me })
                   : (schedTab === "crew" && canEdit)
-                    ? h(CrewMgmtView, { crew, saveCrew, flash, isOwner, myId: me ? me.id : null })
+                    ? h(CrewMgmtView, { crew, saveCrew, flash, isOwner, myId: me ? me.id : null, sessionPin })
                     : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr, canEdit }),
                 canEdit ? h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
                   h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:8 } }, "MANAGER CONTROLS"),
@@ -5665,7 +5685,7 @@ function SARModal({
             h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:20, letterSpacing:1, color:C.text, marginBottom:4 } }, "SIGN IN"),
             h("div", { style:{ fontSize:11, color:C.dim, marginBottom:12 } }, "Enter your PIN"),
             h("input", { type:"password", inputMode:"numeric", autoFocus:true, value:pinInput,
-              onChange: e => { const v = e.target.value; setPinInput(v); setPinError(false); if (v.trim() && crew.some(c => c.pin && c.pin === v.trim())) submitPin(v); },
+              onChange: e => { const v = e.target.value; setPinInput(v); setPinError(false); if (pinTimer.current) clearTimeout(pinTimer.current); if (v.trim().length >= 4) pinTimer.current = setTimeout(() => submitPin(v, true), 450); },
               onKeyDown: e => { if (e.key === "Enter") submitPin(); },
               style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+(pinError?C.red:C.border), borderRadius:8, padding:"10px 12px", fontSize:18, letterSpacing:3, textAlign:"center", colorScheme:"dark" } }),
             pinError ? h("div", { style:{ fontSize:11, color:C.red, marginTop:8 } }, "PIN not recognized") : null,
