@@ -228,7 +228,7 @@
   }
   function getHoliday(year, month, day) { return getFederalHolidays(year)[month + "-" + day] || null; }
 
-  // ── Fallback roster (used only if crew_defaults.json fails to load) ──────────
+  // ── Default roster — canonical crew; seeds the Firebase crew doc only if it is ever empty ──
   const FALLBACK_ROSTER = [
     { id:1, name:"Sanchez",   role:"RPIC", tier:"owner", pin:"241408", color:"#4A90D9", initials:"AS", part107:"2026-11-01", reserve:false },
     { id:3, name:"Bauchman",  role:"RPIC", tier:"admin", pin:"0336",   color:"#E67E22", initials:"RB", part107:"2027-05-06", reserve:false },
@@ -694,13 +694,7 @@
           h("div", { style:{ fontSize:10, color: saving ? C.amber : C.dim } }, saving ? "Saving…" : (savedAt ? "Auto-saved" : (loaded ? "" : "Loading…")))),
 
         // Propose / apply / reset bar (increment 3 — smart assignment + month reset) — manager-only
-        canEdit ? (confirmReset
-          ? h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10, background:"rgba(255,59,48,0.08)", border:"1px dashed "+C.red, borderRadius:8, padding:"8px 11px" } },
-              h("div", { style:{ fontSize:11, color:C.text } }, h("b", { style:{ color:C.red } }, "Reset · "), "Erase every assignment for this month?"),
-              h("div", { style:{ display:"flex", gap:8 } },
-                h("button", { onClick: () => setConfirmReset(false), style:{ borderRadius:7, padding:"6px 12px", fontSize:11, background:C.panel2, border:"1px solid "+C.border, color:C.dim } }, "Cancel"),
-                h("button", { onClick: clearMonth, style:{ borderRadius:7, padding:"6px 14px", fontSize:11, background:"rgba(255,59,48,0.16)", border:"1px solid "+C.red, color:C.red, fontWeight:500 } }, "Yes, Clear All")))
-          : proposal
+        canEdit ? (proposal
           ? h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10, background:"rgba(255,107,53,0.08)", border:"1px dashed "+C.accent, borderRadius:8, padding:"8px 11px" } },
               h("div", { style:{ fontSize:11, color:C.text } },
                 h("b", { style:{ color:C.accent } }, "Draft · "), proposalCount + " day" + (proposalCount === 1 ? "" : "s") + " proposed",
@@ -712,9 +706,9 @@
               h("button", { onClick: proposeMonth, disabled: openCount === 0,
                 style:{ flex:1, borderRadius:8, padding:"10px 0", fontSize:12, letterSpacing:0.5, background:"rgba(255,107,53,0.14)", border:"1px solid "+C.accent, color:C.accent, opacity: openCount === 0 ? 0.4 : 1 } },
                 openCount === 0 ? "Propose Month — no open days" : "✨ Propose Month from Availability"),
-              h("button", { onClick: () => setConfirmReset(true), disabled: crewedDays.length === 0,
-                style:{ borderRadius:8, padding:"10px 12px", fontSize:11, background:C.panel2, border:"1px solid "+C.border, color: crewedDays.length===0?C.dim:C.red, opacity: crewedDays.length===0?0.4:1 } },
-                "Clear Month"))) : null,
+              h("button", { onClick: () => { if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 4000); } else { clearMonth(); } }, disabled: crewedDays.length === 0,
+                style:{ borderRadius:8, padding:"10px 12px", fontSize:11, background: confirmReset ? "rgba(255,59,48,0.16)" : C.panel2, border:"1px solid "+(crewedDays.length===0?C.border:C.red), color: crewedDays.length===0?C.dim:C.red, fontWeight: confirmReset?600:400, opacity: crewedDays.length===0?0.4:1 } },
+                confirmReset ? "Confirm — Clear Month?" : "Clear Month"))) : null,
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,minmax(0,1fr))", gap:6, marginBottom:6 } },
           DOW.map(d => h("div", { key:d, style:{ textAlign:"center", fontSize:10, color:C.dim, letterSpacing:1 } }, d))),
         h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,minmax(0,1fr))", gap:6 } }, cells),
@@ -5422,7 +5416,6 @@ function SARModal({
     const [toast, setToast]         = useState("");
     const [lastErr, setLastErr]     = useState("");
     const [busy, setBusy]           = useState(false);
-    const [seedArm, setSeedArm]     = useState(false);
     const [burnBan, setBurnBan]           = useState(null);   // 7.1 live weather (Cloudflare Worker → TFS / NWS)
     const [redFlag, setRedFlag]           = useState(null);
     const [floodWarning, setFloodWarning] = useState(null);
@@ -5439,6 +5432,7 @@ function SARModal({
 
     // ── 7.1 live weather: Red Flag / Burn Ban / Flood via Cloudflare Worker (fail-silent) ──
     const WX = "https://firehawk-wx.usafsentinel-45e.workers.dev";
+    const AUTH = "https://firehawk-auth.usafsentinel-45e.workers.dev";
     useEffect(() => {   // burn ban — TFS, cached hourly
       const f = async () => { try { const r = await fetch(WX + "/burnban"); if (r.ok) setBurnBan(await r.json()); } catch (e) {} };
       f(); const t = setInterval(f, 3600000); return () => clearInterval(t);
@@ -5472,11 +5466,21 @@ function SARModal({
     const isOwner   = tier === "owner";                     // program owner (Sanchez) — additional permissions
     // Schedule sub-tabs only matter signed in; collapse to the read-only calendar when signed out (or on a now-invalid tab).
     const schedTab  = ((tab === "crew" && !canEdit) || (tab === "avail" && !me)) ? "sched" : tab;
-    const submitPin = (val) => {
+    const submitPin = async (val) => {
       const entered = (val != null ? val : pinInput).trim();
-      const found = entered ? crew.find(c => c.pin && c.pin === entered) : null;
+      if (!entered) { setPinError(true); return; }
+      let found = null, via = "";
+      try {
+        const r = await fetch(AUTH + "/auth", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ pin: entered }) });
+        if (r.ok) { const j = await r.json(); if (j && j.ok) { found = crew.find(c => c.id === j.id) || null; via = "server"; } }
+      } catch (e) {}
+      if (!found) {                                            // temporary local backup until cutover is confirmed
+        const local = crew.find(c => c.pin && c.pin === entered) || null;
+        if (local) { found = local; via = "backup"; }
+      }
       if (found) {
         setAuthId(found.id); setShowPin(false); setPinInput(""); setPinError(false);
+        flash(via === "server" ? "\u2713 Verified by server" : "\u26A0 Local backup \u2014 server unreachable");
         const now = new Date();
         const IDENTITY = {
           Sanchez:   { first:"Aaron",   rank:"Capt", title:"Program Manager",     color:"#3B82F6" },
@@ -5501,10 +5505,7 @@ function SARModal({
     const logout = () => { setAuthId(null); };
 
     useEffect(() => {
-      fetch("crew_defaults.json?v=" + APP_VERSION)
-        .then(r => { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
-        .then(j => { setDefaults(j.roster); setDataSource("json"); })
-        .catch(() => { setDefaults(FALLBACK_ROSTER); setDataSource("fallback"); });
+      setDefaults(FALLBACK_ROSTER); setDataSource("fallback");
     }, []);
 
     useEffect(() => {
@@ -5554,16 +5555,6 @@ function SARModal({
     const k = monthKey(vYear, vMonth);
     const locked = !!(locks[k] && locks[k].locked);
 
-    const seed = async () => {
-      if (!seedArm) { setSeedArm(true); setTimeout(() => setSeedArm(false), 4000); return; }
-      setSeedArm(false);
-      setBusy(true);
-      const fresh = (defaults || FALLBACK_ROSTER).map(d => ({ ...d, availMonths: {} }));
-      const res = await writeCrewDoc(fresh);
-      setBusy(false);
-      if (res.ok) { setLastErr(""); flash("Roster reset to defaults"); }
-      else { setLastErr("Reset failed (" + res.status + "): " + res.detail); flash("Reset failed — see error below"); }
-    };
 
     const toggleLock = async () => {
       setBusy(true);
@@ -5655,7 +5646,6 @@ function SARModal({
                 canEdit ? h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
                   h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:8 } }, "MANAGER CONTROLS"),
                   h("div", { style:{ display:"flex", gap:8 } },
-                    isOwner ? h("button", { onClick: seed, disabled: busy, style: seedArm ? { ...ghostBtn(busy), border:"1px solid "+C.red, color:C.red } : ghostBtn(busy) }, seedArm ? "Confirm Reset Roster?" : "Reset Roster to Defaults") : null,
                     h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] + " Avail" : "Lock " + MONTHS[vMonth] + " Avail"))) : null),
 
         // Error line
