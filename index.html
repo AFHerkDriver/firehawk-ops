@@ -833,12 +833,18 @@
         ? h("div", { style:{ fontSize:11, color:C.dim } }, "Loading…")
         : entries.length === 0
           ? h("div", { style:{ fontSize:11, color:C.dim } }, "No sign-ins recorded yet.")
-          : entries.slice(0, 10).map((e, i) => h("div", { key:i,
-              style:{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:"1px solid rgba(255,255,255,0.04)", fontSize:11 } },
-              h("span", { style:{ color:C.text } }, e.name,
-                e.tier ? h("span", { style:{ fontSize:9, letterSpacing:1, color: e.tier === "staff" ? C.dim : C.accent, marginLeft:6 } }, e.tier === "staff" ? "STAFF" : "ADMIN") : null),
-              h("span", { style:{ color:C.dim, fontSize:10 } },
-                new Date(e.time).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", timeZone:"America/Chicago" }) + " CST"))));
+          : entries.slice(0, 10).map((e, i) => {
+              const ix = (e.name || "").indexOf(" (");
+              const nm = ix >= 0 ? e.name.slice(0, ix) : (e.name || "");
+              const pr = ix >= 0 ? e.name.slice(ix) : "";
+              return h("div", { key:i,
+                style:{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 0", borderBottom:"1px solid rgba(255,255,255,0.04)", fontSize:11 } },
+                h("span", { style:{ color:C.text } }, nm,
+                  pr ? h("span", { style:{ color: e.color || C.text } }, pr) : null,
+                  e.tier ? h("span", { style:{ fontSize:9, letterSpacing:1, color: e.tier === "staff" ? C.dim : C.accent, marginLeft:6 } }, e.tier === "staff" ? "STAFF" : "ADMIN") : null),
+                h("span", { style:{ color:C.dim, fontSize:10 } },
+                  new Date(e.time).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", timeZone:"America/Chicago" }) + " CST"));
+            }));
   }
 
   function WhatsNew() {
@@ -5416,6 +5422,7 @@ function SARModal({
     const [toast, setToast]         = useState("");
     const [lastErr, setLastErr]     = useState("");
     const [busy, setBusy]           = useState(false);
+    const [seedArm, setSeedArm]     = useState(false);
     const [burnBan, setBurnBan]           = useState(null);   // 7.1 live weather (Cloudflare Worker → TFS / NWS)
     const [redFlag, setRedFlag]           = useState(null);
     const [floodWarning, setFloodWarning] = useState(null);
@@ -5472,16 +5479,17 @@ function SARModal({
         setAuthId(found.id); setShowPin(false); setPinInput(""); setPinError(false);
         const now = new Date();
         const IDENTITY = {
-          Sanchez:   { first:"Aaron",   rank:"Capt" },
-          Bauchman:  { first:"Ryan",    rank:"FF" },
+          Sanchez:   { first:"Aaron",   rank:"Capt", title:"Program Manager",     color:"#3B82F6" },
+          Bauchman:  { first:"Ryan",    rank:"FF",   title:"Program Coordinator", color:"#34C759" },
           Thomas:    { first:"Michael", rank:"FF" },
           Rodriguez: { first:"Joseph",  rank:"Lt" },
           Goddu:     { first:"Blake",   rank:"FF" },
           Rait:      { first:"Chris",   rank:"FF" }
         };
         const idn = IDENTITY[found.name] || {};
-        const label = (idn.first ? idn.first + " " : "") + found.name + " (" + (idn.rank || found.role) + ")";
-        const entry = { name: label, time: now.toISOString(), ts: now.getTime() };
+        const second = idn.title || found.role;
+        const label = (idn.first ? idn.first + " " : "") + found.name + " (" + (idn.rank || found.role) + " - " + second + ")";
+        const entry = { name: label, color: idn.color || "#FFFFFF", time: now.toISOString(), ts: now.getTime() };
         fsGet(DEV_COL, "access_log").then(log => {
           const entries = (log && Array.isArray(log.entries)) ? log.entries : [];
           entries.unshift(entry);
@@ -5547,14 +5555,14 @@ function SARModal({
     const locked = !!(locks[k] && locks[k].locked);
 
     const seed = async () => {
-      if (crewLoaded && crew.some(c => c.availMonths && Object.keys(c.availMonths).length)
-          && !window.confirm("Re-seed the LIVE roster? This overwrites the crew and wipes all entered availability in production. This cannot be undone.")) return;
+      if (!seedArm) { setSeedArm(true); setTimeout(() => setSeedArm(false), 4000); return; }
+      setSeedArm(false);
       setBusy(true);
       const fresh = (defaults || FALLBACK_ROSTER).map(d => ({ ...d, availMonths: {} }));
       const res = await writeCrewDoc(fresh);
       setBusy(false);
-      if (res.ok) { setLastErr(""); flash("Seeded crew roster"); }
-      else { setLastErr("Seed failed (" + res.status + "): " + res.detail); flash("Seed failed — see error below"); }
+      if (res.ok) { setLastErr(""); flash("Roster reset to defaults"); }
+      else { setLastErr("Reset failed (" + res.status + "): " + res.detail); flash("Reset failed — see error below"); }
     };
 
     const toggleLock = async () => {
@@ -5645,9 +5653,9 @@ function SARModal({
                     ? h(CrewMgmtView, { crew, saveCrew, flash, isOwner, myId: me ? me.id : null })
                     : h(ScheduleView, { crew, vYear, vMonth, flash, setLastErr, canEdit }),
                 canEdit ? h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:12, marginTop:14, marginBottom:10 } },
-                  h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:8 } }, "MANAGER / DEV CONTROLS"),
+                  h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:8 } }, "MANAGER CONTROLS"),
                   h("div", { style:{ display:"flex", gap:8 } },
-                    h("button", { onClick: seed, disabled: busy, style: ghostBtn(busy) }, "Seed / Reset Roster"),
+                    isOwner ? h("button", { onClick: seed, disabled: busy, style: seedArm ? { ...ghostBtn(busy), border:"1px solid "+C.red, color:C.red } : ghostBtn(busy) }, seedArm ? "Confirm Reset Roster?" : "Reset Roster to Defaults") : null,
                     h("button", { onClick: toggleLock, disabled: busy, style: ghostBtn(busy) }, locked ? "Unlock " + MONTHS[vMonth] + " Avail" : "Lock " + MONTHS[vMonth] + " Avail"))) : null),
 
         // Error line
