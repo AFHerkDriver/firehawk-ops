@@ -270,6 +270,7 @@
   const certDays  = (s) => { if (!s) return null; return (new Date(s + "T00:00:00Z").getTime() - Date.now()) / 86400000; };
   const certColor = (s) => { const d = certDays(s); if (d == null) return C.amber; if (d < 30) return C.red; if (d < 90) return C.amber; return C.green; };
   const fmtCert   = (s) => { try { return new Date(s).toLocaleDateString("en-US", { month:"short", year:"numeric", timeZone:"UTC" }); } catch (e) { return s; } };
+  const fmtCertShort = (s) => { try { const d = new Date(s); return d.toLocaleDateString("en-US", { month:"short", timeZone:"UTC" }) + " '" + String(d.getUTCFullYear()).slice(-2); } catch (e) { return s; } };   // "May '28"
 
   // ── Crew storage model ───────────────────────────────────────────────────────
   // Members live in a keyed map (membersById) with an explicit memberOrder list.
@@ -1069,7 +1070,7 @@
         : h("div", { style:{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" } },
             editBtn(c),
             h("button", { onClick: () => setRole(c), disabled:busy, style: pillBtn(c.role === "RPIC") }, c.role),
-            h("button", { onClick: () => openCert(c), style: pillBtn(true, c.part107 ? certColor(c.part107) : (c.role === "RPIC" ? C.amber : C.dim)) }, c.part107 ? ((certDays(c.part107) < 0 ? "107 expired " : "107 exp ") + fmtCert(c.part107)) : "no 107"),
+            h("button", { onClick: () => openCert(c), style: pillBtn(true, c.part107 ? certColor(c.part107) : C.dim) }, c.part107 ? fmtCertShort(c.part107) : "Enter 107"),
             h("button", { onClick: () => archive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.dim, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Archive"), delBtn(c)));
 
     const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:5, marginTop:10 } }, t);
