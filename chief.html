@@ -320,6 +320,7 @@ function render(weekDays,schedCache,crewData) {
   const vo2=a?.vo2?crew.find(c=>c.id===a.vo2||c.id===parseInt(a.vo2)):null;
   const extra=(a?.extra||[]).map(eid=>crew.find(c=>c.id===eid||c.id===parseInt(eid))).filter(Boolean);
   const dayLabel=selectedOffset===0?"TODAY":"";
+  const crewDayLabel=selectedOffset===0?"TODAY":selDay.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
 
   let html='';
 
@@ -453,7 +454,7 @@ function render(weekDays,schedCache,crewData) {
 
     html+=`<div class="crew-card">
       <div class="crew-header">
-        <span class="crew-header-label">${dayLabel}'S CREW</span>
+        <span class="crew-header-label">${crewDayLabel}'S CREW</span>
         <span class="status-badge" style="color:${a.confirmed?'#34C759':'#FFC107'};background:${a.confirmed?'rgba(52,199,89,0.1)':'rgba(255,193,7,0.1)'};border:1px solid ${a.confirmed?'rgba(52,199,89,0.3)':'rgba(255,193,7,0.3)'}">
           ${a.confirmed?'✓ CONFIRMED':'PENDING'}
         </span>
