@@ -309,8 +309,12 @@ async function loadData() {
 
 function render(weekDays,schedCache,crewData) {
   let crew=CREW;
-  if(crewData&&crewData.members) {
-    crew=CREW.map(c=>{const m=crewData.members.find(x=>x.id===c.id||x.id===String(c.id));return m?{...c,...m}:c;});
+  if(crewData) {
+    // Prefer the keyed map shape; fall back to the legacy members array.
+    let fbMembers=[];
+    if(crewData.membersById && typeof crewData.membersById==="object") fbMembers=Object.keys(crewData.membersById).map(k=>crewData.membersById[k]);
+    else if(Array.isArray(crewData.members)) fbMembers=crewData.members;
+    if(fbMembers.length) crew=CREW.map(c=>{const m=fbMembers.find(x=>x.id===c.id||String(x.id)===String(c.id));return m?{...c,...m}:c;});
   }
 
   const selDay=weekDays[selectedOffset];
