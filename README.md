@@ -2,7 +2,7 @@
 
 Operational web tools for the Fire Hawk UAS Program, Bexar County ESD No. 2 (BC2FD), covering Districts 2 & 6. Two single-file web apps — a crew operations app and a read-only command status board — backed by Firebase Firestore and a Cloudflare Worker for live weather and alerts. No build step; deployed straight to GitHub Pages.
 
-**Live version:** v1.9 (June 2026). The version is shown in the app footer and in the in-app **What's New** panel, and is incremented on every change.
+**Live version:** v1.5 (June 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
 
 ## Live URLs
 
@@ -63,9 +63,13 @@ The apps are static files. To publish a change:
 
 ## Versioning
 
-- **v1.0** — go-live release (June 2026): production crew app and redesigned command status board, shield branding/favicon, fire-rank access log, and the in-app What's New panel.
-- **v1.1–v1.9** (June 2026) — added the staff **Availability** calendar and the personal **My Shifts** view; crew management with role-aware access and archived-member lockout; schedule confirm/finalize and auto-propose from availability; per-unit out-of-service windows and larger unit callsigns on the status board; clearer Class E airspace reads; and reliability fixes so concurrent crew and availability edits no longer overwrite one another.
-- Each change bumps the version shown in the footer; user-facing changes are recorded in the in-app What's New panel.
+The footer and the in-app **What's New** panel show the **user-facing** version. Each user-facing release bumps the number; behind-the-scenes work (data-model hardening, concurrent-edit fixes, sign-in lockout for archived members, and similar) ships between releases without its own public number, so the visible sequence stays continuous for crew.
+
+- **v1.0** — go-live (June 2026): production crew app and redesigned command status board, shield branding/favicon, fire-rank access log, and the in-app What's New panel.
+- **v1.1** — clearer Class E airspace read (no authorization required for standard Part 107 ops to 400 ft AGL).
+- **v1.2** — installable home-screen app with the Fire Hawk badge icon.
+- **v1.3–v1.4** — staff Availability calendar: reliable concurrent saving, and months that stay locked until the program opens them.
+- **v1.5** — personal **My Shifts** view: each signed-in member sees only the days they're assigned this month and next, and can add them straight to their phone's calendar (current release).
 
 ## Contact
 
