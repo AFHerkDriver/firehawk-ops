@@ -276,6 +276,31 @@ function getAssignment(days,day,year,month) {
   return a;
 }
 
+// Sanchez (id 1) flies UAV121 (lead). decodeDay mirrors index.html exactly so the Status
+// page interprets every stored day identically to the scheduler (two-unit model).
+const LEAD_PILOT_ID = 1;
+function decodeDay(day) {
+  const N = (x) => x == null ? null : parseInt(x);
+  const extra = (day.extra || []).map(N).filter(x => x != null);
+  let u121active, u121vo, u124rpic, u124vo, upstaff;
+  if (day.lead !== undefined) {                       // explicit (current) format
+    u121active = !!day.lead;
+    u121vo = u121active ? N(day.vo2) : null;
+    u124rpic = N(day.rpic);
+    u124vo = u124rpic != null ? N(day.vo) : null;
+    upstaff = extra.slice();
+  } else {                                            // legacy / HISTORY format
+    const rpicId = N(day.rpic);
+    u121active = (rpicId === LEAD_PILOT_ID) || extra.indexOf(LEAD_PILOT_ID) !== -1;
+    u124rpic = (rpicId != null && rpicId !== LEAD_PILOT_ID) ? rpicId : null;
+    if (rpicId === LEAD_PILOT_ID) { u121vo = N(day.vo); u124vo = null; }
+    else if (u124rpic != null) { u124vo = N(day.vo); u121vo = u121active ? N(day.vo2) : null; }
+    else { u121vo = u121active ? N(day.vo) : null; u124vo = null; }
+    upstaff = extra.filter(id => id !== LEAD_PILOT_ID);
+  }
+  return { u121: { active: u121active, vo: u121vo }, u124: { rpic: u124rpic, vo: u124vo }, upstaff: upstaff };
+}
+
 let scheduleCache={};
 let crewCache=null;
 let selectedOffset=0;
@@ -325,10 +350,8 @@ function render(weekDays,schedCache,crewData) {
   const days=schedDoc?.days||schedDoc?.daysJson&&JSON.parse(schedDoc.daysJson)||null;
   const a=getAssignment(days,d,y,m);
   if(a&&!a.confirmed&&HISTORY[y+"_"+m+"_"+d]) a.confirmed=true;
-  const rpic=a?.rpic?crew.find(c=>c.id===a.rpic||c.id===parseInt(a.rpic)):null;
-  const vo=a?.vo?crew.find(c=>c.id===a.vo||c.id===parseInt(a.vo)):null;
-  const vo2=a?.vo2?crew.find(c=>c.id===a.vo2||c.id===parseInt(a.vo2)):null;
-  const extra=(a?.extra||[]).map(eid=>crew.find(c=>c.id===eid||c.id===parseInt(eid))).filter(Boolean);
+  const du=a?decodeDay(a):null;
+  const findCrew=(id)=>id==null?null:(crew.find(c=>c.id===id||c.id===parseInt(id))||null);
   const dayLabel=selectedOffset===0?"TODAY":"";
   const crewDayLabel=selectedOffset===0?"TODAY":selDay.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
 
@@ -356,7 +379,9 @@ function render(weekDays,schedCache,crewData) {
     const wdoc=schedCache[wy+"_"+wm];
     const wdays=wdoc?.days||wdoc?.daysJson&&JSON.parse(wdoc.daysJson)||null;
     const wa=getAssignment(wdays,wdd,wy,wm);
-    const wcr=wa?.rpic?crew.find(c=>c.id===wa.rpic||c.id===parseInt(wa.rpic)):null;
+    const wdu=wa?decodeDay(wa):null;
+    const wlead=wdu?(wdu.u124.rpic!=null?wdu.u124.rpic:(wdu.u121.active?LEAD_PILOT_ID:null)):null;
+    const wcr=wlead!=null?crew.find(c=>c.id===wlead||c.id===parseInt(wlead)):null;
     const isSel=i===selectedOffset;
     html+=`<div class="day-cell" onclick="selectDay(${i})" style="background:${isSel?wsc.bg:'rgba(255,255,255,0.03)'};border:1px solid ${isSel?wsc.border:'rgba(255,255,255,0.06)'}">
       ${i===0?`<div style="position:absolute;top:-2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:${wsc.color}"></div>`:''}<div class="day-name">${wd.toLocaleDateString('en-US',{weekday:'narrow'})}</div>
@@ -371,45 +396,30 @@ function render(weekDays,schedCache,crewData) {
     <div class="legend-item"><div class="legend-dot" style="background:#FF3B30;opacity:0.6"></div>No Coverage</div>
   </div></div>`;
 
-  // Crew card — grouped by unit
-  if(a&&rpic) {
-    // Sanchez (id:1) = UAV121, everyone else = UAV124
-    const SANCHEZ_ID = 1;
-    const rpicIsManager = rpic.id === SANCHEZ_ID;
-
-    // Build unit groups
-    // extra array may contain additional RPICs or crew
-    // VO pairs to primary RPIC (rpic field)
-    // extra members: if Sanchez is primary, extras go to UAV124; otherwise extras are upstaff on UAV124
-
+  // Crew card — grouped by unit, decoded with the app's exact two-unit model
+  if(a && du && (du.u121.active || du.u124.rpic != null)) {
     const uav121 = [];
     const uav124 = [];
 
-    if(rpicIsManager) {
-      // Sanchez is primary RPIC — UAV121
-      uav121.push({ person: rpic, role: 'RPIC', roleColor: '#4A90D9', badge: 'RPIC' });
-      if(vo) uav121.push({ person: vo, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
-      // extras go to UAV124
-      extra.forEach(em => {
-        uav124.push({ person: em, role: em.role === 'RPIC' ? 'REMOTE PILOT IN COMMAND' : 'UPSTAFF', roleColor: em.role === 'RPIC' ? '#4A90D9' : '#D4AF37', badge: em.role });
-      });
-      // vo2 pairs to UAV124 (extra RPIC)
-      if(vo2) uav124.push({ person: vo2, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
-    } else {
-      // Someone else is primary RPIC — UAV124
-      uav124.push({ person: rpic, role: 'RPIC', roleColor: '#4A90D9', badge: 'RPIC' });
-      if(vo) uav124.push({ person: vo, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
-      // check if Sanchez is in extras — he goes to UAV121
-      extra.forEach(em => {
-        if(em.id === SANCHEZ_ID) {
-          uav121.push({ person: em, role: 'RPIC', roleColor: '#4A90D9', badge: 'RPIC' });
-        } else {
-          uav124.push({ person: em, role: em.role === 'RPIC' ? 'REMOTE PILOT IN COMMAND' : 'UPSTAFF', roleColor: em.role === 'RPIC' ? '#4A90D9' : '#D4AF37', badge: em.role });
-        }
-      });
-      // vo2 pairs to Sanchez on UAV121
-      if(vo2) uav121.push({ person: vo2, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
+    // UAV121 (lead) — Sanchez flies it whenever the day's lead flag is set
+    if(du.u121.active) {
+      const lead = findCrew(LEAD_PILOT_ID);
+      if(lead) uav121.push({ person: lead, role: 'RPIC', roleColor: '#4A90D9', badge: 'RPIC' });
+      const lvo = findCrew(du.u121.vo);
+      if(lvo) uav121.push({ person: lvo, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
     }
+    // UAV124 (primary) — its own RPIC + VO
+    if(du.u124.rpic != null) {
+      const r = findCrew(du.u124.rpic);
+      if(r) uav124.push({ person: r, role: 'RPIC', roleColor: '#4A90D9', badge: 'RPIC' });
+      const rvo = findCrew(du.u124.vo);
+      if(rvo) uav124.push({ person: rvo, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
+    }
+    // Upstaff → UAV124
+    (du.upstaff || []).forEach(eid => {
+      const em = findCrew(eid);
+      if(em) uav124.push({ person: em, role: em.role === 'RPIC' ? 'REMOTE PILOT IN COMMAND' : 'UPSTAFF', roleColor: em.role === 'RPIC' ? '#4A90D9' : '#D4AF37', badge: em.role });
+    });
 
     // Per-unit temporary out-of-service flags, set from the scheduler.
     // Shape: a.oos = { UAV121: {reason, from, to, note}, UAV124: {...} }
