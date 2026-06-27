@@ -474,7 +474,7 @@ function render(weekDays,schedCache,crewData) {
       const oosList = oosData[unit] || [];
       const dim = oosList.some(oosActive) ? 'opacity:0.4' : '';
       return `<div style="margin-bottom:12px">
-        <div style="font-size:8px;color:#8B949E;letter-spacing:3px;padding:8px 16px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06)">${unit}</div>
+        <div style="font-family:'Bebas Neue';font-size:26px;line-height:1;color:#E6EDF3;letter-spacing:4px;text-align:center;padding:11px 16px;background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.1)">${unit}</div>
         ${renderOOS(oosList)}
         ${members.map(m => `<div class="crew-row" style="${dim}">
           <div class="avatar" style="background:linear-gradient(135deg,${m.person.color},${m.person.color}88);box-shadow:0 0 14px ${m.person.color}40;border:2px solid ${m.person.color}55">${m.person.initials}</div>
