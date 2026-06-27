@@ -421,13 +421,24 @@ function render(weekDays,schedCache,crewData) {
       if(em) uav124.push({ person: em, role: em.role === 'RPIC' ? 'REMOTE PILOT IN COMMAND' : 'UPSTAFF', roleColor: em.role === 'RPIC' ? '#4A90D9' : '#D4AF37', badge: em.role });
     });
 
-    // Per-unit temporary out-of-service flags, set from the scheduler.
-    // Shape: a.oos = { UAV121: {reason, from, to, note}, UAV124: {...} }
+    // Per-unit temporary out-of-service windows, set from the scheduler.
+    // The app stores a.oos as a FLAT ARRAY of windows: [{unit,from,to,reason}, ...]
+    // (one entry per window; a unit may carry more than one). Group by unit here so
+    // the renderers can show every active window. Tolerate a legacy object-keyed
+    // shape {UAV121:{...}} defensively in case any old data exists.
     // from/to are "HH:MM" 24-hr CST strings.
     // Display rule: on TODAY, only show while the window is active (auto-clears
     // after the back-in-service time and stays hidden before the start time).
     // On any other day in the outlook, show whenever it's set.
-    const oosData = a.oos || {};
+    const oosData = (() => {
+      const raw = a.oos, byUnit = {};
+      if (Array.isArray(raw)) {
+        raw.forEach(w => { if (w && w.unit) (byUnit[w.unit] = byUnit[w.unit] || []).push(w); });
+      } else if (raw && typeof raw === 'object') {
+        Object.keys(raw).forEach(u => { if (raw[u]) byUnit[u] = [].concat(raw[u]); });
+      }
+      return byUnit;
+    })();
     const fmtHM = t => (t && /^\d{1,2}:\d{2}$/.test(t)) ? t.replace(':', '').padStart(4, '0') : t;
     const toMins = t => { const mm = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return mm ? parseInt(mm[1]) * 60 + parseInt(mm[2]) : null; };
     // Current time in US Central, as minutes-since-midnight (handles CST/CDT automatically).
@@ -448,7 +459,7 @@ function render(weekDays,schedCache,crewData) {
       if (now === null || f === null || t === null) return true; // fail open
       return t >= f ? (now >= f && now < t) : (now >= f || now < t); // handle past-midnight windows
     };
-    const renderOOS = o => {
+    const renderOOSWindow = o => {
       if(!oosActive(o)) return '';
       const reason = (o.reason || '').toUpperCase();
       return `<div style="background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.4);border-left:3px solid #D4AF37;border-radius:8px;margin:10px 16px 12px;padding:10px 14px">
@@ -457,13 +468,14 @@ function render(weekDays,schedCache,crewData) {
         ${o.note?`<div style="font-size:10px;color:#8B949E;margin-top:3px">${o.note}</div>`:''}
       </div>`;
     };
+    const renderOOS = list => (list || []).map(renderOOSWindow).filter(Boolean).join('');
     const renderUnit = (unit, members) => {
       if(members.length === 0) return '';
-      const oos = oosData[unit];
-      const dim = oosActive(oos) ? 'opacity:0.4' : '';
+      const oosList = oosData[unit] || [];
+      const dim = oosList.some(oosActive) ? 'opacity:0.4' : '';
       return `<div style="margin-bottom:12px">
         <div style="font-size:8px;color:#8B949E;letter-spacing:3px;padding:8px 16px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06)">${unit}</div>
-        ${renderOOS(oos)}
+        ${renderOOS(oosList)}
         ${members.map(m => `<div class="crew-row" style="${dim}">
           <div class="avatar" style="background:linear-gradient(135deg,${m.person.color},${m.person.color}88);box-shadow:0 0 14px ${m.person.color}40;border:2px solid ${m.person.color}55">${m.person.initials}</div>
           <div style="flex:1"><div class="crew-name">${m.person.name}</div><div class="crew-role" style="color:${m.roleColor}">${m.role}</div></div>
