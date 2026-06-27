@@ -935,7 +935,7 @@
   function MyAssignments(props) {
     const { myId, crew, compact } = props;
     const [rows, setRows] = useState(null);   // null = loading
-    const [open, setOpen] = useState(true);   // admin compact card is collapsible
+    const [open, setOpen] = useState(false);  // admin compact card is collapsible, starts collapsed
     useEffect(() => {
       let alive = true;
       if (myId == null) { setRows([]); return; }
@@ -978,20 +978,28 @@
     const downloadICS = function () {
       if (!rows || !rows.length) return;
       const pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      const BS = String.fromCharCode(92);                       // backslash, for ICS escaping
+      const esc = function (t) { return String(t).split(BS).join(BS + BS).split(";").join(BS + ";").split(",").join(BS + ",").split("\n").join(BS + "n"); };
       const now = new Date();
       const stamp = "" + now.getUTCFullYear() + pad(now.getUTCMonth() + 1) + pad(now.getUTCDate()) + "T" + pad(now.getUTCHours()) + pad(now.getUTCMinutes()) + pad(now.getUTCSeconds()) + "Z";
+      const LOCATION = "Station 121, 2096 Talley Rd, San Antonio, TX 78253";
+      const PHONE = "(210) 861-6643";
+      const dutyFull = function (role) { return role === "RPIC" ? "RPIC (Remote Pilot in Command)" : role === "VO" ? "VO (Visual Observer)" : "Upstaff"; };
       const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Fire Hawk UAS//Ops//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
       rows.forEach(function (r) {
         const start = "" + r.y + pad(r.m + 1) + pad(r.d);
         const e = new Date(r.y, r.m, r.d + 1);
         const end = "" + e.getFullYear() + pad(e.getMonth() + 1) + pad(e.getDate());
+        const shift = getShift(r.y, r.m, r.d);
+        const desc = ["Unit: " + r.unit, "Duty: " + dutyFull(r.role), "Shift: " + shift, "Status: " + (r.confirmed ? "Confirmed" : "Pending"), "Contact UAS Program Manager: " + PHONE].join("\n");
         L.push("BEGIN:VEVENT");
         L.push("UID:firehawk-" + myId + "-" + start + "-" + r.unit + "@bc2fd.org");
         L.push("DTSTAMP:" + stamp);
         L.push("DTSTART;VALUE=DATE:" + start);
         L.push("DTEND;VALUE=DATE:" + end);
-        L.push("SUMMARY:Fire Hawk \u2014 " + r.unit + " " + r.role);
-        L.push("DESCRIPTION:Fire Hawk UAS assignment \u00B7 " + (r.confirmed ? "Confirmed" : "Pending"));
+        L.push("SUMMARY:" + esc("Fire Hawk UAS \u2014 " + r.unit + " " + r.role + " (" + shift + " Shift)"));
+        L.push("LOCATION:" + esc(LOCATION));
+        L.push("DESCRIPTION:" + esc(desc));
         L.push("END:VEVENT");
       });
       L.push("END:VCALENDAR");
