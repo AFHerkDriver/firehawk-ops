@@ -1,8 +1,8 @@
-# Fire Hawk UAS — Ops Platform
+# Firehawk Ops
 
 Operational web tools for the Fire Hawk UAS Program, Bexar County ESD No. 2 (BC2FD), covering Districts 2 & 6. Two single-file web apps — a crew operations app and a read-only command status board — backed by Firebase Firestore and a Cloudflare Worker for live weather and alerts. No build step; deployed straight to GitHub Pages.
 
-**Live version:** v1.5 (June 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
+**Live version:** v1.9 (June 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
 
 ## Live URLs
 
@@ -22,13 +22,14 @@ legacy.html   # Previous monolithic build, retained for reference
 ## Features
 
 ### Fire Hawk Ops (`index.html`)
-- **Schedule** — monthly grid showing UAV121 / UAV124 with the assigned RPIC; tap a day for the full crew roster, including upstaffing. Upstaff is a standalone, day-level concept (additional/training crew) that can be added independently of a second aircraft. Days can be marked confirmed/finalized, and the manager can auto-propose a month from crew availability.
-- **My Shifts** — signed-in crew get a personal list of only the days they're assigned across the current and next month, with unit, role, and confirmed/pending status, so they don't have to scan the calendar.
+- **Schedule** — monthly grid showing UAV121 / UAV124 with the assigned RPIC; tap a day for the full crew roster, including upstaffing. Upstaff is a standalone, day-level concept (additional/training crew) that can be added independently of a second aircraft. Each day is **Finalized** (green) or **Draft** (amber); editing crew or an out-of-service window on a finalized day re-opens it as Draft. A footer dot reads green when every crewed day is finalized, amber while any is Draft. The manager can finalize a single day, finalize/unfinalize the whole month, and auto-propose a month from crew availability.
+- **My Shifts** — signed-in crew get a personal list of only the days they're assigned across the current and next month, with unit, role, and finalized/draft status, so they don't have to scan the calendar.
+- **YTD Stats** — a button under the calendar opens a year-to-date view of days worked per crew member (one tally per person per day, both units collapsed, upstaff included), counting finalized days only, with a per-person total, a bar relative to the busiest crew, and a month-by-month breakdown. Visible to all signed-in crew.
 - **Availability** — crew set the days they're available each month. Months stay locked until the program opens them, and edits save atomically so several crew can enter the same month without overwriting one another.
 - **Crew management** (owner) — add, archive, and remove members, and set each member's role-aware access tier and PIN.
 - **Crew roster** — RPIC / VO assignments, colors, and Part 107 currency.
 - **Preflight WX** — GPS-based weather with a three-tier convective read (observed thunderstorm via METAR / NWS warning → ground; model-only signal → caution; none).
-- **Airspace** — ADS-B, LAANC, and FAA Part 71 airport class awareness.
+- **Airspace** — live ADS-B traffic within 3NM (smoothly interpolated between polls, with tail number and type code per contact), conflict / inbound alerting, LAANC, and FAA Part 71 airport class awareness.
 - **Thermal config**, **SAR operations** reference, **Bulletins**, and **Links**.
 - **Sign-in** — PIN-based, role-aware access (owner / admin / staff). PINs are verified server-side and never stored in the app or schedule database. Archived members are locked out of sign-in until they're restored. Sign-ins are recorded in an access log with full name and fire rank.
 - **What's New** — collapsible changelog of user-facing improvements in the footer.
@@ -69,7 +70,11 @@ The footer and the in-app **What's New** panel show the **user-facing** version.
 - **v1.1** — clearer Class E airspace read (no authorization required for standard Part 107 ops to 400 ft AGL).
 - **v1.2** — installable home-screen app with the Fire Hawk badge icon.
 - **v1.3–v1.4** — staff Availability calendar: reliable concurrent saving, and months that stay locked until the program opens them.
-- **v1.5** — personal **My Shifts** view: each signed-in member sees only the days they're assigned this month and next, and can add them straight to their phone's calendar (current release).
+- **v1.5** — personal **My Shifts** view: each signed-in member sees only the days they're assigned this month and next, and can add them straight to their phone's calendar.
+- **v1.6** — **YTD Stats**: days-worked-per-crew-member view for the calendar year (finalized days, one tally per person per day, both units collapsed), visible to all signed-in crew.
+- **v1.7** — **Finalized / Draft** day states: clearer green/amber labeling, a footer status dot, single-day and whole-month finalize, and auto-revert to Draft when a finalized day is edited.
+- **v1.8** — **smoother ADS-B tracker**: faster polling with motion interpolated between updates so traffic glides instead of jumping; more reliable conflict / inbound alerts.
+- **v1.9** — **tail number + type code** shown per contact in the traffic list, and a faster traffic refresh for smoother movement (current release).
 
 ## Contact
 
