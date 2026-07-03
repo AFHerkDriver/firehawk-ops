@@ -906,6 +906,7 @@
         "Airspace overhaul. The status card now always shows the most restrictive condition at your position: an active TFR you're standing inside turns the card red with the NOTAM number and end time and outranks everything \u2014 including a LAANC grid. A National Security no-fly or a low-floor Prohibited/Restricted area also outranks a LAANC grid instead of hiding behind it.",
         "Fewer false alarms, no false all-clears. High-altitude special-use airspace (like a MOA with a 14,000ft floor) no longer raises a caution a drone can't reach, flight-level floors (FL180) read correctly, and overlapping LAANC grids show the lowest (controlling) ceiling. If the FAA data sources can't be reached the card says CHECK INCOMPLETE and tells you to verify via B4UFLY \u2014 it will never show a green all-clear it can't back up.",
         "Full provenance. Special-use airspace now comes directly from the FAA's own published layer (previous source kept as automatic backup), and every special-use card shows a SRC chip naming exactly where its data came from.",
+        "New Run Source Diagnostics button in Airspace \u2014 one tap live-tests every airspace data source, the department worker, and the TFR pipeline from your device, and names exactly what's unreachable. Airspace map queries also automatically retry through the department worker if a direct connection is blocked.",
         "Optional LAANC grid overlay on the traffic scope. A LAANC button next to North-Up / Track-Up paints the FAA facility-map cells around your position with each cell's authorization ceiling \u2014 so you can see where the ceiling changes, not just what it is where you stand. Off by default; display-only."
       ]},
       { v:"2.3", date:"July 2026", items:[
@@ -3286,7 +3287,10 @@ const [showComms, setShowComms] = useState(false);
       const BASE_LAANC = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + geoParam + "&outFields=*";
       const BASE_NSR = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/NationalSecurityUAS_FlightRestrictions/FeatureServer/0/query?" + geoParam + "&outFields=NAME,TYPE,LOWER_ALT,UPPER_ALT";
       const BASE_CLASS = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + geoParam + "&outFields=CLASS,NAME";
-      const safeFetch = url => fetch(url).then(r => r.json()).then(d => (d && Array.isArray(d.features)) ? d : ({ features: [], __failed: true })).catch(() => ({ features: [], __failed: true }));
+      const AGP = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
+      const okFeatures = r => r.json().then(d => (d && Array.isArray(d.features)) ? d : Promise.reject(0));
+      const safeFetch = url => fetch(url).then(okFeatures)
+        .catch(() => fetch(AGP(url)).then(okFeatures).catch(() => ({ features: [], __failed: true })));
       Promise.all([safeFetch(BASE_LAANC), fetchSUA(), safeFetch(BASE_NSR), safeFetch(BASE_CLASS)])
         .then(([laanc, sua, nsr, cls]) => {
           const failedNames = [];
@@ -3761,6 +3765,51 @@ const [showComms, setShowComms] = useState(false);
     suaNote: null
   } : laancData;
 
+  // ── Source diagnostics — one tap live-tests every airspace endpoint from THIS device ──
+  const [diagRows, setDiagRows] = useState(null);
+  const runDiag = async () => {
+    const dLat = posCoords ? posCoords.lat : 29.591, dLon = posCoords ? posCoords.lon : -98.6;
+    const gp = "geometry=" + dLon + "%2C" + dLat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&f=json&outFields=*";
+    const prox = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
+    const TT = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error("timeout")), ms))]);
+    const rows = [];
+    setDiagRows([{ name: "RUNNING\u2026", ok: null, note: "" }]);
+    let tfrFirstId = null;
+    const probe = async (name, url, kind) => {
+      const t0 = Date.now();
+      try {
+        const r = await TT(fetch(url), 8000);
+        const ms = Date.now() - t0;
+        let note = "HTTP " + r.status, ok = r.ok;
+        if (r.ok) {
+          const tx = await r.text();
+          if (kind === "arcgis") {
+            try { const d = JSON.parse(tx); if (d.error) { ok = false; note = "ArcGIS: " + (d.error.message || ("code " + d.error.code)); } else if (Array.isArray(d.features)) note = "OK \u00b7 " + d.features.length + " feat"; else { ok = false; note = "no features[]"; } }
+            catch (e2) { ok = false; note = "bad JSON"; }
+          } else if (kind === "tfrlist") {
+            try { const d = JSON.parse(tx); const tx2 = (Array.isArray(d) ? d : []).filter(x => x && x.state === "TX"); note = "OK \u00b7 " + (Array.isArray(d) ? d.length : "?") + " rows \u00b7 " + tx2.length + " TX"; if (tx2[0] && tx2[0].notam_id) tfrFirstId = String(tx2[0].notam_id).replace("/", "_"); }
+            catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 40); }
+          } else if (kind === "json") {
+            try { JSON.parse(tx); note = "OK \u00b7 json"; } catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 40); }
+          } else if (kind === "xml") {
+            if (tx.indexOf("geoLat") !== -1) note = "OK \u00b7 shape data"; else { ok = false; note = "no geo tags: " + tx.slice(0, 40); }
+          }
+        }
+        rows.push({ name, ok, note: note + " \u00b7 " + ms + "ms" });
+      } catch (e) { rows.push({ name, ok: false, note: e.message || "failed" }); }
+      setDiagRows(rows.slice());
+    };
+    await probe("LAANC GRID \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + gp, "arcgis");
+    await probe("SUA \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Special_Use_Airspace/FeatureServer/0/query?" + gp, "arcgis");
+    await probe("SUA \u00b7 TAMU FALLBACK", "https://gis.nri.tamu.edu/arcgis/rest/services/SUA_MTR/SUA/MapServer/0/query?" + gp, "arcgis");
+    await probe("SECURITY \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/NationalSecurityUAS_FlightRestrictions/FeatureServer/0/query?" + gp, "arcgis");
+    await probe("CLASS \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + gp, "arcgis");
+    await probe("WORKER \u00b7 /BURNBAN", "https://firehawk-wx.usafsentinel-45e.workers.dev/burnban", "json");
+    await probe("WORKER \u00b7 TFR LIST PROXY", prox("https://tfr.faa.gov/tfrapi/exportTfrList"), "tfrlist");
+    if (tfrFirstId) await probe("TFR SHAPE XML \u00b7 " + tfrFirstId, prox("https://tfr.faa.gov/save_pages/detail_" + tfrFirstId + ".xml"), "xml");
+    await probe("ELEVATION \u00b7 OPEN-METEO", "https://api.open-meteo.com/v1/elevation?latitude=" + dLat.toFixed(3) + "&longitude=" + dLon.toFixed(3), "json");
+  };
+
   // ── Compass heading ───────────────────────────────────────────────────────
   useEffect(() => {
     const handler = e => {
@@ -3996,6 +4045,16 @@ const [showComms, setShowComms] = useState(false);
           : tfrStatus === "list-unreachable" ? "TFR — FAA LIST UNREACHABLE (WORKER/NETWORK)"
           : String(tfrStatus).indexOf("shapes-unreachable") === 0 ? ("TFR — " + String(tfrStatus).split(":")[1] + " ACTIVE IN TX · SHAPE DATA UNREACHABLE")
           : "TFR — CHECK UNAVAILABLE")),
+
+    /* Source diagnostics — turns any crew phone into a live endpoint probe */
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", marginBottom: 8 } },
+      /*#__PURE__*/React.createElement("button", { onClick: runDiag, style: { padding: "5px 12px", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "#8B949E", fontSize: 8, letterSpacing: 1.5, fontFamily: "inherit", cursor: "pointer" } }, "RUN SOURCE DIAGNOSTICS")),
+    diagRows && /*#__PURE__*/React.createElement("div", { style: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "8px 10px", marginBottom: 8 } },
+      diagRows.map(function(r, i) {
+        return /*#__PURE__*/React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 8.5, letterSpacing: 0.5, padding: "3px 0" } },
+          /*#__PURE__*/React.createElement("span", { style: { color: r.ok === false ? "#FF6B6B" : r.ok ? "#34C759" : "#8B949E", flexShrink: 0 } }, r.name),
+          /*#__PURE__*/React.createElement("span", { style: { color: "#8B949E", textAlign: "right", wordBreak: "break-all" } }, r.note));
+      })),
 
     /* TFR detail cards — only when something is in the scan window */
     tfrs.length > 0 && /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
