@@ -2,7 +2,7 @@
 
 Operational web tools for the Fire Hawk UAS Program, Bexar County ESD No. 2 (BC2FD), covering Districts 2 & 6. Two single-file web apps — a crew operations app and a read-only command status board — backed by Firebase Firestore and a Cloudflare Worker for live weather and alerts. No build step; deployed straight to GitHub Pages.
 
-**Live version:** v1.9 (June 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
+**Live version:** v2.3 (July 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
 
 ## Live URLs
 
@@ -29,7 +29,7 @@ legacy.html   # Previous monolithic build, retained for reference
 - **Crew management** (owner) — add, archive, and remove members, and set each member's role-aware access tier and PIN.
 - **Crew roster** — RPIC / VO assignments, colors, and Part 107 currency.
 - **Preflight WX** — GPS-based weather with a three-tier convective read (observed thunderstorm via METAR / NWS warning → ground; model-only signal → caution; none).
-- **Airspace** — live ADS-B traffic within 3NM (smoothly interpolated between polls, with tail number and type code per contact), conflict / inbound alerting, LAANC, and FAA Part 71 airport class awareness.
+- **Airspace** — live ADS-B traffic within 3NM read in **AGL above the launch site** (ground elevation pulled at the operator's GPS position; MSL shown secondary), smoothly interpolated between polls with tail number and type code per contact, AGL-based conflict / inbound alerting, **live FAA TFR awareness** (status line, nearby cards, and true boundary shapes drawn on the scope), LAANC, and FAA Part 71 airport class awareness.
 - **Thermal config**, **SAR operations** reference, **Bulletins**, and **Links**.
 - **Sign-in** — PIN-based, role-aware access (owner / admin / staff). PINs are verified server-side and never stored in the app or schedule database. Archived members are locked out of sign-in until they're restored. Sign-ins are recorded in an access log with full name and fire rank.
 - **What's New** — collapsible changelog of user-facing improvements in the footer.
@@ -74,7 +74,11 @@ The footer and the in-app **What's New** panel show the **user-facing** version.
 - **v1.6** — **YTD Stats**: days-worked-per-crew-member view for the calendar year (finalized days, one tally per person per day, both units collapsed), visible to all signed-in crew.
 - **v1.7** — **Finalized / Draft** day states: clearer green/amber labeling, a footer status dot, single-day and whole-month finalize, and auto-revert to Draft when a finalized day is edited.
 - **v1.8** — **smoother ADS-B tracker**: faster polling with motion interpolated between updates so traffic glides instead of jumping; more reliable conflict / inbound alerts.
-- **v1.9** — **tail number + type code** shown per contact in the traffic list, and a faster traffic refresh for smoother movement (current release).
+- **v1.9** — **tail number + type code** shown per contact in the traffic list, and a faster traffic refresh for smoother movement.
+- **v2.0** — **AGL traffic altitudes**: ground elevation at the launch site converts each contact's MSL altitude to height above the operator; filters and alerts now key off AGL, with MSL shown secondary.
+- **v2.1** — **Part 107 currency advisory** on the Dashboard (amber inside 90 days, red inside 30, per-pilot days remaining), correctly sized desktop radar, and steadier traffic on a jittery GPS signal.
+- **v2.2** — **live TFR awareness**: Texas TFR scan every 10 minutes with an honest status line (clear / nearby / inside / unavailable), detail cards, and scope markers.
+- **v2.3** — **TFR boundary rendering**: the actual published polygon or circle paints on the scope when it reaches the 3NM window, and inside/outside is determined against the true boundary (current release).
 
 ## Contact
 
