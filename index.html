@@ -1511,9 +1511,21 @@ function WeatherModal({ onClose }) {
       var withTimeout = function(p, ms) {
         return Promise.race([p, new Promise(function(_, rej) { setTimeout(function() { rej(new Error("timeout")); }, ms); })]);
       };
+      var WX_PROXY = function(target) { return "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(target); };
 
-      var omRes = await withTimeout(fetch(omUrl), 8000);
-      if (!omRes.ok) throw new Error("Open-Meteo HTTP " + omRes.status);
+      // Direct first; VPN/firewalled desktops often can't reach Open-Meteo — fall back through the worker
+      var omRes;
+      try {
+        omRes = await withTimeout(fetch(omUrl), 8000);
+        if (!omRes.ok) throw new Error("HTTP " + omRes.status);
+      } catch (eDirect) {
+        try {
+          omRes = await withTimeout(fetch(WX_PROXY(omUrl)), 8000);
+          if (!omRes.ok) throw new Error("HTTP " + omRes.status);
+        } catch (eProxy) {
+          throw new Error("Open-Meteo unreachable (direct: " + eDirect.message + " \u00b7 proxy: " + eProxy.message + ")");
+        }
+      }
       var om = await omRes.json();
       var cur = om.current;
       if (!cur) throw new Error("No current data");
@@ -1562,7 +1574,7 @@ function WeatherModal({ onClose }) {
         var ALERT_URL = "https://api.weather.gov/alerts/active?zone=TXZ205";
         for (var purl of makeProxies(ALERT_URL)) {
           try {
-            var r = await fetch(purl);
+            var r = await withTimeout(fetch(purl), 6000);
             if (!r.ok) continue;
             var alertData = JSON.parse(await r.text());
             activeAlerts = (alertData.features || []).map(function(f) {
@@ -1592,7 +1604,7 @@ function WeatherModal({ onClose }) {
         var REGIONAL_URL = "https://aviationweather.gov/api/data/metar?ids=" + closestTwo + "&format=json&taf=false";
         for (var purl of makeProxies(REGIONAL_URL)) {
           try {
-            var rr = await fetch(purl);
+            var rr = await withTimeout(fetch(purl), 6000);
             if (!rr.ok) continue;
             var parsedR = JSON.parse(await rr.text());
             if (Array.isArray(parsedR)) {
@@ -3469,8 +3481,11 @@ const [showComms, setShowComms] = useState(false);
   useEffect(() => {
     if (!posCoords) return;
     let alive = true;
-    fetch("https://api.open-meteo.com/v1/elevation?latitude=" + posCoords.lat.toFixed(4) + "&longitude=" + posCoords.lon.toFixed(4))
-      .then(r => r.json()).then(d => {
+    const eUrl = "https://api.open-meteo.com/v1/elevation?latitude=" + posCoords.lat.toFixed(4) + "&longitude=" + posCoords.lon.toFixed(4);
+    const eProx = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(eUrl);
+    const grab = (u) => fetch(u).then(r => { if (!r.ok) throw 0; return r.json(); });
+    grab(eUrl).catch(() => grab(eProx))   // VPN/firewalled desktops — fall back through the worker
+      .then(d => {
         if (!alive) return;
         const m = Array.isArray(d.elevation) ? d.elevation[0] : d.elevation;
         if (typeof m === "number" && isFinite(m)) setGroundElevFt(Math.round(m * 3.28084));
@@ -3490,65 +3505,80 @@ const [showComms, setShowComms] = useState(false);
     const seq = ++tfrSeq.current;
     const run = async () => {
       try {
-        const html = await fetch(prox("https://tfr.faa.gov/tfr2/list.html")).then(r => { if (!r.ok) throw 0; return r.text(); });
-        // Split on detail links; a row chunk holds its state + type cells
-        const found = []; const seen = {};
-        const linkRe = /detail_(\d)_(\d{3,5})\.html/g; let mm;
-        while ((mm = linkRe.exec(html)) !== null) {
-          const id = mm[1] + "_" + mm[2];
-          if (seen[id]) continue; seen[id] = 1;
-          const chunk = html.slice(mm.index, mm.index + 900);
-          if (!/>\s*TX\s*</.test(chunk)) continue;   // Texas rows only
-          const ty = (chunk.match(/(HAZARDS?|SECURITY|VIP|SPORTING\s*EVENTS?|AIR ?SHOW|SPACE\s*OPERATIONS?|EMERGENCY|SPECIAL)/i) || [,"TFR"])[1].toUpperCase();
-          found.push({ id, notam: mm[1] + "/" + mm[2], type: ty });
+        const fetchT = (u, ms) => { const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms); return fetch(u, { signal: ac.signal }).finally(() => clearTimeout(t)); };
+        // List — tfr3 JSON API (the old tfr2/list.html now redirects to a JS shell with no data in it)
+        let found = [];
+        try {
+          const list = await fetchT(prox("https://tfr.faa.gov/tfrapi/exportTfrList?_=" + Date.now()), 12000).then(r => { if (!r.ok) throw 0; return r.json(); });
+          const seen = {};
+          (Array.isArray(list) ? list : []).forEach(row => {
+            if (!row || row.state !== "TX" || !row.notam_id) return;
+            const id = String(row.notam_id).replace("/", "_");
+            if (seen[id]) return; seen[id] = 1;
+            found.push({ id, notam: row.notam_id, type: String(row.type || "TFR").toUpperCase() });
+          });
+        } catch (e0) {
+          // Fallback — legacy scrape, kept in case the JSON API moves again
+          const html = await fetchT(prox("https://tfr.faa.gov/tfr2/list.html"), 12000).then(r => { if (!r.ok) throw 0; return r.text(); });
+          const seen = {}; const linkRe = /detail_(\d)_(\d{3,5})\.(?:html|xml)/g; let mm;
+          while ((mm = linkRe.exec(html)) !== null) {
+            const id = mm[1] + "_" + mm[2];
+            if (seen[id]) continue; seen[id] = 1;
+            const chunk = html.slice(mm.index, mm.index + 900);
+            if (!/>\s*TX\s*</.test(chunk)) continue;
+            const ty = (chunk.match(/(HAZARDS?|SECURITY|VIP|SPORTING\s*EVENTS?|AIR ?SHOW|SPACE\s*OPERATIONS?|EMERGENCY|SPECIAL)/i) || [,"TFR"])[1].toUpperCase();
+            found.push({ id, notam: mm[1] + "/" + mm[2], type: ty });
+          }
         }
-        const out = [];
-        for (const f of found.slice(0, 8)) {
-          try {
-            const xml = await fetch(prox("https://tfr.faa.gov/save_pages/detail_" + f.id + ".xml")).then(r => { if (!r.ok) throw 0; return r.text(); });
-            const exp = (xml.match(/<dateExpire>([^<]+)</) || [])[1];
-            const eff = (xml.match(/<dateEffective>([^<]+)</) || [])[1];
-            if (exp && new Date(exp + (exp.endsWith("Z") ? "" : "Z")) < new Date()) continue;   // already expired
-            // Per-shape parse — polygons from each abdMergedArea block, circles from geoLatCen groups
-            const shapes = [];
-            for (const am of xml.matchAll(/<abdMergedArea>([\s\S]*?)<\/abdMergedArea>/g)) {
-              const la = [...am[1].matchAll(/<geoLat>([^<]+)</g)].map(x => pc(x[1]));
-              const lo = [...am[1].matchAll(/<geoLong>([^<]+)</g)].map(x => pc(x[1]));
-              const pts = []; for (let i = 0; i < Math.min(la.length, lo.length); i++) if (la[i] != null && lo[i] != null) pts.push([la[i], lo[i]]);
-              if (pts.length >= 3) shapes.push({ kind: "poly", pts });
-            }
-            {
-              const cla = [...xml.matchAll(/<geoLatCen>([^<]+)</g)].map(x => pc(x[1]));
-              const clo = [...xml.matchAll(/<geoLongCen>([^<]+)</g)].map(x => pc(x[1]));
-              const rr  = [...xml.matchAll(/<valRadiusArc>([\d.]+)</g)].map(x => parseFloat(x[1]));
-              for (let i = 0; i < Math.min(cla.length, clo.length); i++) if (cla[i] != null && clo[i] != null) shapes.push({ kind: "circle", clat: cla[i], clon: clo[i], radNm: (rr[i] || rr[0] || 3) });
-            }
-            // Aggregate point cloud → centroid/extent (drives card bearing/range + scan window)
-            let all = []; shapes.forEach(s => { if (s.kind === "poly") all = all.concat(s.pts); else all.push([s.clat, s.clon]); });
-            if (!all.length) {   // odd XML — fall back to any coordinate tags at all
-              const la = [...xml.matchAll(/<geoLat(?:Cen)?>([^<]+)</g)].map(x => pc(x[1]));
-              const lo = [...xml.matchAll(/<geoLong(?:Cen)?>([^<]+)</g)].map(x => pc(x[1]));
-              for (let i = 0; i < Math.min(la.length, lo.length); i++) if (la[i] != null && lo[i] != null) all.push([la[i], lo[i]]);
-            }
-            if (!all.length) continue;
-            const clat = all.reduce((s, p) => s + p[0], 0) / all.length;
-            const clon = all.reduce((s, p) => s + p[1], 0) / all.length;
-            let radNm = 0; all.forEach(p => { radNm = Math.max(radNm, distNm(clat, clon, p[0], p[1])); });
-            shapes.forEach(s => { if (s.kind === "circle") radNm = Math.max(radNm, distNm(clat, clon, s.clat, s.clon) + s.radNm); });
-            if (!radNm) radNm = 3;                                // point-only shape — assume a conservative 3nm
-            const dist = distNm(posCoords.lat, posCoords.lon, clat, clon);
-            if (dist - radNm > TFR_SCAN_NM) continue;
-            const brg = Math.round(bearingTo(posCoords.lat, posCoords.lon, clat, clon));
-            // True boundary test — ray-cast the polygons, radius-test the circles; centroid fallback
-            const inPoly = (pt, pts) => { let inn = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const yi = pts[i][0], xi = pts[i][1], yj = pts[j][0], xj = pts[j][1]; if (((yi > pt[0]) !== (yj > pt[0])) && (pt[1] < (xj - xi) * (pt[0] - yi) / (yj - yi) + xi)) inn = !inn; } return inn; };
-            const op = [posCoords.lat, posCoords.lon];
-            const inside = shapes.length
-              ? shapes.some(s => s.kind === "poly" ? inPoly(op, s.pts) : distNm(op[0], op[1], s.clat, s.clon) <= s.radNm + 0.1)
-              : dist <= radNm + 0.2;
-            out.push({ notam: f.notam, type: f.type, brg, dist, radNm, inside, shapes, exp: exp || null, eff: eff || null });
-          } catch (e) {}
-        }
+        let parsedCount = 0;   // detail XMLs successfully fetched (regardless of range) — guards against a false all-clear
+        const detail = async (f) => {
+          const xml = await fetchT(prox("https://tfr.faa.gov/save_pages/detail_" + f.id + ".xml"), 8000).then(r => { if (!r.ok) throw 0; return r.text(); });
+          parsedCount++;
+          const exp = (xml.match(/<dateExpire>([^<]+)</) || [])[1];
+          const eff = (xml.match(/<dateEffective>([^<]+)</) || [])[1];
+          if (exp && new Date(exp + (exp.endsWith("Z") ? "" : "Z")) < new Date()) return null;   // already expired
+          // Per-shape parse — polygons from each abdMergedArea block, circles from geoLatCen groups
+          const shapes = [];
+          for (const am of xml.matchAll(/<abdMergedArea>([\s\S]*?)<\/abdMergedArea>/g)) {
+            const la = [...am[1].matchAll(/<geoLat>([^<]+)</g)].map(x => pc(x[1]));
+            const lo = [...am[1].matchAll(/<geoLong>([^<]+)</g)].map(x => pc(x[1]));
+            const pts = []; for (let i = 0; i < Math.min(la.length, lo.length); i++) if (la[i] != null && lo[i] != null) pts.push([la[i], lo[i]]);
+            if (pts.length >= 3) shapes.push({ kind: "poly", pts });
+          }
+          {
+            const cla = [...xml.matchAll(/<geoLatCen>([^<]+)</g)].map(x => pc(x[1]));
+            const clo = [...xml.matchAll(/<geoLongCen>([^<]+)</g)].map(x => pc(x[1]));
+            const rr  = [...xml.matchAll(/<valRadiusArc>([\d.]+)</g)].map(x => parseFloat(x[1]));
+            for (let i = 0; i < Math.min(cla.length, clo.length); i++) if (cla[i] != null && clo[i] != null) shapes.push({ kind: "circle", clat: cla[i], clon: clo[i], radNm: (rr[i] || rr[0] || 3) });
+          }
+          // Aggregate point cloud → centroid/extent (drives card bearing/range + scan window)
+          let all = []; shapes.forEach(sh => { if (sh.kind === "poly") all = all.concat(sh.pts); else all.push([sh.clat, sh.clon]); });
+          if (!all.length) {   // odd XML — fall back to any coordinate tags at all
+            const la = [...xml.matchAll(/<geoLat(?:Cen)?>([^<]+)</g)].map(x => pc(x[1]));
+            const lo = [...xml.matchAll(/<geoLong(?:Cen)?>([^<]+)</g)].map(x => pc(x[1]));
+            for (let i = 0; i < Math.min(la.length, lo.length); i++) if (la[i] != null && lo[i] != null) all.push([la[i], lo[i]]);
+          }
+          if (!all.length) return null;
+          const clat = all.reduce((s2, p) => s2 + p[0], 0) / all.length;
+          const clon = all.reduce((s2, p) => s2 + p[1], 0) / all.length;
+          let radNm = 0; all.forEach(p => { radNm = Math.max(radNm, distNm(clat, clon, p[0], p[1])); });
+          shapes.forEach(sh => { if (sh.kind === "circle") radNm = Math.max(radNm, distNm(clat, clon, sh.clat, sh.clon) + sh.radNm); });
+          if (!radNm) radNm = 3;                                // point-only shape — assume a conservative 3nm
+          const dist = distNm(posCoords.lat, posCoords.lon, clat, clon);
+          if (dist - radNm > TFR_SCAN_NM) return null;
+          const brg = Math.round(bearingTo(posCoords.lat, posCoords.lon, clat, clon));
+          // True boundary test — ray-cast the polygons, radius-test the circles; centroid fallback
+          const inPoly = (pt, pts) => { let inn = false; for (let i = 0, j2 = pts.length - 1; i < pts.length; j2 = i++) { const yi = pts[i][0], xi = pts[i][1], yj = pts[j2][0], xj = pts[j2][1]; if (((yi > pt[0]) !== (yj > pt[0])) && (pt[1] < (xj - xi) * (pt[0] - yi) / (yj - yi) + xi)) inn = !inn; } return inn; };
+          const op = [posCoords.lat, posCoords.lon];
+          const inside = shapes.length
+            ? shapes.some(sh => sh.kind === "poly" ? inPoly(op, sh.pts) : distNm(op[0], op[1], sh.clat, sh.clon) <= sh.radNm + 0.1)
+            : dist <= radNm + 0.2;
+          return { notam: f.notam, type: f.type, brg, dist, radNm, inside, shapes, exp: exp || null, eff: eff || null };
+        };
+        const settled = await Promise.all(found.slice(0, 8).map(f => detail(f).catch(() => undefined)));
+        const out = settled.filter(r => r);   // undefined = fetch failed · null = parsed but expired/out-of-range
         if (seq !== tfrSeq.current) return;
+        if (found.length > 0 && parsedCount === 0) { setTfrStatus("unavailable"); return; }   // TFRs exist but shapes unreachable — never fake a clear
         out.sort((a, b) => (a.dist - a.radNm) - (b.dist - b.radNm));
         setTfrs(out); setTfrStatus("ok");
       } catch (e) { if (seq === tfrSeq.current) setTfrStatus("unavailable"); }
