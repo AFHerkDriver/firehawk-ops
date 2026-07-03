@@ -2932,6 +2932,7 @@ const [showComms, setShowComms] = useState(false);
   const [altMax, setAltMax] = useState(1000);
   const [groundElevFt, setGroundElevFt] = useState(null);   // launch-site terrain (ft MSL) — converts traffic MSL → AGL
   const groundElevRef = useRef(null); groundElevRef.current = groundElevFt;
+  const elevGateRef = useRef(null);   // last attempt {lat,lon,t} — ground elev must never be polled at GPS rate
   const CONFLICT_AGL = 500;    // red / audible alert — at or near the drone's 400ft AGL ceiling
   const NEARBY_AGL   = 1000;   // amber — worth watching
   const effAlt = (ac) => (ac.agl != null ? ac.agl : ac.alt);   // AGL when we have ground elev, else raw MSL
@@ -3400,6 +3401,7 @@ const [showComms, setShowComms] = useState(false);
   const inboundTimer    = useRef(null);
   const adsbBase        = useRef([]);          // last real fix per aircraft (lat/lon/gs/track/t0) for interpolation
   const fetchSeq        = useRef(0);           // drops out-of-order poll responses (slow cell fetch overtaken by a newer one)
+  const lastAdsbAt      = useRef(0);           // GPS movement restarts this effect — dedupe the immediate refires
 
   // Dead-reckon an aircraft forward from its last real fix, then recompute range/bearing to the operator.
   const projectAircraft = (b, nowMs) => {
@@ -3420,6 +3422,8 @@ const [showComms, setShowComms] = useState(false);
   useEffect(() => {
     if (!posCoords) return;
     const fetchADSB = () => {
+      if (Date.now() - lastAdsbAt.current < 2500) return;   // floor the real-world rate regardless of effect churn
+      lastAdsbAt.current = Date.now();
       const seq = ++fetchSeq.current;
       fetch("https://api.airplanes.live/v2/point/" + posCoords.lat.toFixed(4) + "/" + posCoords.lon.toFixed(4) + "/3")
         .then(r => r.json()).then(data => {
@@ -3480,6 +3484,10 @@ const [showComms, setShowComms] = useState(false);
   // ── Launch-site ground elevation (Open-Meteo, free, CORS) — turns traffic MSL into AGL ──
   useEffect(() => {
     if (!posCoords) return;
+    const g = elevGateRef.current;
+    const moved = !g || Math.abs(posCoords.lat - g.lat) > 0.005 || Math.abs(posCoords.lon - g.lon) > 0.005;   // ~0.3nm
+    if (g && !moved && Date.now() - g.t < 300000) return;   // terrain doesn't change — 1 attempt / 5 min max
+    elevGateRef.current = { lat: posCoords.lat, lon: posCoords.lon, t: Date.now() };
     let alive = true;
     const eUrl = "https://api.open-meteo.com/v1/elevation?latitude=" + posCoords.lat.toFixed(4) + "&longitude=" + posCoords.lon.toFixed(4);
     const eProx = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(eUrl);
@@ -3498,12 +3506,17 @@ const [showComms, setShowComms] = useState(false);
   const [tfrStatus, setTfrStatus] = useState("checking");   // checking | ok | unavailable
   const TFR_SCAN_NM = 15;
   const tfrSeq = useRef(0);
+  const tfrGate = useRef(null);   // last run {lat,lon,t} — GPS movement must not multiply worker/FAA traffic
   useEffect(() => {
     if (!posCoords) return;
     const prox = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
     const pc = (s) => { const m = String(s).trim().match(/^([\d.]+)\s*([NSEW])$/i); return m ? (/[SW]/i.test(m[2]) ? -parseFloat(m[1]) : parseFloat(m[1])) : null; };
     const seq = ++tfrSeq.current;
     const run = async () => {
+      const g = tfrGate.current;
+      const moved = !g || Math.abs(posCoords.lat - g.lat) > 0.02 || Math.abs(posCoords.lon - g.lon) > 0.02;   // ~1.2nm
+      if (g && !moved && Date.now() - g.t < 120000) return;
+      tfrGate.current = { lat: posCoords.lat, lon: posCoords.lon, t: Date.now() };
       try {
         const fetchT = (u, ms) => { const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms); return fetch(u, { signal: ac.signal }).finally(() => clearTimeout(t)); };
         // List — tfr3 JSON API (the old tfr2/list.html now redirects to a JS shell with no data in it)
