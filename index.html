@@ -3273,7 +3273,7 @@ const [showComms, setShowComms] = useState(false);
       // ── Airspace query stack ─────────────────────────────────────────────
       setLaancStatus("loading");
       const geoParam = "geometry=" + lon + "%2C" + lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&f=json";
-      const BASE_SUA_FAA = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Special_Use_Airspace/FeatureServer/0/query?" + geoParam + "&outFields=NAME,TYPE_CODE,LOWER_DESC,LOWER_VAL,LOWER_UOM,LOWER_CODE,UPPER_DESC,UPPER_VAL,UPPER_UOM,TIMESOFUSE,CONT_AGENT";
+      const BASE_SUA_FAA = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Special_Use_Airspace/FeatureServer/0/query?" + geoParam + "&outFields=*";
       const BASE_SUA_TAMU = "https://gis.nri.tamu.edu/arcgis/rest/services/SUA_MTR/SUA/MapServer/0/query?" + geoParam + "&outFields=NAME,TYPE,SUAS_IDENT,LOWER_ALT,UPPER_ALT,EFF_TIMES,CON_AGCY";
       // SUA provenance: FAA AIS (authoritative, 28-day NASR cycle) primary; TAMU NASR mirror only if FAA is unreachable
       const fetchSUA = async () => {
@@ -3289,7 +3289,13 @@ const [showComms, setShowComms] = useState(false);
       const safeFetch = url => fetch(url).then(r => r.json()).then(d => (d && Array.isArray(d.features)) ? d : ({ features: [], __failed: true })).catch(() => ({ features: [], __failed: true }));
       Promise.all([safeFetch(BASE_LAANC), fetchSUA(), safeFetch(BASE_NSR), safeFetch(BASE_CLASS)])
         .then(([laanc, sua, nsr, cls]) => {
-          const failedCount = [laanc, sua, nsr, cls].filter(x => x.__failed).length;
+          const failedNames = [];
+          if (laanc.__failed) failedNames.push("LAANC");
+          if (sua.__failed) failedNames.push("SUA");
+          if (nsr.__failed) failedNames.push("SECURITY");
+          if (cls.__failed) failedNames.push("CLASS");
+          const failedCount = failedNames.length;
+          const laancDown = !!laanc.__failed;
           // A regulatory check that got no data must FAIL LOUD — never render as clear.
           if (failedCount === 4) { setLaancData(null); setLaancStatus("incomplete"); return; }
 
@@ -3349,7 +3355,7 @@ const [showComms, setShowComms] = useState(false);
               agency: f.CON_AGCY || null,
               suaType,
               suaLabel: typeMap[suaType] || "SPECIAL USE",
-              partial: failedCount
+              partial: failedCount, partialNames: failedNames, laancDown: laancDown
             });
             setLaancStatus("loaded");
           };
@@ -3364,7 +3370,7 @@ const [showComms, setShowComms] = useState(false);
               auth: "PROHIBITED",
               lower: f.LOWER_ALT || "SFC", upper: f.UPPER_ALT || "400 AGL",
               times: "24/7", agency: "FAA/DOD", suaType: "P",
-              partial: failedCount
+              partial: failedCount, partialNames: failedNames, laancDown: laancDown
             });
             setLaancStatus("loaded");
             return;
@@ -3389,7 +3395,7 @@ const [showComms, setShowComms] = useState(false);
               auth: g0.auth,
               lower: null, upper: null, times: null, agency: null, suaType: null,
               suaNote: advNote,
-              partial: failedCount
+              partial: failedCount, partialNames: failedNames, laancDown: laancDown
             });
             setLaancStatus("loaded");
             return;
@@ -3416,7 +3422,7 @@ const [showComms, setShowComms] = useState(false);
                 lower: null, upper: null, times: null, agency: null, suaType: null,
                 derivedClass,
                 eClear: derivedClass === "E",
-                partial: failedCount
+                partial: failedCount, partialNames: failedNames, laancDown: laancDown
               });
               setLaancStatus("loaded");
               return;
@@ -3435,7 +3441,7 @@ const [showComms, setShowComms] = useState(false);
               lower: null, upper: null, times: null, agency: null, suaType: null,
               derivedClass: nearestCheck.cls,
               eClear: false,
-              partial: failedCount
+              partial: failedCount, partialNames: failedNames, laancDown: laancDown
             });
             setLaancStatus("loaded");
             return;
@@ -3636,7 +3642,7 @@ const [showComms, setShowComms] = useState(false);
         // List — tfr3 JSON API (the old tfr2/list.html now redirects to a JS shell with no data in it)
         let found = [];
         try {
-          const list = await fetchT(prox("https://tfr.faa.gov/tfrapi/exportTfrList?_=" + Date.now()), 12000).then(r => { if (!r.ok) throw 0; return r.json(); });
+          const list = await fetchT(prox("https://tfr.faa.gov/tfrapi/exportTfrList"), 12000).then(r => { if (!r.ok) throw 0; return r.json(); });
           const seen = {};
           (Array.isArray(list) ? list : []).forEach(row => {
             if (!row || row.state !== "TX" || !row.notam_id) return;
@@ -3705,10 +3711,10 @@ const [showComms, setShowComms] = useState(false);
         const settled = await Promise.all(found.slice(0, 8).map(f => detail(f).catch(() => undefined)));
         const out = settled.filter(r => r);   // undefined = fetch failed · null = parsed but expired/out-of-range
         if (seq !== tfrSeq.current) return;
-        if (found.length > 0 && parsedCount === 0) { setTfrStatus("unavailable"); return; }   // TFRs exist but shapes unreachable — never fake a clear
+        if (found.length > 0 && parsedCount === 0) { setTfrStatus("shapes-unreachable:" + found.length); return; }   // TFRs exist but shapes unreachable — never fake a clear
         out.sort((a, b) => (a.dist - a.radNm) - (b.dist - b.radNm));
         setTfrs(out); setTfrStatus("ok");
-      } catch (e) { if (seq === tfrSeq.current) setTfrStatus("unavailable"); }
+      } catch (e) { if (seq === tfrSeq.current) setTfrStatus("list-unreachable"); }
     };
     run();
     const iv = setInterval(run, 600000);   // 10 min
@@ -3986,7 +3992,10 @@ const [showComms, setShowComms] = useState(false);
         tfrs.some(t => t.inside) ? ("TFR — INSIDE " + tfrs.filter(t => t.inside).map(t => t.notam).join(", "))
           : tfrs.length ? ("TFR — " + tfrs.length + " WITHIN " + TFR_SCAN_NM + "NM")
           : tfrStatus === "ok" ? ("TFR — NONE WITHIN " + TFR_SCAN_NM + "NM")
-          : tfrStatus === "checking" ? "TFR — CHECKING\u2026" : "TFR — CHECK UNAVAILABLE")),
+          : tfrStatus === "checking" ? "TFR — CHECKING\u2026"
+          : tfrStatus === "list-unreachable" ? "TFR — FAA LIST UNREACHABLE (WORKER/NETWORK)"
+          : String(tfrStatus).indexOf("shapes-unreachable") === 0 ? ("TFR — " + String(tfrStatus).split(":")[1] + " ACTIVE IN TX · SHAPE DATA UNREACHABLE")
+          : "TFR — CHECK UNAVAILABLE")),
 
     /* TFR detail cards — only when something is in the scan window */
     tfrs.length > 0 && /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
@@ -4379,7 +4388,7 @@ const [showComms, setShowComms] = useState(false);
                 return /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, fontWeight: 700, color: "#34C759", letterSpacing: 1 } }, "CLASS E \u2014 NO AUTH REQUIRED");
               }
               const clsLabel = dc === "B" ? "CLASS B" : dc === "C" ? "CLASS C" : dc === "D" ? "CLASS D" : "CONTROLLED";
-              return /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, fontWeight: 700, color: "#FF9F0A", letterSpacing: 1 } }, clsLabel + " \u2014 NO LAANC GRID");
+              return /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, fontWeight: 700, color: "#FF9F0A", letterSpacing: 1 } }, clsLabel + (dispData.laancDown ? " \u2014 LAANC UNKNOWN" : " \u2014 NO LAANC GRID"));
             }
           })()
         ),
@@ -4417,7 +4426,7 @@ const [showComms, setShowComms] = useState(false);
               if (dispData.suaType === "M") return "\u26A0  MOA \u2014 VERIFY ACTIVE STATUS BEFORE LAUNCH";
               return "\u26A0  SPECIAL USE AIRSPACE \u2014 VERIFY BEFORE LAUNCH";
             }
-            if (dispData.source === "class") { const dc = dispData.derivedClass || "?"; if (dispData.eClear) return "\u2713  CLASS E \u2014 NO AUTHORIZATION REQUIRED \u00B7 PART 107 TO 400 AGL"; return "\u26A0  CLASS " + dc + " \u2014 NO LAANC GRID \u00B7 APPLY VIA DRONEZONE"; }
+            if (dispData.source === "class") { const dc = dispData.derivedClass || "?"; if (dispData.laancDown) return "\u26A0  CLASS " + dc + " \u2014 LAANC SOURCE UNREACHABLE \u00B7 GRID STATUS UNKNOWN \u00B7 VERIFY VIA B4UFLY / ALOFT"; if (dispData.eClear) return "\u2713  CLASS E \u2014 NO AUTHORIZATION REQUIRED \u00B7 PART 107 TO 400 AGL"; return "\u26A0  CLASS " + dc + " \u2014 NO LAANC GRID \u00B7 APPLY VIA DRONEZONE"; }
             if (dispData.source === "laanc") {
               if (dispData.ceiling === 0) return "\u2715  DRONEZONE MANUAL AUTH REQUIRED \u2014 DO NOT LAUNCH";
               if (dispData.ceiling <= 100) return "\u26A0  CEILING RESTRICTED \u2014 VERIFY BEFORE LAUNCH";
@@ -4431,7 +4440,7 @@ const [showComms, setShowComms] = useState(false);
         ),
         /* Partial data — some airspace sources didn't answer; verdict may be incomplete */
         dispData.partial > 0 && /*#__PURE__*/React.createElement("div", { style: { marginTop: 6, padding: "6px 10px", background: "rgba(255,59,48,0.06)", border: "1px solid rgba(255,59,48,0.25)", borderRadius: 8, fontSize: 9, color: "#FF6B6B", letterSpacing: 1 } },
-          "\u26A0  " + dispData.partial + " OF 4 AIRSPACE SOURCES UNREACHABLE \u2014 VERIFY INDEPENDENTLY BEFORE LAUNCH"
+          "\u26A0  " + (dispData.partialNames && dispData.partialNames.length ? dispData.partialNames.join(" + ") + " SOURCE" + (dispData.partial > 1 ? "S" : "") : dispData.partial + " OF 4 SOURCES") + " UNREACHABLE \u2014 VERIFY INDEPENDENTLY BEFORE LAUNCH"
         )
       ) : /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#475569", letterSpacing: 1, padding: "8px 0 4px" } },
         dispStatus === "loading" ? "QUERYING FAA AIRSPACE DATA..."
