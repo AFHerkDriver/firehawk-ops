@@ -349,7 +349,7 @@ function render(weekDays,schedCache,crewData) {
   const schedDoc=schedCache[y+"_"+m];
   const days=schedDoc?.days||schedDoc?.daysJson&&JSON.parse(schedDoc.daysJson)||null;
   const a=getAssignment(days,d,y,m);
-  if(a&&!a.confirmed&&HISTORY[y+"_"+m+"_"+d]) a.confirmed=true;
+  // (legacy HISTORY override removed — the board must mirror the scheduler's Finalized/Draft state exactly)
   const du=a?decodeDay(a):null;
   const findCrew=(id)=>id==null?null:(crew.find(c=>c.id===id||c.id===parseInt(id))||null);
   const dayLabel=selectedOffset===0?"TODAY":"";
@@ -488,7 +488,7 @@ function render(weekDays,schedCache,crewData) {
       <div class="crew-header">
         <span class="crew-header-label">${crewDayLabel}'S CREW</span>
         <span class="status-badge" style="color:${a.confirmed?'#34C759':'#FFC107'};background:${a.confirmed?'rgba(52,199,89,0.1)':'rgba(255,193,7,0.1)'};border:1px solid ${a.confirmed?'rgba(52,199,89,0.3)':'rgba(255,193,7,0.3)'}">
-          ${a.confirmed?'✓ CONFIRMED':'PENDING'}
+          ${a.confirmed?'✓ FINALIZED':'DRAFT'}
         </span>
       </div>
       ${renderUnit('UAV121', uav121)}
