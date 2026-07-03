@@ -870,6 +870,75 @@
   // ════════════════════════════════════════════════════════════════════════════
   // APP  (shared state + tabs + month nav + dev controls)
   // ════════════════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════════════
+  // SOURCE DIAGNOSTICS (owner) — live-tests EVERY external dependency the program
+  // relies on, from this device. Fixed district reference point; no GPS required.
+  // ════════════════════════════════════════════════════════════════════════════
+  function SourceDiagnostics() {
+    const [rows, setRows] = useState(null);
+    const [lastRun, setLastRun] = useState(null);
+    const REF = { lat: 29.591, lon: -98.600 };   // district reference point
+    const run = async () => {
+      const out = []; setRows([{ name: "RUNNING\u2026", ok: null, note: "" }]);
+      const prox = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
+      const TT = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error("timeout")), ms))]);
+      const gp = "geometry=" + REF.lon + "%2C" + REF.lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&f=json&outFields=*";
+      const probe = async (name, url, kind) => {
+        const t0 = Date.now();
+        try {
+          const r = await TT(fetch(url), 8000);
+          const ms = Date.now() - t0;
+          let note = "HTTP " + r.status, ok = r.ok;
+          if (kind === "reach") { ok = true; note = "reachable \u00b7 HTTP " + r.status; }
+          else if (r.ok) {
+            const tx = await r.text();
+            if (kind === "arcgis") { try { const d = JSON.parse(tx); if (d.error) { ok = false; note = "ArcGIS: " + (d.error.message || ("code " + d.error.code)); } else if (Array.isArray(d.features)) note = "OK \u00b7 " + d.features.length + " feat"; else { ok = false; note = "no features[]"; } } catch (e2) { ok = false; note = "bad JSON"; } }
+            else if (kind === "tfrlist") { try { const d = JSON.parse(tx); const tx2 = (Array.isArray(d) ? d : []).filter(x => x && x.state === "TX"); note = "OK \u00b7 " + (Array.isArray(d) ? d.length : "?") + " rows \u00b7 " + tx2.length + " TX"; } catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 36); } }
+            else if (kind === "wfs") { try { const d = JSON.parse(tx); const fl = Array.isArray(d.features) ? d.features : []; const np = fl.filter(f2 => f2.geometry && /Polygon/.test(f2.geometry.type)).length; note = "OK \u00b7 " + fl.length + " feat \u00b7 " + np + " poly"; } catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 36); } }
+            else if (kind === "adsb") { try { const d = JSON.parse(tx); note = "OK \u00b7 " + ((d.ac || []).length) + " aircraft"; } catch (e2) { ok = false; note = "not JSON"; } }
+            else if (kind === "w3w") { try { const d = JSON.parse(tx); note = d.words ? ("OK \u00b7 ///" + d.words) : "no words \u00b7 key?"; ok = !!d.words; } catch (e2) { ok = false; note = "not JSON"; } }
+            else if (kind === "fs") { try { const d = JSON.parse(tx); note = d.fields ? "OK \u00b7 crew doc" : "OK \u00b7 json"; } catch (e2) { ok = false; note = "not JSON"; } }
+            else { try { JSON.parse(tx); note = "OK \u00b7 json"; } catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 36); } }
+          }
+          out.push({ name, ok, note: note + " \u00b7 " + ms + "ms" });
+        } catch (e) { out.push({ name, ok: false, note: e.message || "failed" }); }
+        setRows(out.slice());
+      };
+      await probe("FIRESTORE \u00b7 SCHEDULE DB", FS_BASE + "/" + DEV_COL + "/crew", "fs");
+      await probe("AUTH WORKER", AUTH + "/", "reach");
+      await probe("WX WORKER \u00b7 /BURNBAN", "https://firehawk-wx.usafsentinel-45e.workers.dev/burnban", "json");
+      await probe("WX WORKER \u00b7 /REDFLAG", "https://firehawk-wx.usafsentinel-45e.workers.dev/redflag", "json");
+      await probe("NWS ALERTS (VIA WORKER)", prox("https://api.weather.gov/alerts/active?zone=TXZ205,TXC029"), "json");
+      await probe("LAANC GRID \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + gp, "arcgis");
+      await probe("SUA \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Special_Use_Airspace/FeatureServer/0/query?" + gp, "arcgis");
+      await probe("SUA \u00b7 TAMU FALLBACK", "https://gis.nri.tamu.edu/arcgis/rest/services/SUA_MTR/SUA/MapServer/0/query?" + gp, "arcgis");
+      await probe("SECURITY \u00b7 DOD 99.7", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/DoD_Mar_13/FeatureServer/0/query?" + gp, "arcgis");
+      await probe("SECURITY \u00b7 PART-TIME", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Part_Time_National_Security_UAS_Flight_Restrictions/FeatureServer/0/query?" + gp, "arcgis");
+      await probe("CLASS AIRSPACE \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + gp, "arcgis");
+      await probe("TFR LIST (VIA WORKER)", prox("https://tfr.faa.gov/tfrapi/exportTfrList"), "tfrlist");
+      await probe("TFR SHAPES \u00b7 WFS", prox("https://tfr.faa.gov/geoserver/TFR/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=TFR%3Aboundary&outputFormat=application%2Fjson&maxFeatures=5&bbox=" + (REF.lon - 0.4) + "," + (REF.lat - 0.4) + "," + (REF.lon + 0.4) + "," + (REF.lat + 0.4) + ",EPSG:4326"), "wfs");
+      await probe("ADS-B \u00b7 AIRPLANES.LIVE", "https://api.airplanes.live/v2/point/" + REF.lat + "/" + REF.lon + "/3", "adsb");
+      await probe("OPEN-METEO \u00b7 FORECAST", "https://api.open-meteo.com/v1/forecast?latitude=" + REF.lat + "&longitude=" + REF.lon + "&current=temperature_2m", "json");
+      await probe("OPEN-METEO \u00b7 ELEVATION", "https://api.open-meteo.com/v1/elevation?latitude=" + REF.lat + "&longitude=" + REF.lon, "json");
+      await probe("WHAT3WORDS", "https://api.what3words.com/v3/convert-to-3wa?coordinates=" + REF.lat + "%2C" + REF.lon + "&key=J4FL5TE7", "w3w");
+      await probe("METAR (VIA WORKER)", prox("https://aviationweather.gov/api/data/metar?ids=KSSF&format=json&taf=false"), "json");
+      setLastRun(new Date());
+    };
+    const failCount = rows ? rows.filter(r => r.ok === false).length : 0;
+    return h("div", { style: { background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: 14, marginTop: 14 } },
+      h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 } },
+        h("div", null,
+          h("div", { style: { fontSize: 10, color: C.dim, letterSpacing: 1.5 } }, "EXTERNAL SOURCE DIAGNOSTICS"),
+          lastRun ? h("div", { style: { fontSize: 8, color: failCount ? C.red : C.green, letterSpacing: 1, marginTop: 3 } },
+            (failCount ? failCount + " FAILING" : "ALL SOURCES OK") + " \u00b7 " + lastRun.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })) : null),
+        h("button", { onClick: run, style: { padding: "6px 14px", borderRadius: 8, background: C.panel2, border: "1px solid " + C.border, color: C.text, fontSize: 9, letterSpacing: 1.5, fontFamily: "inherit", cursor: "pointer" } }, "RUN CHECK")),
+      rows ? h("div", null,
+        rows.map((r, i2) => h("div", { key: i2, style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 9, letterSpacing: 0.5, padding: "3.5px 0", borderBottom: i2 < rows.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" } },
+          h("span", { style: { color: r.ok === false ? C.red : r.ok ? C.green : C.dim, flexShrink: 0 } }, r.name),
+          h("span", { style: { color: C.dim, textAlign: "right", wordBreak: "break-all" } }, r.note))))
+        : h("div", { style: { fontSize: 9, color: C.dim, fontStyle: "italic" } }, "Tap Run Check to live-test every external data source the program depends on."));
+  }
+
   function AccessLogPanel() {
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -3641,6 +3710,7 @@ const [showComms, setShowComms] = useState(false);
   const tfrSeq = useRef(0);
   const tfrGate = useRef(null);   // last run {lat,lon,t} — GPS movement must not multiply worker/FAA traffic
   const tfrTypeName = useRef(null);   // WFS layer name, self-discovered from GetCapabilities once per session
+  const tfrCandidates = useRef(null); // ranked WFS layer candidates from capabilities
   useEffect(() => {
     if (!posCoords) return;
     const prox = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
@@ -3682,18 +3752,28 @@ const [showComms, setShowComms] = useState(false);
         const WFS_BASE = "https://tfr.faa.gov/geoserver/TFR/ows";
         let wfsOk = false; let feats = [];
         try {
-          if (!tfrTypeName.current) {
+          if (!tfrCandidates.current) {
             const cap = await fetchT(prox(WFS_BASE + "?service=WFS&version=1.0.0&request=GetCapabilities"), 10000).then(r => { if (!r.ok) throw 0; return r.text(); });
             const names = [...cap.matchAll(/<Name>([^<]+)<\/Name>/g)].map(m => m[1]).filter(n2 => n2.indexOf(":") !== -1);
-            tfrTypeName.current = names.find(n2 => /tfr/i.test(n2)) || names[0] || null;
+            // Rank: TFR boundaries first; reference layers (airport/navaid/etc) last — the workspace
+            // prefix "TFR:" is on EVERY layer, so matching /tfr/i alone picks the wrong one.
+            const rank = (n2) => /bound/i.test(n2) ? 0 : /notam|(:)tfr$/i.test(n2) ? 1 : /airport|navaid|runway|fix|airspace/i.test(n2) ? 9 : 5;
+            tfrCandidates.current = names.slice().sort((a2, b2) => rank(a2) - rank(b2));
           }
-          if (tfrTypeName.current) {
-            const dd = 0.4;   // ±24 NM box comfortably covers the 15 NM scan
-            const gf = WFS_BASE + "?service=WFS&version=1.0.0&request=GetFeature&typeName=" + encodeURIComponent(tfrTypeName.current)
-              + "&outputFormat=application%2Fjson&maxFeatures=60&bbox=" + (posCoords.lon - dd) + "," + (posCoords.lat - dd) + "," + (posCoords.lon + dd) + "," + (posCoords.lat + dd) + ",EPSG:4326";
-            const gj = await fetchT(prox(gf), 12000).then(r => { if (!r.ok) throw 0; return r.json(); });
-            feats = Array.isArray(gj.features) ? gj.features : [];
-            wfsOk = true;
+          const dd = 0.4;   // ±24 NM box comfortably covers the 15 NM scan
+          const cands = tfrTypeName.current ? [tfrTypeName.current] : (tfrCandidates.current || []);
+          for (const tn of cands.slice(0, 4)) {
+            try {
+              const gf = WFS_BASE + "?service=WFS&version=1.0.0&request=GetFeature&typeName=" + encodeURIComponent(tn)
+                + "&outputFormat=application%2Fjson&maxFeatures=60&bbox=" + (posCoords.lon - dd) + "," + (posCoords.lat - dd) + "," + (posCoords.lon + dd) + "," + (posCoords.lat + dd) + ",EPSG:4326";
+              const gj = await fetchT(prox(gf), 12000).then(r => { if (!r.ok) throw 0; return r.json(); });
+              const fl = Array.isArray(gj.features) ? gj.features : [];
+              const hasPoly = fl.some(f2 => f2.geometry && (f2.geometry.type === "Polygon" || f2.geometry.type === "MultiPolygon"));
+              // Accept a layer only if it proves polygonal — or is empty but NAMED like the shapes layer
+              if (hasPoly || (fl.length === 0 && /bound|notam|(:)tfr$/i.test(tn))) {
+                tfrTypeName.current = tn; feats = fl; wfsOk = true; break;
+              }
+            } catch (e4) {}
           }
         } catch (eW) {}
         const inPoly = (pt, pts) => { let inn = false; for (let i2 = 0, j2 = pts.length - 1; i2 < pts.length; j2 = i2++) { const yi = pts[i2][0], xi = pts[i2][1], yj = pts[j2][0], xj = pts[j2][1]; if (((yi > pt[0]) !== (yj > pt[0])) && (pt[1] < (xj - xi) * (pt[0] - yi) / (yj - yi) + xi)) inn = !inn; } return inn; };
@@ -3775,83 +3855,7 @@ const [showComms, setShowComms] = useState(false);
     suaNote: null
   } : laancData;
 
-  // ── Source diagnostics — one tap live-tests every airspace endpoint from THIS device ──
-  const [diagRows, setDiagRows] = useState(null);
-  const runDiag = async () => {
-    const dLat = posCoords ? posCoords.lat : 29.591, dLon = posCoords ? posCoords.lon : -98.6;
-    const gp = "geometry=" + dLon + "%2C" + dLat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&f=json&outFields=*";
-    const prox = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
-    const TT = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error("timeout")), ms))]);
-    const rows = [];
-    setDiagRows([{ name: "RUNNING\u2026", ok: null, note: "" }]);
-    let tfrFirstId = null;
-    const probe = async (name, url, kind) => {
-      const t0 = Date.now();
-      try {
-        const r = await TT(fetch(url), 8000);
-        const ms = Date.now() - t0;
-        let note = "HTTP " + r.status, ok = r.ok;
-        if (r.ok) {
-          const tx = await r.text();
-          if (kind === "arcgis") {
-            try { const d = JSON.parse(tx); if (d.error) { ok = false; note = "ArcGIS: " + (d.error.message || ("code " + d.error.code)); } else if (Array.isArray(d.features)) note = "OK \u00b7 " + d.features.length + " feat"; else { ok = false; note = "no features[]"; } }
-            catch (e2) { ok = false; note = "bad JSON"; }
-          } else if (kind === "tfrlist") {
-            try { const d = JSON.parse(tx); const tx2 = (Array.isArray(d) ? d : []).filter(x => x && x.state === "TX"); note = "OK \u00b7 " + (Array.isArray(d) ? d.length : "?") + " rows \u00b7 " + tx2.length + " TX"; if (tx2[0] && tx2[0].notam_id) tfrFirstId = String(tx2[0].notam_id).replace("/", "_"); }
-            catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 40); }
-          } else if (kind === "json") {
-            try { JSON.parse(tx); note = "OK \u00b7 json"; } catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 40); }
-          } else if (kind === "cap") {
-            const tn = [...tx.matchAll(/<Name>([^<]+)<\/Name>/g)].map(m2 => m2[1]).filter(n2 => n2.indexOf(":") !== -1);
-            ok = tx.indexOf("Capabilities") !== -1 && tn.length > 0;
-            note = ok ? ("OK \u00b7 layers: " + tn.slice(0, 3).join(", ")) : ("no layers \u00b7 " + tx.slice(0, 40));
-          } else if (kind === "sniff") {
-            const hasGeo = tx.indexOf("geoLat") !== -1 || tx.indexOf("coordinates") !== -1 || tx.indexOf("latitude") !== -1 || tx.indexOf("Polygon") !== -1;
-            note = (hasGeo ? "GEO DATA \u2713 " : "no geo ") + "\u00b7 " + tx.slice(0, 50).replace(/\s+/g, " ");
-            ok = hasGeo;
-          } else if (kind === "xml") {
-            if (tx.indexOf("geoLat") !== -1) note = "OK \u00b7 shape data"; else { ok = false; note = "no geo tags: " + tx.slice(0, 40); }
-          }
-        }
-        rows.push({ name, ok, note: note + " \u00b7 " + ms + "ms" });
-      } catch (e) { rows.push({ name, ok: false, note: e.message || "failed" }); }
-      setDiagRows(rows.slice());
-    };
-    await probe("LAANC GRID \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + gp, "arcgis");
-    await probe("SUA \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Special_Use_Airspace/FeatureServer/0/query?" + gp, "arcgis");
-    await probe("SUA \u00b7 TAMU FALLBACK", "https://gis.nri.tamu.edu/arcgis/rest/services/SUA_MTR/SUA/MapServer/0/query?" + gp, "arcgis");
-    await probe("SECURITY \u00b7 DOD 99.7", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/DoD_Mar_13/FeatureServer/0/query?" + gp, "arcgis");
-    await probe("SECURITY \u00b7 PART-TIME", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Part_Time_National_Security_UAS_Flight_Restrictions/FeatureServer/0/query?" + gp, "arcgis");
-    await probe("CLASS \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + gp, "arcgis");
-    await probe("WORKER \u00b7 /BURNBAN", "https://firehawk-wx.usafsentinel-45e.workers.dev/burnban", "json");
-    await probe("WORKER \u00b7 TFR LIST PROXY", prox("https://tfr.faa.gov/tfrapi/exportTfrList"), "tfrlist");
-    // ── TFR endpoint discovery: read the FAA site's own JS bundles and list the API paths they call ──
-    try {
-      const shell = await TT(fetch(prox("https://tfr.faa.gov/tfr3/")), 8000).then(r => r.text());
-      const srcs = [...shell.matchAll(/src="?([^"\s>]+\.js[^"\s>]*)"?/g)].map(m => m[1])
-        .filter(u => u.indexOf("http") !== 0 || u.indexOf("tfr.faa.gov") !== -1);
-      rows.push({ name: "TFR3 JS BUNDLES", ok: srcs.length > 0, note: (srcs.slice(0, 3).join(" \u00b7 ") || "none found").slice(0, 90) });
-      setDiagRows(rows.slice());
-      const eps = new Set();
-      for (const sr of srcs.slice(0, 4)) {
-        const u = sr.indexOf("http") === 0 ? sr : ("https://tfr.faa.gov" + (sr.charAt(0) === "/" ? "" : "/tfr3/") + sr.replace(/^\.\//, ""));
-        try {
-          const js = await TT(fetch(prox(u)), 10000).then(r => r.text());
-          [...js.matchAll(/tfrapi\/([A-Za-z_]+)/g)].forEach(m => eps.add("tfrapi/" + m[1]));
-          [...js.matchAll(/save_pages\/[^"'\s\\]+/g)].forEach(m => eps.add(m[0].slice(0, 40)));
-          [...js.matchAll(/geoserver[^"'\s\\]*/g)].forEach(m => eps.add(m[0].slice(0, 40)));
-        } catch (e2) {}
-      }
-      rows.push({ name: "TFR3 API CALLS FOUND", ok: eps.size > 0, note: ([...eps].join(", ") || "none extracted").slice(0, 160) });
-      setDiagRows(rows.slice());
-    } catch (e) {
-      rows.push({ name: "TFR3 DISCOVERY", ok: false, note: e.message || "failed" });
-      setDiagRows(rows.slice());
-    }
-    await probe("TFR WFS \u00b7 CAPABILITIES", prox("https://tfr.faa.gov/geoserver/TFR/ows?service=WFS&version=1.0.0&request=GetCapabilities"), "cap");
-    await probe("TFR WFS \u00b7 GETFEATURE", prox("https://tfr.faa.gov/geoserver/TFR/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=" + encodeURIComponent(tfrTypeName.current || "TFR:tfr") + "&outputFormat=application%2Fjson&maxFeatures=2"), "sniff");
-    await probe("ELEVATION \u00b7 OPEN-METEO", "https://api.open-meteo.com/v1/elevation?latitude=" + dLat.toFixed(3) + "&longitude=" + dLon.toFixed(3), "json");
-  };
+
 
   // ── Compass heading ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -4089,15 +4093,7 @@ const [showComms, setShowComms] = useState(false);
           : String(tfrStatus).indexOf("shapes-unreachable") === 0 ? ("TFR — " + String(tfrStatus).split(":")[1] + " ACTIVE IN TX · SHAPE DATA UNREACHABLE")
           : "TFR — CHECK UNAVAILABLE")),
 
-    /* Source diagnostics — turns any crew phone into a live endpoint probe */
-    /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", marginBottom: 8 } },
-      /*#__PURE__*/React.createElement("button", { onClick: runDiag, style: { padding: "5px 12px", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "#8B949E", fontSize: 8, letterSpacing: 1.5, fontFamily: "inherit", cursor: "pointer" } }, "RUN SOURCE DIAGNOSTICS")),
-    diagRows && /*#__PURE__*/React.createElement("div", { style: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "8px 10px", marginBottom: 8 } },
-      diagRows.map(function(r, i) {
-        return /*#__PURE__*/React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 8.5, letterSpacing: 0.5, padding: "3px 0" } },
-          /*#__PURE__*/React.createElement("span", { style: { color: r.ok === false ? "#FF6B6B" : r.ok ? "#34C759" : "#8B949E", flexShrink: 0 } }, r.name),
-          /*#__PURE__*/React.createElement("span", { style: { color: "#8B949E", textAlign: "right", wordBreak: "break-all" } }, r.note));
-      })),
+
 
     /* TFR detail cards — only when something is in the scan window */
     tfrs.length > 0 && /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
@@ -6236,7 +6232,8 @@ function SARModal({
             h("span", { style:{ fontSize:9, fontWeight:700, color:hue, background:hue+"1F", border:"1px solid "+hue+"55", borderRadius:5, padding:"2px 8px" } }, label));
         })),
 
-      isOwner ? h(AccessLogPanel, null) : null);
+      isOwner ? h(AccessLogPanel, null) : null,
+      isOwner ? h(SourceDiagnostics, null) : null);
   }
 
   const LINK_ICONS = {
