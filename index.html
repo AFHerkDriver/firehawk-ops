@@ -3820,12 +3820,28 @@ const [showComms, setShowComms] = useState(false);
     await probe("CLASS \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + gp, "arcgis");
     await probe("WORKER \u00b7 /BURNBAN", "https://firehawk-wx.usafsentinel-45e.workers.dev/burnban", "json");
     await probe("WORKER \u00b7 TFR LIST PROXY", prox("https://tfr.faa.gov/tfrapi/exportTfrList"), "tfrlist");
-    if (tfrFirstId) {
-      const slashId = tfrFirstId.replace("_", "/");
-      await probe("TFR A \u00b7 save_pages/detail", prox("https://tfr.faa.gov/save_pages/detail_" + tfrFirstId + ".xml"), "sniff");
-      await probe("TFR B \u00b7 save_pages/plain", prox("https://tfr.faa.gov/save_pages/" + tfrFirstId + ".xml"), "sniff");
-      await probe("TFR C \u00b7 tfrapi/getTfrDetail", prox("https://tfr.faa.gov/tfrapi/getTfrDetail?notamNumber=" + encodeURIComponent(slashId)), "sniff");
-      await probe("TFR D \u00b7 tfrapi/exportTfrDetail", prox("https://tfr.faa.gov/tfrapi/exportTfrDetail?notam_id=" + encodeURIComponent(slashId)), "sniff");
+    // ── TFR endpoint discovery: read the FAA site's own JS bundles and list the API paths they call ──
+    try {
+      const shell = await TT(fetch(prox("https://tfr.faa.gov/tfr3/")), 8000).then(r => r.text());
+      const srcs = [...shell.matchAll(/src="?([^"\s>]+\.js[^"\s>]*)"?/g)].map(m => m[1])
+        .filter(u => u.indexOf("http") !== 0 || u.indexOf("tfr.faa.gov") !== -1);
+      rows.push({ name: "TFR3 JS BUNDLES", ok: srcs.length > 0, note: (srcs.slice(0, 3).join(" \u00b7 ") || "none found").slice(0, 90) });
+      setDiagRows(rows.slice());
+      const eps = new Set();
+      for (const sr of srcs.slice(0, 4)) {
+        const u = sr.indexOf("http") === 0 ? sr : ("https://tfr.faa.gov" + (sr.charAt(0) === "/" ? "" : "/tfr3/") + sr.replace(/^\.\//, ""));
+        try {
+          const js = await TT(fetch(prox(u)), 10000).then(r => r.text());
+          [...js.matchAll(/tfrapi\/([A-Za-z_]+)/g)].forEach(m => eps.add("tfrapi/" + m[1]));
+          [...js.matchAll(/save_pages\/[^"'\s\\]+/g)].forEach(m => eps.add(m[0].slice(0, 40)));
+          [...js.matchAll(/geoserver[^"'\s\\]*/g)].forEach(m => eps.add(m[0].slice(0, 40)));
+        } catch (e2) {}
+      }
+      rows.push({ name: "TFR3 API CALLS FOUND", ok: eps.size > 0, note: ([...eps].join(", ") || "none extracted").slice(0, 160) });
+      setDiagRows(rows.slice());
+    } catch (e) {
+      rows.push({ name: "TFR3 DISCOVERY", ok: false, note: e.message || "failed" });
+      setDiagRows(rows.slice());
     }
     await probe("ELEVATION \u00b7 OPEN-METEO", "https://api.open-meteo.com/v1/elevation?latitude=" + dLat.toFixed(3) + "&longitude=" + dLon.toFixed(3), "json");
   };
