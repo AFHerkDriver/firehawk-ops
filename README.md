@@ -2,7 +2,7 @@
 
 Operational web tools for the Fire Hawk UAS Program, Bexar County ESD No. 2 (BC2FD), covering Districts 2 & 6. Two single-file web apps — a crew operations app and a read-only command status board — backed by Firebase Firestore and a Cloudflare Worker for live weather and alerts. No build step; deployed straight to GitHub Pages.
 
-**Live version:** v2.3 (July 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
+**Live version:** v2.5 (July 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
 
 ## Live URLs
 
@@ -78,7 +78,8 @@ The footer and the in-app **What's New** panel show the **user-facing** version.
 - **v2.0** — **AGL traffic altitudes**: ground elevation at the launch site converts each contact's MSL altitude to height above the operator; filters and alerts now key off AGL, with MSL shown secondary.
 - **v2.1** — **Part 107 currency advisory** on the Dashboard (amber inside 90 days, red inside 30, per-pilot days remaining), correctly sized desktop radar, and steadier traffic on a jittery GPS signal.
 - **v2.2** — **live TFR awareness**: Texas TFR scan every 10 minutes with an honest status line (clear / nearby / inside / unavailable), detail cards, and scope markers.
-- **v2.3** — **TFR boundary rendering**: the actual published polygon or circle paints on the scope when it reaches the 3NM window, and inside/outside is determined against the true boundary (current release).
+- **v2.3** — **TFR boundary rendering**: the actual published polygon or circle paints on the scope when it reaches the 3NM window, and inside/outside is determined against the true boundary.
+- **v2.5** — **airspace overhaul**: the status card always shows the most restrictive condition — an active TFR at your position (red, NOTAM + end time) outranks everything including a LAANC grid, as does a National Security no-fly or surface Restricted area; high-floor special-use airspace no longer raises false alarms and flight-level floors read correctly; overlapping grids show the controlling (lowest) ceiling; data-source failures render CHECK INCOMPLETE instead of a false all-clear; special-use data comes directly from the FAA's published layer with an on-card provenance chip. An optional LAANC toggle on the traffic scope paints the FAA facility-map grid cells with their ceilings around your position. Decision logic is documented in `AIRSPACE_COMPLIANCE.md` (current release).
 
 ## Contact
 
