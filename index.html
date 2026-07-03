@@ -3285,13 +3285,22 @@ const [showComms, setShowComms] = useState(false);
         return t;
       };
       const BASE_LAANC = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + geoParam + "&outFields=*";
-      const BASE_NSR = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/NationalSecurityUAS_FlightRestrictions/FeatureServer/0/query?" + geoParam + "&outFields=NAME,TYPE,LOWER_ALT,UPPER_ALT";
+      // National Security = full-time DoD facility restrictions (\u00a799.7, layer DoD_Mar_13)
+      // + part-time NSRs. The old service name (NationalSecurityUAS_FlightRestrictions) does not
+      // exist on FAA's server \u2014 confirmed via live diagnostics returning "ArcGIS: Invalid URL".
+      const BASE_NSR_DOD = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/DoD_Mar_13/FeatureServer/0/query?" + geoParam + "&outFields=*";
+      const BASE_NSR_PT  = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Part_Time_National_Security_UAS_Flight_Restrictions/FeatureServer/0/query?" + geoParam + "&outFields=*";
+      const fetchNSR = async () => {
+        const a = await safeFetch(BASE_NSR_DOD);
+        const b = await safeFetch(BASE_NSR_PT);
+        return { features: (a.features || []).concat(b.features || []), __failed: !!(a.__failed || b.__failed) };
+      };
       const BASE_CLASS = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + geoParam + "&outFields=CLASS,NAME";
       const AGP = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
       const okFeatures = r => r.json().then(d => (d && Array.isArray(d.features)) ? d : Promise.reject(0));
       const safeFetch = url => fetch(url).then(okFeatures)
         .catch(() => fetch(AGP(url)).then(okFeatures).catch(() => ({ features: [], __failed: true })));
-      Promise.all([safeFetch(BASE_LAANC), fetchSUA(), safeFetch(BASE_NSR), safeFetch(BASE_CLASS)])
+      Promise.all([safeFetch(BASE_LAANC), fetchSUA(), fetchNSR(), safeFetch(BASE_CLASS)])
         .then(([laanc, sua, nsr, cls]) => {
           const failedNames = [];
           if (laanc.__failed) failedNames.push("LAANC");
@@ -3369,7 +3378,7 @@ const [showComms, setShowComms] = useState(false);
             const f = nsr.features[0].attributes;
             setLaancData({
               source: "nsr",
-              facility: f.NAME || "SECURITY RESTRICTION",
+              facility: f.NAME || f.Base || f.BASE || f.FACILITY || f.Facility || "SECURITY RESTRICTION",
               ceiling: 0,
               auth: "PROHIBITED",
               lower: f.LOWER_ALT || "SFC", upper: f.UPPER_ALT || "400 AGL",
@@ -3791,6 +3800,10 @@ const [showComms, setShowComms] = useState(false);
             catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 40); }
           } else if (kind === "json") {
             try { JSON.parse(tx); note = "OK \u00b7 json"; } catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 40); }
+          } else if (kind === "sniff") {
+            const hasGeo = tx.indexOf("geoLat") !== -1 || tx.indexOf("coordinates") !== -1 || tx.indexOf("latitude") !== -1 || tx.indexOf("Polygon") !== -1;
+            note = (hasGeo ? "GEO DATA \u2713 " : "no geo ") + "\u00b7 " + tx.slice(0, 50).replace(/\s+/g, " ");
+            ok = hasGeo;
           } else if (kind === "xml") {
             if (tx.indexOf("geoLat") !== -1) note = "OK \u00b7 shape data"; else { ok = false; note = "no geo tags: " + tx.slice(0, 40); }
           }
@@ -3802,11 +3815,18 @@ const [showComms, setShowComms] = useState(false);
     await probe("LAANC GRID \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + gp, "arcgis");
     await probe("SUA \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Special_Use_Airspace/FeatureServer/0/query?" + gp, "arcgis");
     await probe("SUA \u00b7 TAMU FALLBACK", "https://gis.nri.tamu.edu/arcgis/rest/services/SUA_MTR/SUA/MapServer/0/query?" + gp, "arcgis");
-    await probe("SECURITY \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/NationalSecurityUAS_FlightRestrictions/FeatureServer/0/query?" + gp, "arcgis");
+    await probe("SECURITY \u00b7 DOD 99.7", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/DoD_Mar_13/FeatureServer/0/query?" + gp, "arcgis");
+    await probe("SECURITY \u00b7 PART-TIME", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Part_Time_National_Security_UAS_Flight_Restrictions/FeatureServer/0/query?" + gp, "arcgis");
     await probe("CLASS \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0/query?" + gp, "arcgis");
     await probe("WORKER \u00b7 /BURNBAN", "https://firehawk-wx.usafsentinel-45e.workers.dev/burnban", "json");
     await probe("WORKER \u00b7 TFR LIST PROXY", prox("https://tfr.faa.gov/tfrapi/exportTfrList"), "tfrlist");
-    if (tfrFirstId) await probe("TFR SHAPE XML \u00b7 " + tfrFirstId, prox("https://tfr.faa.gov/save_pages/detail_" + tfrFirstId + ".xml"), "xml");
+    if (tfrFirstId) {
+      const slashId = tfrFirstId.replace("_", "/");
+      await probe("TFR A \u00b7 save_pages/detail", prox("https://tfr.faa.gov/save_pages/detail_" + tfrFirstId + ".xml"), "sniff");
+      await probe("TFR B \u00b7 save_pages/plain", prox("https://tfr.faa.gov/save_pages/" + tfrFirstId + ".xml"), "sniff");
+      await probe("TFR C \u00b7 tfrapi/getTfrDetail", prox("https://tfr.faa.gov/tfrapi/getTfrDetail?notamNumber=" + encodeURIComponent(slashId)), "sniff");
+      await probe("TFR D \u00b7 tfrapi/exportTfrDetail", prox("https://tfr.faa.gov/tfrapi/exportTfrDetail?notam_id=" + encodeURIComponent(slashId)), "sniff");
+    }
     await probe("ELEVATION \u00b7 OPEN-METEO", "https://api.open-meteo.com/v1/elevation?latitude=" + dLat.toFixed(3) + "&longitude=" + dLon.toFixed(3), "json");
   };
 
