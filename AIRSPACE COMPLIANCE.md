@@ -19,8 +19,8 @@ The Airspace status is a **preflight situational-awareness aid. It is not an air
 
 | # | Layer | Source & host | Authority | Update cadence |
 |---|-------|--------------|-----------|----------------|
-| 0 | Temporary Flight Restrictions | tfr.faa.gov — JSON list API (`tfrapi/exportTfrList`) + per-NOTAM shape XML (`save_pages/detail_*.xml`), fetched via the program's Cloudflare Worker proxy | FAA (authoritative, live NOTAM system) | App refresh every 10 min and on GPS lock (rate-gated) |
-| 1 | National Security UAS Flight Restrictions | FAA AIS ArcGIS (`services6.arcgis.com/ssFJjBXIUyZDrSYZ`), `NationalSecurityUAS_FlightRestrictions` | FAA (authoritative) | FAA-maintained; queried on 0.1 NM movement |
+| 0 | Temporary Flight Restrictions | tfr.faa.gov via the program's Cloudflare Worker proxy: JSON list (`tfrapi/exportTfrList`) for inventory/labels + **GeoServer WFS** (`geoserver/TFR/ows`, GetFeature GeoJSON, bounding-box filtered) for geometry — the same endpoint the FAA's own tfr3 map uses, identified by reading the FAA site's JS bundles via in-app diagnostics (Jul 2026) after legacy `save_pages` XMLs went 404. The WFS layer name is self-discovered from GetCapabilities each session, so an FAA layer rename degrades to an honest SHAPE DATA UNREACHABLE rather than silent failure. | FAA (authoritative, live NOTAM system) | App refresh every 10 min and on GPS lock (rate-gated) |
+| 1 | National Security UAS Flight Restrictions | FAA AIS ArcGIS: `DoD_Mar_13` (full-time §99.7 DoD facility restrictions) **+** `Part_Time_National_Security_UAS_Flight_Restrictions`, merged. (A previously referenced service name did not exist on FAA's server; discovered via in-app source diagnostics Jul 2026 and corrected.) | FAA (authoritative) | FAA-maintained; queried on 0.1 NM movement |
 | 2/4 | Special Use Airspace (P/R/W/A/MOA) | **Primary:** FAA AIS ArcGIS `Special_Use_Airspace` layer. **Automatic fallback:** Texas A&M NRI mirror of FAA NASR (`gis.nri.tamu.edu`), used only if the FAA layer is unreachable. The active source is displayed on the card as a `SRC ·` chip. | FAA NASR data, 28-day AIRAC cycle | Queried on 0.1 NM movement |
 | 3 | LAANC UAS Facility Map (grid ceilings) | FAA AIS ArcGIS, `FAA_UAS_FacilityMap_Data` | FAA (authoritative) | FAA 56-day publication cycle |
 | 5 | Class Airspace boundaries | FAA AIS ArcGIS, `Class_Airspace` | FAA (authoritative) | FAA NASR cycle |
@@ -49,7 +49,8 @@ All spatial layers are point-intersect queries at the operator's GPS position. T
 
 - A source that fails (network error, or an ArcGIS error payload) is counted as **failed**, never as "no restrictions."
 - If **all** sources fail, the card renders red: **CHECK INCOMPLETE — verify via B4UFLY / FAA UAS Facility Map before launch.**
-- If **some** sources fail, whatever verdict the surviving sources produce is displayed **with a warning line** stating how many sources were unreachable; if the survivors found nothing, the card still renders CHECK INCOMPLETE rather than green.
+- If **some** sources fail, the verdict from surviving sources is displayed **with a warning line that names the failed source(s)** (e.g., "LAANC SOURCE UNREACHABLE"). If the LAANC source itself is down, the card will not assert "NO LAANC GRID" — it renders **LAANC UNKNOWN — verify via B4UFLY/Aloft**, because absence of grid data is not evidence of absence of a grid. If the survivors found nothing, the card still renders CHECK INCOMPLETE rather than green.
+- The TFR status distinguishes failure modes: **FAA LIST UNREACHABLE** (worker/network path down) vs **N ACTIVE IN TX · SHAPE DATA UNREACHABLE** (list retrieved, geometry files not).
 - The TFR status line has the same property: it displays CLEAR, *n* WITHIN 15 NM, INSIDE, or **CHECK UNAVAILABLE** — it never renders clear on missing data. If the TFR list is retrieved but no shape files can be read, the status is UNAVAILABLE.
 
 ## 6. Known limitations (for the SOP)
@@ -58,7 +59,8 @@ All spatial layers are point-intersect queries at the operator's GPS position. T
 2. **Data currency.** SUA, Class, and LAANC layers follow FAA's 28/56-day publication cycles; the app is exactly as fresh as FAA's data. TFRs are the live exception (10-minute refresh).
 3. **TFR geometry approximation at range.** "Inside" is a true boundary test. Distance-to-edge for *nearby* TFRs uses a centroid-plus-extent approximation and is conservative.
 4. **Coincident hard stops.** If a TFR and an NSR overlap at the operator's position, the TFR is displayed (it is the transient condition crews are least likely to know about); both are flight-prohibiting.
-5. **GPS dependency.** No GPS lock → no verdict (AWAITING GPS LOCK); the app never substitutes an assumed position for spatial queries.
+5. **Class airspace is evaluated as a 2-D footprint.** The Class layer point-intersect includes shelf areas; a position under an outer shelf (e.g., 7–10 NM from a Class C primary) reports the class of the overlying airspace even though the surface there may be Class E/G. The verdict errs conservative. Floor-aware class filtering is a planned refinement pending verification of the layer's floor attributes.
+6. **GPS dependency.** No GPS lock → no verdict (AWAITING GPS LOCK); the app never substitutes an assumed position for spatial queries.
 
 ## 7. Change control
 
