@@ -901,7 +901,11 @@
             else { try { JSON.parse(tx); note = "OK \u00b7 json"; } catch (e2) { ok = false; note = "not JSON: " + tx.slice(0, 36); } }
           }
           out.push({ name, ok, note: note + " \u00b7 " + ms + "ms" });
-        } catch (e) { out.push({ name, ok: false, note: e.message || "failed" }); }
+        } catch (e) {
+          const wall = Date.now() - t0;
+          const susp = e && e.message === "timeout" && wall > 20000;   // timers froze — iOS suspended the page (permission prompt / backgrounded)
+          out.push({ name, ok: false, note: susp ? "interrupted \u2014 app was suspended mid-check \u00b7 re-run" : (e.message || "failed") });
+        }
         setRows(out.slice());
       };
       await probe("FIRESTORE \u00b7 SCHEDULE DB", FS_BASE + "/" + DEV_COL + "/crew", "fs");
@@ -918,8 +922,18 @@
       await probe("TFR LIST (VIA WORKER)", prox("https://tfr.faa.gov/tfrapi/exportTfrList"), "tfrlist");
       await probe("TFR SHAPES \u00b7 WFS", prox("https://tfr.faa.gov/geoserver/TFR/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=TFR%3Aboundary&outputFormat=application%2Fjson&maxFeatures=5&bbox=" + (REF.lon - 0.4) + "," + (REF.lat - 0.4) + "," + (REF.lon + 0.4) + "," + (REF.lat + 0.4) + ",EPSG:4326"), "wfs");
       await probe("ADS-B \u00b7 AIRPLANES.LIVE", "https://api.airplanes.live/v2/point/" + REF.lat + "/" + REF.lon + "/3", "adsb");
-      await probe("OPEN-METEO \u00b7 FORECAST", "https://api.open-meteo.com/v1/forecast?latitude=" + REF.lat + "&longitude=" + REF.lon + "&current=temperature_2m", "json");
-      await probe("OPEN-METEO \u00b7 ELEVATION", "https://api.open-meteo.com/v1/elevation?latitude=" + REF.lat + "&longitude=" + REF.lon, "json");
+      const probe2 = async (name, url) => {   // direct leg, then worker leg — reports both
+        const t0 = Date.now();
+        const leg = async (u) => { try { const r = await TT(fetch(u), 6000); if (!r.ok) return "HTTP " + r.status; JSON.parse(await r.text()); return null; } catch (e) { return e.message || "failed"; } };
+        const d1 = await leg(url);
+        if (d1 === null) { out.push({ name, ok: true, note: "OK \u00b7 direct \u00b7 " + (Date.now() - t0) + "ms" }); setRows(out.slice()); return; }
+        const d2 = await leg(prox(url));
+        out.push({ name, ok: d2 === null, note: (d2 === null ? ("OK via worker (direct: " + d1 + ")") : ("direct: " + d1 + " \u00b7 worker: " + d2)) + " \u00b7 " + (Date.now() - t0) + "ms" });
+        setRows(out.slice());
+      };
+      await probe2("OPEN-METEO \u00b7 FORECAST", "https://api.open-meteo.com/v1/forecast?latitude=" + REF.lat + "&longitude=" + REF.lon + "&current=temperature_2m");
+      await probe2("OPEN-METEO \u00b7 ELEVATION", "https://api.open-meteo.com/v1/elevation?latitude=" + REF.lat + "&longitude=" + REF.lon);
+      await probe2("ELEVATION \u00b7 USGS EPQS", "https://epqs.nationalmap.gov/v1/json?x=" + REF.lon + "&y=" + REF.lat + "&units=Feet&wkid=4326&includeDate=false");
       await probe("WHAT3WORDS", "https://api.what3words.com/v3/convert-to-3wa?coordinates=" + REF.lat + "%2C" + REF.lon + "&key=J4FL5TE7", "w3w");
       await probe("METAR (VIA WORKER)", prox("https://aviationweather.gov/api/data/metar?ids=KSSF&format=json&taf=false"), "json");
       setLastRun(new Date());
@@ -975,6 +989,7 @@
         "Airspace overhaul. The status card now always shows the most restrictive condition at your position: an active TFR you're standing inside turns the card red with the NOTAM number and end time and outranks everything \u2014 including a LAANC grid. A National Security no-fly or a low-floor Prohibited/Restricted area also outranks a LAANC grid instead of hiding behind it.",
         "Fewer false alarms, no false all-clears. High-altitude special-use airspace (like a MOA with a 14,000ft floor) no longer raises a caution a drone can't reach, flight-level floors (FL180) read correctly, and overlapping LAANC grids show the lowest (controlling) ceiling. If the FAA data sources can't be reached the card says CHECK INCOMPLETE and tells you to verify via B4UFLY \u2014 it will never show a green all-clear it can't back up.",
         "Full provenance. Special-use airspace now comes directly from the FAA's own published layer (previous source kept as automatic backup), and every special-use card shows a SRC chip naming exactly where its data came from.",
+        "One-tap GPS setup on the Dashboard. A banner asks for location access up front \u2014 on your terms \u2014 so the iOS permission prompt never interrupts you inside Airspace or Preflight WX at a scene. Grant it once and the banner goes away.",
         "New Run Source Diagnostics button in Airspace \u2014 one tap live-tests every airspace data source, the department worker, and the TFR pipeline from your device, and names exactly what's unreachable. Airspace map queries also automatically retry through the department worker if a direct connection is blocked.",
         "Optional LAANC grid overlay on the traffic scope. A LAANC button next to North-Up / Track-Up paints the FAA facility-map cells around your position with each cell's authorization ceiling \u2014 so you can see where the ceiling changes, not just what it is where you stand. Off by default; display-only."
       ]},
@@ -3689,17 +3704,38 @@ const [showComms, setShowComms] = useState(false);
     const g = elevGateRef.current;
     const moved = !g || Math.abs(posCoords.lat - g.lat) > 0.005 || Math.abs(posCoords.lon - g.lon) > 0.005;   // ~0.3nm
     if (g && !moved && Date.now() - g.t < 300000) return;   // terrain doesn't change — 1 attempt / 5 min max
+    // Terrain doesn't change — serve from cache first (survives Open-Meteo outages entirely)
+    try {
+      const cch = JSON.parse(localStorage.getItem("fh_elev_cache") || "null");
+      if (cch && Math.abs(cch.lat - posCoords.lat) <= 0.005 && Math.abs(cch.lon - posCoords.lon) <= 0.005 && typeof cch.ft === "number") {
+        setGroundElevFt(cch.ft);
+        return;
+      }
+    } catch (eC) {}
     elevGateRef.current = { lat: posCoords.lat, lon: posCoords.lon, t: Date.now() };
     let alive = true;
-    const eUrl = "https://api.open-meteo.com/v1/elevation?latitude=" + posCoords.lat.toFixed(4) + "&longitude=" + posCoords.lon.toFixed(4);
-    const eProx = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(eUrl);
-    const grab = (u) => fetch(u).then(r => { if (!r.ok) throw 0; return r.json(); });
-    grab(eUrl).catch(() => grab(eProx))   // VPN/firewalled desktops — fall back through the worker
-      .then(d => {
+    const TT6 = (p) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error("timeout")), 6000))]);
+    const prx = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
+    const omUrl2 = "https://api.open-meteo.com/v1/elevation?latitude=" + posCoords.lat.toFixed(4) + "&longitude=" + posCoords.lon.toFixed(4);
+    const usUrl = "https://epqs.nationalmap.gov/v1/json?x=" + posCoords.lon.toFixed(5) + "&y=" + posCoords.lat.toFixed(5) + "&units=Feet&wkid=4326&includeDate=false";
+    const grabOM = (u) => TT6(fetch(u)).then(r => { if (!r.ok) throw 0; return r.json(); }).then(d => {
+      const m = Array.isArray(d.elevation) ? d.elevation[0] : d.elevation;
+      if (typeof m !== "number" || !isFinite(m)) throw 0;
+      return Math.round(m * 3.28084);
+    });
+    const grabUS = (u) => TT6(fetch(u)).then(r => { if (!r.ok) throw 0; return r.json(); }).then(d => {
+      const v = parseFloat(d.value);
+      if (!isFinite(v) || v < -1000) throw 0;
+      return Math.round(v);
+    });
+    grabOM(omUrl2).catch(() => grabOM(prx(omUrl2)))
+      .catch(() => grabUS(usUrl)).catch(() => grabUS(prx(usUrl)))
+      .then(ft => {
         if (!alive) return;
-        const m = Array.isArray(d.elevation) ? d.elevation[0] : d.elevation;
-        if (typeof m === "number" && isFinite(m)) setGroundElevFt(Math.round(m * 3.28084));
-      }).catch(() => {});   // fail-silent → MSL-only display
+        setGroundElevFt(ft);
+        try { localStorage.setItem("fh_elev_cache", JSON.stringify({ lat: posCoords.lat, lon: posCoords.lon, ft: ft })); } catch (eS) {}
+      })
+      .catch(() => {});   // all four legs down → honest MSL-only display
     return () => { alive = false; };
   }, [posCoords]);
 
@@ -6151,6 +6187,15 @@ function SARModal({
 }
 
   function DashboardView(props) {
+    const [gpsPrime, setGpsPrime] = useState(() => { try { return localStorage.getItem("fh_gps_primed") === "1" ? "ok" : "ask"; } catch (e) { return "ask"; } });
+    const primeGps = () => {
+      if (!navigator.geolocation) { setGpsPrime("unsupported"); return; }
+      setGpsPrime("asking");
+      navigator.geolocation.getCurrentPosition(
+        () => { try { localStorage.setItem("fh_gps_primed", "1"); } catch (e) {} setGpsPrime("ok"); },
+        (err) => { setGpsPrime(err && err.code === 1 ? "denied" : "error"); },
+        { timeout: 10000, maximumAge: 600000 });
+    };
     const { crew, isOwner, flash, me } = props;
     const [wxOpen, setWxOpen] = useState(false);
     const [airOpen, setAirOpen] = useState(false);
@@ -6186,6 +6231,17 @@ function SARModal({
       bulOpen ? h(BulletinBoard, { me, onClose: () => setBulOpen(false) }) : null,
       thermOpen ? h(ThermalModal, { onClose: () => setThermOpen(false) }) : null,
       sarOpen ? h(SARModal, { onClose: () => setSarOpen(false), onOpenThermal: () => { setSarOpen(false); setThermOpen(true); } }) : null,
+      gpsPrime !== "ok" ? h("button", { onClick: primeGps, style: { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: gpsPrime === "denied" ? "rgba(255,193,7,0.08)" : "rgba(59,130,246,0.08)", border: "1px solid " + (gpsPrime === "denied" ? "rgba(255,193,7,0.35)" : "rgba(59,130,246,0.35)"), borderRadius: 12, padding: "10px 14px", marginBottom: 10, fontFamily: "inherit", cursor: "pointer" } },
+        h("span", { style: { fontSize: 16, lineHeight: 1 } }, "\ud83d\udccd"),
+        h("div", { style: { flex: 1 } },
+          h("div", { style: { fontSize: 11, color: gpsPrime === "denied" ? C.amber : C.blue, letterSpacing: 1, fontWeight: 700 } },
+            gpsPrime === "asking" ? "REQUESTING GPS ACCESS\u2026"
+            : gpsPrime === "denied" ? "GPS DENIED \u2014 ENABLE IN IOS SETTINGS \u203a FIREHAWK OPS \u203a LOCATION"
+            : gpsPrime === "unsupported" ? "GPS NOT AVAILABLE ON THIS DEVICE"
+            : "ENABLE GPS \u2014 ONE TAP, BEFORE YOU NEED IT"),
+          h("div", { style: { fontSize: 9, color: C.dim, marginTop: 2 } }, "Airspace and Preflight WX use your position. Granting now keeps the iOS prompt from interrupting you mid-mission.")),
+        gpsPrime === "ask" ? h("span", { style: { fontSize: 9, color: C.blue, letterSpacing: 1.5, border: "1px solid rgba(59,130,246,0.4)", borderRadius: 8, padding: "5px 10px", flexShrink: 0 } }, "ENABLE") : null) : null,
+
       navRow("🌤️", "PREFLIGHT WX", "GPS WX", C.blue, () => setWxOpen(true)),
       navRow("✈️", "AIRSPACE", "GPS ADS-B, LAANC, Airports", C.green, () => setAirOpen(true)),
       navRow("🌡️", "THERMAL CONFIG", "Mission Specific Settings", C.accent, () => setThermOpen(true)),
