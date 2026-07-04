@@ -987,7 +987,8 @@
     const [open, setOpen] = useState(false);
     const LOG = [
       { v:"2.6", date:"July 2026", items:[
-        "My Shifts now shows only today and upcoming assignments \u2014 past dates drop off the list automatically, so what you see is always what's ahead."
+        "My Shifts now shows only today and upcoming assignments \u2014 past dates drop off the list automatically, so what you see is always what's ahead.",
+        "My Shifts also flags planned out-of-service windows on your assigned aircraft \u2014 an amber note under the shift shows the window and reason, and it carries into the calendar export."
       ]},
       { v:"2.5", date:"July 2026", items:[
         "Airspace overhaul. The status card now always shows the most restrictive condition at your position: an active TFR you're standing inside turns the card red with the NOTAM number and end time and outranks everything \u2014 including a LAANC grid. A National Security no-fly or a low-floor Prohibited/Restricted area also outranks a LAANC grid instead of hiding behind it.",
@@ -1093,7 +1094,10 @@
             // Past shifts drop off automatically — the list is forward-looking from today
             const tn = new Date(); const t0 = new Date(tn.getFullYear(), tn.getMonth(), tn.getDate());
             if (new Date(mm.y, mm.m, dnum) < t0) return;
-            if (unit) out.push({ y:mm.y, m:mm.m, d:dnum, unit:unit, role:role, confirmed: !!day.confirmed });
+            // Planned OOS windows on this member's unit that day (unit strings normalized by digits)
+            const uDig = String(unit || "").replace(/\D/g, "");
+            const myOos = (Array.isArray(day.oos) ? day.oos : []).filter(w => w && String(w.unit || "").replace(/\D/g, "") === uDig);
+            if (unit) out.push({ y:mm.y, m:mm.m, d:dnum, unit:unit, role:role, confirmed: !!day.confirmed, oos: myOos });
           });
         });
         out.sort(function (a, b) { return (a.y - b.y) || (a.m - b.m) || (a.d - b.d); });
@@ -1121,7 +1125,8 @@
         const e = new Date(r.y, r.m, r.d + 1);
         const end = "" + e.getFullYear() + pad(e.getMonth() + 1) + pad(e.getDate());
         const shift = getShift(r.y, r.m, r.d);
-        const desc = ["Unit: " + r.unit, "Duty: " + dutyFull(r.role), "Shift: " + shift, "Status: " + (r.confirmed ? "Confirmed" : "Pending"), "Contact UAS Program Manager: " + PHONE].join("\n");
+        const oosNote = (r.oos && r.oos.length) ? r.oos.map(w => "Planned OOS " + (w.from || "?") + "-" + (w.to || "?") + (w.reason ? " (" + w.reason + ")" : "")).join("; ") : null;
+        const desc = ["Unit: " + r.unit, "Duty: " + dutyFull(r.role), "Shift: " + shift, "Status: " + (r.confirmed ? "Confirmed" : "Pending")].concat(oosNote ? [oosNote] : []).concat(["Contact UAS Program Manager: " + PHONE]).join("\n");
         L.push("BEGIN:VEVENT");
         L.push("UID:firehawk-" + myId + "-" + start + "-" + r.unit + "@bc2fd.org");
         L.push("DTSTAMP:" + stamp);
@@ -1172,7 +1177,9 @@
               h("div", { style:{ flex:1, fontSize:11.5, color:C.text, letterSpacing:0.5 } }, r.role),
               h("div", { style:{ display:"flex", alignItems:"center", gap:5, fontSize:10, color: r.confirmed ? C.green : C.amber } },
                 h("span", { style:{ width:7, height:7, borderRadius:"50%", background: r.confirmed ? C.green : C.amber, display:"inline-block" } }),
-                r.confirmed ? "Confirmed" : "Pending"));
+                r.confirmed ? "Confirmed" : "Pending"),
+              r.oos && r.oos.length > 0 && h("div", { style:{ width:"100%", marginTop:5, fontSize:9.5, letterSpacing:0.5, color:C.amber } },
+                r.oos.map(w => "\u26A0 " + unitShort(r.unit) + " planned OOS " + (w.from || "?") + "\u2013" + (w.to || "?") + (w.reason ? " \u00b7 " + w.reason : "")).join("  ")));
           }));
       });
     }
