@@ -913,6 +913,7 @@
       await probe("WX WORKER \u00b7 /BURNBAN", "https://firehawk-wx.usafsentinel-45e.workers.dev/burnban", "json");
       await probe("WX WORKER \u00b7 /REDFLAG", "https://firehawk-wx.usafsentinel-45e.workers.dev/redflag", "json");
       await probe("NWS ALERTS (VIA WORKER)", prox("https://api.weather.gov/alerts/active?zone=TXZ205,TXC029"), "json");
+      await probe("NWS GRIDPOINT \u00b7 GPS WX", "https://api.weather.gov/points/" + REF.lat + "," + REF.lon, "json");
       await probe("LAANC GRID \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?" + gp, "arcgis");
       await probe("SUA \u00b7 FAA", "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/ArcGIS/rest/services/Special_Use_Airspace/FeatureServer/0/query?" + gp, "arcgis");
       await probe("SUA \u00b7 TAMU FALLBACK", "https://gis.nri.tamu.edu/arcgis/rest/services/SUA_MTR/SUA/MapServer/0/query?" + gp, "arcgis");
@@ -989,6 +990,7 @@
         "Airspace overhaul. The status card now always shows the most restrictive condition at your position: an active TFR you're standing inside turns the card red with the NOTAM number and end time and outranks everything \u2014 including a LAANC grid. A National Security no-fly or a low-floor Prohibited/Restricted area also outranks a LAANC grid instead of hiding behind it.",
         "Fewer false alarms, no false all-clears. High-altitude special-use airspace (like a MOA with a 14,000ft floor) no longer raises a caution a drone can't reach, flight-level floors (FL180) read correctly, and overlapping LAANC grids show the lowest (controlling) ceiling. If the FAA data sources can't be reached the card says CHECK INCOMPLETE and tells you to verify via B4UFLY \u2014 it will never show a green all-clear it can't back up.",
         "Full provenance. Special-use airspace now comes directly from the FAA's own published layer (previous source kept as automatic backup), and every special-use card shows a SRC chip naming exactly where its data came from.",
+        "Preflight WX now falls back to the National Weather Service forecast for your exact GPS position when the primary model is unreachable \u2014 the banner reads NWS FORECAST with your forecast grid \u2014 before dropping to airfield-observed METAR as the final backstop.",
         "One-tap GPS setup on the Dashboard. A banner asks for location access up front \u2014 on your terms \u2014 so the iOS permission prompt never interrupts you inside Airspace or Preflight WX at a scene. Grant it once and the banner goes away.",
         "New Run Source Diagnostics button in Airspace \u2014 one tap live-tests every airspace data source, the department worker, and the TFR pipeline from your device, and names exactly what's unreachable. Airspace map queries also automatically retry through the department worker if a direct connection is blocked.",
         "Optional LAANC grid overlay on the traffic scope. A LAANC button next to North-Up / Track-Up paints the FAA facility-map cells around your position with each cell's authorization ceiling \u2014 so you can see where the ceiling changes, not just what it is where you stand. Off by default; display-only."
@@ -1616,6 +1618,40 @@ function WeatherModal({ onClose }) {
           omRes = await withTimeout(fetch(WX_PROXY(omUrl)), 8000);
           if (!omRes.ok) throw new Error("HTTP " + omRes.status);
         } catch (eProxy) {
+          // GPS-specific fallback — NWS gridpoint hourly forecast for the operator's EXACT position
+          // (2.5 km government forecast grid; rides api.weather.gov, proven green in diagnostics).
+          try {
+            var gW = function(u) {
+              return withTimeout(fetch(u), 7000).then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+                .catch(function() { return withTimeout(fetch(WX_PROXY(u)), 7000).then(function(r2) { if (!r2.ok) throw new Error("HTTP " + r2.status); return r2.json(); }); });
+            };
+            var pt = await gW("https://api.weather.gov/points/" + opLat.toFixed(4) + "," + opLon.toFixed(4));
+            var hUrl = pt && pt.properties && pt.properties.forecastHourly;
+            if (!hUrl) throw new Error("no gridpoint");
+            var hf = await gW(hUrl);
+            var per = hf && hf.properties && hf.properties.periods && hf.properties.periods[0];
+            if (!per) throw new Error("no periods");
+            var cF2 = function(cv) { return cv == null ? null : (cv * 9 / 5 + 32); };
+            var wdMap = { N: 0, NNE: 22, NE: 45, ENE: 67, E: 90, ESE: 112, SE: 135, SSE: 157, S: 180, SSW: 202, SW: 225, WSW: 247, W: 270, WNW: 292, NW: 315, NNW: 337 };
+            var sf = String(per.shortForecast || "");
+            var lowPct2 = /overcast/i.test(sf) ? 90 : /mostly cloudy/i.test(sf) ? 70 : /partly/i.test(sf) ? 40 : /mostly (sunny|clear)/i.test(sf) ? 20 : 0;
+            var gustM = String(per.windSpeed || "").match(/to (\d+)/);
+            om = { current: {
+              temperature_2m: per.temperature,
+              dew_point_2m: (per.dewpoint && per.dewpoint.value != null) ? cF2(per.dewpoint.value) : null,
+              relative_humidity_2m: (per.relativeHumidity && per.relativeHumidity.value != null) ? per.relativeHumidity.value : null,
+              apparent_temperature: per.temperature,
+              precipitation: 0,
+              weather_code: /thunder/i.test(sf) ? 95 : /rain|shower|drizzle/i.test(sf) ? 61 : /snow|sleet|ice/i.test(sf) ? 71 : 0,
+              cloud_cover: lowPct2, cloud_cover_low: lowPct2,
+              pressure_msl: null,
+              wind_speed_10m: parseFloat(String(per.windSpeed || "0")) || 0,
+              wind_direction_10m: (wdMap[String(per.windDirection || "").toUpperCase()] != null) ? wdMap[String(per.windDirection || "").toUpperCase()] : 0,
+              wind_gusts_10m: (per.windGust && per.windGust.value != null) ? per.windGust.value : (gustM ? parseFloat(gustM[1]) : null),
+              visibility: /fog|mist/i.test(sf) ? 3219 : 16093
+            }, hourly: null };
+            setWxSource("NWS FORECAST \u2014 GPS GRID " + ((pt.properties.gridId || "") + " " + (pt.properties.gridX != null ? pt.properties.gridX + "," + pt.properties.gridY : "")).trim() + " (Open-Meteo unavailable)");
+          } catch (eNws) {
           // Last resort — Open-Meteo is refusing both routes (it IP-blocks aggressively).
           // Build current conditions from the nearest METAR observation instead: real
           // observed wx via aviationweather.gov through the worker, a path that has
@@ -1648,7 +1684,8 @@ function WeatherModal({ onClose }) {
             }, hourly: null };
             setWxSource("OBSERVED \u2014 " + mob.icaoId + " METAR (MODEL UNAVAILABLE)");
           } catch (eMetar) {
-            throw new Error("Weather sources unreachable (Open-Meteo direct: " + eDirect.message + " \u00b7 proxy: " + eProxy.message + " \u00b7 METAR: " + eMetar.message + ")");
+            throw new Error("Weather sources unreachable (OM direct: " + eDirect.message + " \u00b7 OM proxy: " + eProxy.message + " \u00b7 NWS: " + eNws.message + " \u00b7 METAR: " + eMetar.message + ")");
+          }
           }
         }
       }
