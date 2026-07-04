@@ -279,6 +279,19 @@ function getAssignment(days,day,year,month) {
 // Sanchez (id 1) flies UAV121 (lead). decodeDay mirrors index.html exactly so the Status
 // page interprets every stored day identically to the scheduler (two-unit model).
 const LEAD_PILOT_ID = 1;
+function crewPhones(cc){const out={};try{const m=cc.fields.membersById.mapValue.fields;for(const k in m){const f=m[k].mapValue.fields;if(f&&f.phone&&f.phone.stringValue)out[parseInt(k)]=f.phone.stringValue;}}catch(e){}return out;}
+function rpicContactBtn(u124,u121on,phones,label){
+  try{
+    if(!/^today/i.test(String(label)))return '';
+    let rid=null;
+    if(u124!=null)rid=(typeof u124==='number')?u124:(u124.rpic!=null?u124.rpic:(u124.rpicId!=null?u124.rpicId:null));
+    if(rid==null&&u121on)rid=LEAD_PILOT_ID;
+    if(rid==null||rid===LEAD_PILOT_ID)return '';
+    const ph=phones[rid];if(!ph)return '';
+    const cm=CREW.find(x=>x.id===rid);
+    return `<a href="tel:${ph}" class="contact-btn" style="background:rgba(52,199,89,0.07);border:1px solid rgba(52,199,89,0.25);color:#34C759;margin-top:8px">📞 Contact On-Duty RPIC · ${cm?cm.name:'RPIC'}</a>`;
+  }catch(e){return '';}
+}
 function decodeDay(day) {
   const N = (x) => x == null ? null : parseInt(x);
   const extra = (day.extra || []).map(N).filter(x => x != null);
@@ -333,6 +346,7 @@ async function loadData() {
 }
 
 function render(weekDays,schedCache,crewData) {
+  const PHONES = crewData ? crewPhones(crewData) : {};
   let crew=CREW;
   if(crewData) {
     // Prefer the keyed map shape; fall back to the legacy members array.
@@ -495,7 +509,7 @@ function render(weekDays,schedCache,crewData) {
       ${renderUnit('UAV124', uav124)}
       <a href="tel:+12108616643" class="contact-btn" style="background:rgba(74,144,217,0.07);border:1px solid rgba(74,144,217,0.18);color:#4A90D9">
         📞 Contact UAS Program Manager
-      </a></div>`;
+      </a>${rpicContactBtn(uav124, !!uav121, PHONES, crewDayLabel)}</div>`;
   } else {
     html+=`<div class="oos">
       <div class="oos-title">NO UAS COVERAGE</div>

@@ -1193,6 +1193,7 @@
     const [showArchived, setShowArchived] = useState(false);
     const [busy, setBusy]                 = useState(false);
     const [fName, setFName]   = useState("");
+    const [fPhone, setFPhone] = useState("");
     const [fInit, setFInit]   = useState("");
     const [fColor, setFColor] = useState(PALETTE[0]);
     const [fRole, setFRole]   = useState("RPIC");
@@ -1241,12 +1242,12 @@
       : null;
     const resetForm = () => { setFName(""); setFInit(""); setFFirst(""); setFRank(""); setFTitle(""); setFRole("RPIC"); };
     const closeAddForm = () => { setShowAdd(false); setEditId(null); resetForm(); };
-    const openEdit = (c) => { setEditId(c.id); setFName(c.name || ""); setFInit(c.initials || ""); setFFirst(c.first || ""); setFRank(c.rank || ""); setFTitle(c.title || ""); setFRole(c.role || "RPIC"); setFColor(c.color || PALETTE[0]); setShowAdd(true); };
+    const openEdit = (c) => { setEditId(c.id); setFName(c.name || ""); setFInit(c.initials || ""); setFFirst(c.first || ""); setFRank(c.rank || ""); setFTitle(c.title || ""); setFRole(c.role || "RPIC"); setFColor(c.color || PALETTE[0]); setFPhone(c.phone || ""); setShowAdd(true); };
     const saveMember = async () => {
       const name = fName.trim();
       if (!name) return;
       const init = (fInit.trim() || name.slice(0, 2)).toUpperCase().slice(0, 3);
-      const ident = { name, first: fFirst.trim(), rank: fRank.trim(), title: fTitle.trim(), role: fRole, color: fColor, initials: init };
+      const ident = { name, first: fFirst.trim(), rank: fRank.trim(), title: fTitle.trim(), role: fRole, phone: fPhone.trim() || null, color: fColor, initials: init };
       if (editId != null) {
         const res = await doSave(crew.map(x => x.id === editId ? { ...x, ...ident } : x), name + " updated");
         if (res && res.ok) closeAddForm();
@@ -1299,7 +1300,7 @@
     };
 
     const pillBtn = (on, hue) => { const col = hue || C.blue; return { fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?col:C.border), background: on?(col+"24"):C.panel2, color: on?col:C.dim, cursor:"pointer" }; };
-    const openAdd = () => { setEditId(null); resetForm(); setFColor(availColors[0] || PALETTE[0]); setShowAdd(true); };
+    const openAdd = () => { setEditId(null); resetForm(); setFPhone(""); setFColor(availColors[0] || PALETTE[0]); setShowAdd(true); };
 
     const memberRow = (c) => h("div", { key:c.id, style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8, opacity: c.archived ? 0.6 : 1 } },
       h("div", { style:{ display:"flex", alignItems:"center", gap:8, marginBottom:8 } },
@@ -1347,6 +1348,7 @@
           textInput(fFirst, setFFirst, "First name", 20),
           fieldLabel("Last name (shown on roster)"),
           textInput(fName, setFName, "Last name", 24),
+          textInput(fPhone, setFPhone, "Phone \u00b7 optional \u00b7 shown to Chiefs when on duty", 18),
           fieldLabel("Rank"),
           textInput(fRank, setFRank, "e.g. Capt, Lt, FF", 12),
           fieldLabel("Title (optional)"),
