@@ -254,8 +254,8 @@
     { id:1, name:"Sanchez", first:"Aaron", rank:"Capt", title:"Program Manager",   role:"RPIC", tier:"owner", hasPin:true, color:"#4A90D9", initials:"AS", part107:"2026-11-01", reserve:false },
     { id:3, name:"Bauchman", first:"Ryan", rank:"FF", title:"Program Coordinator",  role:"RPIC", tier:"admin", hasPin:true,   color:"#E67E22", initials:"RB", part107:"2027-05-06", reserve:false },
     { id:4, name:"Thomas", first:"Michael", rank:"FF", title:"",    role:"RPIC", tier:"staff", hasPin:true,   color:"#7D3C98", initials:"MT", part107:"2028-01-16", reserve:false },
-    { id:2, name:"Goddu", first:"Blake", rank:"FF", title:"",     role:"VO",   tier:"staff", hasPin:true,   color:"#C0392B", initials:"BG", part107:null,         reserve:false },
-    { id:5, name:"Rodriguez", first:"Joseph", rank:"Lt", title:"", role:"VO",   tier:"staff", hasPin:true,   color:"#C8A84B", initials:"JR", part107:null,         reserve:false },
+    { id:2, name:"Goddu", first:"Blake", rank:"FF", title:"",     role:"VO",   tier:"staff", hasPin:true,   color:"#C0392B", initials:"BG", part107:"2028-05-14", reserve:false },
+    { id:5, name:"Rodriguez", first:"Joseph", rank:"Lt", title:"", role:"VO",   tier:"staff", hasPin:true,   color:"#C8A84B", initials:"JR", part107:"2028-06-12", reserve:false },
     { id:6, name:"Rait", first:"Chris", rank:"FF", title:"",      role:"RPIC", tier:"staff", hasPin:false,     color:"#8B4513", initials:"CR", part107:"2027-05-31", reserve:false, archived:true }
   ];
 
@@ -6515,9 +6515,13 @@ function SARModal({
           return;                          // keep local crew; do not overwrite with stale data
         }
         let arr = membersToArray(data);                       // prefers the map shape; falls back to legacy array
-        if (arr.length === 0) {                               // empty / fresh doc → seed from the embedded roster
+        if (arr.length === 0) {                               // empty read → run on the embedded roster LOCALLY
           arr = (defaults || FALLBACK_ROSTER).map(normalizeMember);
-          if (!migratedRef.current) { migratedRef.current = true; writeCrewDoc(arr); }
+          // Seed-write ONLY when the doc provably exists and is truly empty (fresh install).
+          // A null/failed/timed-out read must NEVER author the database — that exact path
+          // once overwrote live crew records (incl. Part 107 dates) with defaults.
+          const docTrulyEmpty = !!data && !data.membersById && !(Array.isArray(data.members) && data.members.length);
+          if (docTrulyEmpty && !migratedRef.current) { migratedRef.current = true; writeCrewDoc(arr); }
         } else if (!hasNew && hasLegacy) {                    // legacy array only → migrate to map shape once (non-destructive)
           if (!migratedRef.current) { migratedRef.current = true; writeCrewDoc(arr).then(r => { if (r && r.ok) flash("Roster upgraded"); }); }
         }
