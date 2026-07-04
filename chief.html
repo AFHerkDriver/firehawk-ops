@@ -429,10 +429,12 @@ function render(weekDays,schedCache,crewData) {
       const rvo = findCrew(du.u124.vo);
       if(rvo) uav124.push({ person: rvo, role: 'VISUAL OBSERVER', roleColor: '#34C759', badge: 'VO' });
     }
-    // Upstaff → UAV124
+    // Upstaff — day-level (additional/training crew), rendered as its OWN section,
+    // never folded into a unit. Reads correctly on one-unit and two-unit days alike.
+    const upstaffList = [];
     (du.upstaff || []).forEach(eid => {
       const em = findCrew(eid);
-      if(em) uav124.push({ person: em, role: em.role === 'RPIC' ? 'REMOTE PILOT IN COMMAND' : 'UPSTAFF', roleColor: em.role === 'RPIC' ? '#4A90D9' : '#D4AF37', badge: em.role });
+      if(em) upstaffList.push({ person: em, role: 'UPSTAFF \u00b7 ' + em.role, roleColor: '#D4AF37', badge: em.role });
     });
 
     // Per-unit temporary out-of-service windows, set from the scheduler.
@@ -507,6 +509,7 @@ function render(weekDays,schedCache,crewData) {
       </div>
       ${renderUnit('UAV121', uav121)}
       ${renderUnit('UAV124', uav124)}
+      ${renderUnit('UPSTAFF', upstaffList)}
       <a href="tel:+12108616643" class="contact-btn" style="background:rgba(74,144,217,0.07);border:1px solid rgba(74,144,217,0.18);color:#4A90D9">
         📞 Contact UAS Program Manager
       </a>${rpicContactBtn(uav124, !!uav121, PHONES, crewDayLabel)}</div>`;
