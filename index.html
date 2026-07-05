@@ -733,11 +733,12 @@
     // Month-level finalize — bulk-sets per-day confirmed (drives the chief board ✓)
     const crewedDays = [];
     for (let _d = 1; _d <= dim; _d++) { const _dd = monthDays[_d]; if (_dd && ([_dd.rpic, _dd.vo, _dd.vo2].concat(_dd.extra || []).some(x => x != null) || _dd.lead)) crewedDays.push(_d); }
-    const finalizedCount = crewedDays.filter(_d => monthDays[_d] && monthDays[_d].confirmed).length;
-    const allFinal = crewedDays.length > 0 && finalizedCount === crewedDays.length;
+    const finalizableDays = Array.from(new Set(crewedDays.concat(Object.keys(monthDays || {}).map(Number).filter(_d => { const _x = monthDays[_d]; return _x && Array.isArray(_x.oos) && _x.oos.length > 0; }))));
+    const finalizedCount = finalizableDays.filter(_d => monthDays[_d] && monthDays[_d].confirmed).length;
+    const allFinal = finalizableDays.length > 0 && finalizedCount === finalizableDays.length;
     const finalizeMonth = (value) => {
       const prev = daysRef.current; const next = { ...prev }; let changed = false;
-      crewedDays.forEach(_d => { const _dd = next[_d]; if (_dd && _dd.confirmed !== value) { next[_d] = { ..._dd, confirmed: value, lastEditedBy:"UAS Manager", lastEditedAt: new Date().toISOString() }; changed = true; } });
+      finalizableDays.forEach(_d => { const _dd = next[_d]; if (_dd && _dd.confirmed !== value) { next[_d] = { ..._dd, confirmed: value, lastEditedBy:"UAS Manager", lastEditedAt: new Date().toISOString() }; changed = true; } });
       if (changed) { setMonthDays(next); scheduleSave(next); }
     };
 
