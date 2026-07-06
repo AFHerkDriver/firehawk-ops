@@ -290,6 +290,8 @@
       id: c.id, name: c.name, first: c.first || "", rank: c.rank || "", title: c.title || "", role: c.role, tier: c.tier || "staff",
       hasPin: !!c.hasPin, color: c.color,
       initials: c.initials, part107: (c.part107 == null ? null : c.part107),
+      trainingStatus: (c.trainingStatus == null ? null : c.trainingStatus),
+      instructor: !!c.instructor,
       reserve: !!c.reserve, archived: !!c.archived
     };
   }
@@ -336,6 +338,8 @@
       color: src.color || fb.color || "#888",
       initials: src.initials || fb.initials || "",
       part107: (src.part107 !== undefined ? src.part107 : (fb.part107 !== undefined ? fb.part107 : null)),
+      trainingStatus: (src.trainingStatus !== undefined ? src.trainingStatus : null),
+      instructor: !!src.instructor,
       reserve: !!src.reserve,
       archived: !!src.archived,
       availMonths: (src.availMonths && typeof src.availMonths === "object") ? src.availMonths : {}
@@ -998,8 +1002,9 @@
     const [open, setOpen] = useState(false);
     const LOG = [
       { v:"2.6", date:"July 2026", items:[
-        "My Shifts now shows only today and upcoming assignments \u2014 past dates drop off the list automatically, so what you see is always what's ahead.",
+        "New Pilot Training bar on the Dashboard \u2014 the Appendix E onboarding checklist, now electronic. Already signed in? Tapping it opens your own training folder directly; otherwise sign in with your app PIN to proceed. Instructors see every trainee and are the only ones who can sign items off, with each sign-off stamped by name and date.",
         "Quick-Zoom on the traffic scope \u2014 tap 0.5NM for a close-in view of the immediate area; the button counts down and the scope returns to 3NM automatically after 20 seconds (tap again to return early).",
+        "My Shifts now shows only today and upcoming assignments \u2014 past dates drop off the list automatically, so what you see is always what's ahead.",
         "My Shifts also flags planned out-of-service windows on your assigned aircraft \u2014 an amber note under the shift shows the window and reason, and it carries into the calendar export."
       ]},
       { v:"2.5", date:"July 2026", items:[
@@ -1252,6 +1257,7 @@
       return res;
     };
     const setRole       = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, role: x.role === "RPIC" ? "VO" : "RPIC" } : x));
+    const setInstructor = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, instructor: !x.instructor } : x), c.name + (c.instructor ? " removed as instructor" : " designated instructor"));
     const archive       = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, archived: true } : x), c.name + " archived");
     const unarchive     = (c) => doSave(crew.map(x => x.id === c.id ? { ...x, archived: false } : x), c.name + " restored");
     const removeMember = async (c) => {
@@ -1279,7 +1285,7 @@
         const res = await doSave(crew.map(x => x.id === editId ? { ...x, ...ident } : x), name + " updated");
         if (res && res.ok) closeAddForm();
       } else {
-        const member = { id: Date.now(), ...ident, tier: "staff", hasPin: false, part107: null, reserve: false, archived: false, availMonths: {} };
+        const member = { id: Date.now(), ...ident, tier: "staff", hasPin: false, part107: null, trainingStatus: "in_training", reserve: false, archived: false, availMonths: {} };
         const res = await doSave([...crew, member], "Added " + name);
         if (res && res.ok) closeAddForm();
       }
@@ -1329,6 +1335,13 @@
     const pillBtn = (on, hue) => { const col = hue || C.blue; return { fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?col:C.border), background: on?(col+"24"):C.panel2, color: on?col:C.dim, cursor:"pointer" }; };
     const openAdd = () => { setEditId(null); resetForm(); setFPhone(""); setFColor(availColors[0] || PALETTE[0]); setShowAdd(true); };
 
+    // Training status chip — read-only; state is written by training.html (SOP Appendix E record).
+    // Only In Training renders: no chip = qualified or grandfathered (PM direction, keeps rows uncluttered).
+    const trainingChip = (c) => {
+      if (c.trainingStatus !== "in_training") return null;
+      const col = "#d29922";
+      return h("span", { style:{ fontSize:10, letterSpacing:1, padding:"4px 8px", borderRadius:7, border:"1px solid "+col, background:col+"20", color:col, whiteSpace:"nowrap" } }, "In Training");
+    };
     const memberRow = (c) => h("div", { key:c.id, style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8, opacity: c.archived ? 0.6 : 1 } },
       h("div", { style:{ display:"flex", alignItems:"center", gap:8, marginBottom:8 } },
         h("span", { style:{ width:12, height:12, borderRadius:"50%", background:c.color, flexShrink:0 } }),
@@ -1343,8 +1356,12 @@
             h("button", { onClick: () => unarchive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.green, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Restore"), delBtn(c))
         : h("div", { style:{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" } },
             editBtn(c),
-            h("button", { onClick: () => setRole(c), disabled:busy, style: pillBtn(c.role === "RPIC") }, c.role),
+            h("button", { onClick: () => setRole(c), disabled:busy, style: pillBtn(true, c.role === "RPIC" ? C.blue : C.amber) }, c.role),
+            isOwner
+              ? h("button", { onClick: () => setInstructor(c), disabled:busy, style: pillBtn(!!c.instructor, C.accent) }, "Instructor")
+              : (c.instructor ? h("span", { style: pillBtn(true, C.accent) }, "Instructor") : null),
             h("button", { onClick: () => openCert(c), style: pillBtn(true, c.part107 ? certColor(c.part107) : C.dim) }, c.part107 ? fmtCertShort(c.part107) : "Enter 107"),
+            trainingChip(c),
             h("button", { onClick: () => archive(c), disabled:busy, style:{ marginLeft:"auto", fontSize:10, color:C.dim, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Archive"), delBtn(c)));
 
     const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:5, marginTop:10 } }, t);
@@ -1889,7 +1906,7 @@ function WeatherModal({ onClose }) {
 
     // Header
     React.createElement("div", { style:{
-      background:"linear-gradient(135deg,rgba(74,144,217,0.15),transparent 60%)",
+      background:"linear-gradient(135deg,rgba(52,199,89,0.15),transparent 60%)",
       borderBottom:"1px solid rgba(255,255,255,0.06)",
       padding:"14px 18px", display:"flex", alignItems:"center",
       justifyContent:"space-between", position:"sticky", top:0,
@@ -1898,7 +1915,7 @@ function WeatherModal({ onClose }) {
       React.createElement("div", null,
         React.createElement("div", { style:{
           fontFamily:"'Bebas Neue',sans-serif", fontSize:16,
-          letterSpacing:3, color:"#4A90D9", fontWeight:900
+          letterSpacing:3, color:"#34C759", fontWeight:900
         }}, "PREFLIGHT WX"),
         React.createElement("div", { style:{fontSize:8, color:"#64748B", letterSpacing:2, marginTop:2}},
           wx && wx.station === "GPS"
@@ -3835,17 +3852,24 @@ const [showComms, setShowComms] = useState(false);
   const tfrGate = useRef(null);   // last run {lat,lon,t} — GPS movement must not multiply worker/FAA traffic
   const tfrTypeName = useRef(null);   // WFS layer name, self-discovered from GetCapabilities once per session
   const [tfrFar, setTfrFar] = useState(null);   // nearest TFR beyond scan range — proves the pipeline sees SOMETHING
+  const tfrRunSeq = useRef(0);   // increments only when a real fetch STARTS (not on every GPS-triggered effect firing)
   const tfrCandidates = useRef(null); // ranked WFS layer candidates from capabilities
   useEffect(() => {
     if (!posCoords) return;
     const prox = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
     const pc = (s) => { const m = String(s).trim().match(/^([\d.]+)\s*([NSEW])$/i); return m ? (/[SW]/i.test(m[2]) ? -parseFloat(m[1]) : parseFloat(m[1])) : null; };
-    const seq = ++tfrSeq.current;
     const run = async () => {
       const g = tfrGate.current;
       const moved = !g || Math.abs(posCoords.lat - g.lat) > 0.02 || Math.abs(posCoords.lon - g.lon) > 0.02;   // ~1.2nm
       if (g && !moved && Date.now() - g.t < 120000) return;
       tfrGate.current = { lat: posCoords.lat, lon: posCoords.lon, t: Date.now() };
+      // Sequence number assigned HERE — only real fetches count, so GPS jitter during a
+      // slow multi-layer fetch can no longer make a just-finished result look "stale" and
+      // get silently discarded (the bug that caused a permanent "CHECKING\u2026" freeze).
+      const seq = ++tfrRunSeq.current;
+      // Watchdog: guarantees a terminal status even if something below hangs/throws
+      // in a path with no catch — "checking" can never be stuck forever again.
+      const wd = setTimeout(() => { if (seq === tfrRunSeq.current) setTfrStatus(s2 => s2 === "checking" ? "list-unreachable" : s2); }, 40000);
       try {
         const fetchT = (u, ms) => { const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms); return fetch(u, { signal: ac.signal }).finally(() => clearTimeout(t)); };
         // List — tfr3 JSON API (the old tfr2/list.html now redirects to a JS shell with no data in it)
@@ -3956,12 +3980,12 @@ const [showComms, setShowComms] = useState(false);
             out.push({ _k: dupeKey, _clat: clat, _clon: clon, notam: nm, type: ty, brg, dist, radNm, inside, shapes, exp: exp, eff: null });
           } catch (e3) {}
         }
-        if (seq !== tfrSeq.current) return;
+        clearTimeout(wd); if (seq !== tfrRunSeq.current) return;
         if (!wfsOk && found.length > 0) { setTfrStatus("shapes-unreachable:" + found.length); return; }   // never fake a clear
         out.sort((a, b) => (a.dist - a.radNm) - (b.dist - b.radNm));
         setTfrFar(farBest);
         setTfrs(out); setTfrStatus("ok");
-      } catch (e) { if (seq === tfrSeq.current) setTfrStatus("list-unreachable"); }
+      } catch (e) { clearTimeout(wd); if (seq === tfrRunSeq.current) setTfrStatus("list-unreachable"); }
     };
     run();
     const iv = setInterval(run, 600000);   // 10 min
@@ -4062,7 +4086,7 @@ const [showComms, setShowComms] = useState(false);
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "linear-gradient(135deg,rgba(52,199,89,0.12),transparent 55%)",
+      background: "linear-gradient(135deg,rgba(59,130,246,0.12),transparent 55%)",
       borderBottom: "1px solid rgba(255,255,255,0.06)",
       padding: "14px 18px",
       display: "flex",
@@ -4074,7 +4098,7 @@ const [showComms, setShowComms] = useState(false);
     style: {
       fontSize: 16,
       letterSpacing: 3,
-      color: "#34C759",
+      color: "#3B82F6",
       fontWeight: 900
     }
   }, "AIRSPACE"), /*#__PURE__*/React.createElement("div", {
@@ -5535,7 +5559,7 @@ function ThermalModal({onClose}) {
   const config = mission ? (mission.dayNight ? (dayNight === "day" ? mission.configDay : mission.configNight) : mission.config) : null;
 
   const hdr = {
-    background: "linear-gradient(135deg,rgba(255,107,53,0.15),transparent 55%)",
+    background: "linear-gradient(135deg,rgba(255,59,48,0.15),transparent 55%)",
     borderBottom: "1px solid rgba(255,255,255,0.06)",
     padding: "14px 18px",
     display: "flex",
@@ -5769,7 +5793,7 @@ function ThermalModal({onClose}) {
     // Header
     React.createElement("div", {style: hdr},
       React.createElement("div", null,
-        React.createElement("div", {style:{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:3,color:"#FF6B35",fontWeight:900}}, "THERMAL CONFIG"),
+        React.createElement("div", {style:{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:3,color:"#FF3B30",fontWeight:900}}, "THERMAL CONFIG"),
         React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:3,marginTop:2}}, "Recommended thermal settings by mission type")
       ),
       React.createElement("div", {style:{display:"flex",gap:8,alignItems:"center"}},
@@ -5963,9 +5987,9 @@ function SARModal({
     style: {
       position: "sticky",
       top: 0,
-      background: "#0D1117",
-      borderBottom: "1px solid rgba(100,181,246,0.2)",
-      padding: "14px 20px",
+      background: "linear-gradient(135deg,rgba(255,193,7,0.12),transparent 55%) #0D1117",
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
+      padding: "14px 18px",
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
@@ -5973,10 +5997,11 @@ function SARModal({
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontFamily: "'Bebas Neue'",
-      fontSize: 22,
-      letterSpacing: 4,
-      color: "#FFC107"
+      fontFamily: "'Bebas Neue',sans-serif",
+      fontSize: 16,
+      letterSpacing: 3,
+      color: "#FFC107",
+      fontWeight: 900
     }
   }, "SAR OPERATIONS"), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -6396,9 +6421,9 @@ function SARModal({
           h("div", { style: { fontSize: 9, color: C.dim, marginTop: 2 } }, "Airspace and Preflight WX use your position. Granting now keeps the iOS prompt from interrupting you mid-mission.")),
         gpsPrime === "ask" ? h("span", { style: { fontSize: 9, color: C.blue, letterSpacing: 1.5, border: "1px solid rgba(59,130,246,0.4)", borderRadius: 8, padding: "5px 10px", flexShrink: 0 } }, "ENABLE") : null) : null,
 
-      navRow("🌤️", "PREFLIGHT WX", "GPS WX", C.blue, () => setWxOpen(true)),
-      navRow("✈️", "AIRSPACE", "GPS ADS-B, LAANC, Airports", C.green, () => setAirOpen(true)),
-      navRow("🌡️", "THERMAL CONFIG", "Mission Specific Settings", C.accent, () => setThermOpen(true)),
+      navRow("🌤️", "PREFLIGHT WX", "GPS WX", C.green, () => setWxOpen(true)),
+      navRow("✈️", "AIRSPACE", "GPS ADS-B, LAANC, Airports", C.blue, () => setAirOpen(true)),
+      navRow("🌡️", "THERMAL CONFIG", "Mission Specific Settings", C.red, () => setThermOpen(true)),
       navRow("🔦", "SAR OPERATIONS", "Search Patterns · Sensor Selection · Flight Params", C.amber, () => setSarOpen(true)),
 
       h("button", { onClick: () => setBulOpen(true),
@@ -6408,6 +6433,14 @@ function SARModal({
           h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:16, letterSpacing:1, color:"#B07CC6" } }, "BULLETIN BOARD"),
           h("div", { style:{ fontSize:9.5, color:C.dim, marginTop:2 } }, "Ops Notices · Postings")),
         h("span", { style:{ fontSize:16, color:"#B07CC6" } }, "→")),
+
+      h("a", { href:"training.html", target:"_blank", rel:"noopener noreferrer",
+        style:{ width:"100%", boxSizing:"border-box", textAlign:"left", display:"flex", alignItems:"center", gap:12, textDecoration:"none", background:"linear-gradient(135deg,"+C.accent+"26,"+C.accent+"12)", border:"1px solid "+C.accent+"66", borderRadius:10, padding:"13px 15px", marginBottom:14, cursor:"pointer" } },
+        h("img", { src:"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 32'%3E%3Cg fill='%23C9D1D9'%3E%3Cpath d='M27 20 L4 8 L7 15 L24 23 Z'/%3E%3Cpath d='M26 24 L8 17 L11 22 L24 26 Z'/%3E%3Cpath d='M25 27 L13 24 L16 27 L24 28.5 Z'/%3E%3Cpath d='M37 20 L60 8 L57 15 L40 23 Z'/%3E%3Cpath d='M38 24 L56 17 L53 22 L40 26 Z'/%3E%3Cpath d='M39 27 L51 24 L48 27 L40 28.5 Z'/%3E%3Cpath d='M32 8 L39 12 L39 20 Q39 26 32 29 Q25 26 25 20 L25 12 Z'/%3E%3C/g%3E%3Cpath d='M32 13.2 L33.6 17 L37.6 17.3 L34.6 19.9 L35.5 23.8 L32 21.7 L28.5 23.8 L29.4 19.9 L26.4 17.3 L30.4 17 Z' fill='%231c2330'/%3E%3C/svg%3E", alt:"", "aria-hidden":true, style:{ width:30, height:16, flexShrink:0 } }),
+        h("div", { style:{ flex:1 } },
+          h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:16, letterSpacing:1, color:C.accent } }, "PILOT TRAINING"),
+          h("div", { style:{ fontSize:9.5, color:C.dim, marginTop:2 } }, "Onboarding Checklist · Trainer Sign-Offs")),
+        h("span", { style:{ fontSize:16, color:C.accent } }, "→")),
 
       h("div", { style:{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:14 } },
         stat(rpics.length, "ACTIVE PILOTS", C.blue),
