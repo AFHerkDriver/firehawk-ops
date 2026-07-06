@@ -3834,6 +3834,7 @@ const [showComms, setShowComms] = useState(false);
   const tfrSeq = useRef(0);
   const tfrGate = useRef(null);   // last run {lat,lon,t} — GPS movement must not multiply worker/FAA traffic
   const tfrTypeName = useRef(null);   // WFS layer name, self-discovered from GetCapabilities once per session
+  const [tfrFar, setTfrFar] = useState(null);   // nearest TFR beyond scan range — proves the pipeline sees SOMETHING
   const tfrCandidates = useRef(null); // ranked WFS layer candidates from capabilities
   useEffect(() => {
     if (!posCoords) return;
@@ -3884,38 +3885,50 @@ const [showComms, setShowComms] = useState(false);
             const rank = (n2) => /bound/i.test(n2) ? 0 : /notam|(:)tfr$/i.test(n2) ? 1 : /airport|navaid|runway|fix|airspace/i.test(n2) ? 9 : 5;
             tfrCandidates.current = names.slice().sort((a2, b2) => rank(a2) - rank(b2));
           }
-          const dd = 0.4;   // ±24 NM box comfortably covers the 15 NM scan
-          const cands = tfrTypeName.current ? [tfrTypeName.current] : (tfrCandidates.current || []);
-          for (const tn of cands.slice(0, 4)) {
+          const dd = 1.2;   // ±72 NM box — sees well beyond the 15 NM scan so the status can prove the pipeline has eyes
+          // Query EVERY non-reference layer and MERGE — a TFR's geometry may live in any of
+          // them (boundary polygons, point+radius circles, special-security layers), and
+          // single-layer selection once hid real TFRs. Reference layers (airport/navaid) skipped.
+          const layerList = (tfrCandidates.current || []).filter(n2 => !/airport|navaid|runway|fix/i.test(n2)).slice(0, 5);
+          for (const tn of layerList) {
             try {
               const gf = WFS_BASE + "?service=WFS&version=1.0.0&request=GetFeature&typeName=" + encodeURIComponent(tn)
-                + "&outputFormat=application%2Fjson&maxFeatures=60&bbox=" + (posCoords.lon - dd) + "," + (posCoords.lat - dd) + "," + (posCoords.lon + dd) + "," + (posCoords.lat + dd) + ",EPSG:4326";
+                + "&outputFormat=application%2Fjson&maxFeatures=80&bbox=" + (posCoords.lon - dd) + "," + (posCoords.lat - dd) + "," + (posCoords.lon + dd) + "," + (posCoords.lat + dd) + ",EPSG:4326";
               const gj = await fetchT(prox(gf), 12000).then(r => { if (!r.ok) throw 0; return r.json(); });
               const fl = Array.isArray(gj.features) ? gj.features : [];
-              const hasPoly = fl.some(f2 => f2.geometry && (f2.geometry.type === "Polygon" || f2.geometry.type === "MultiPolygon"));
-              // Accept a layer only if it proves polygonal — or is empty but NAMED like the shapes layer
-              if (hasPoly || (fl.length === 0 && /bound|notam|(:)tfr$/i.test(tn))) {
-                tfrTypeName.current = tn; feats = fl; wfsOk = true; break;
-              }
+              feats = feats.concat(fl);
+              wfsOk = true;   // any layer answering = shapes pipeline alive
             } catch (e4) {}
           }
         } catch (eW) {}
+        let farBest = null;
         const inPoly = (pt, pts) => { let inn = false; for (let i2 = 0, j2 = pts.length - 1; i2 < pts.length; j2 = i2++) { const yi = pts[i2][0], xi = pts[i2][1], yj = pts[j2][0], xj = pts[j2][1]; if (((yi > pt[0]) !== (yj > pt[0])) && (pt[1] < (xj - xi) * (pt[0] - yi) / (yj - yi) + xi)) inn = !inn; } return inn; };
         const out = [];
-        for (const ft of feats.slice(0, 12)) {
+        for (const ft of feats.slice(0, 24)) {
           try {
             const g = ft.geometry || {};
             const polys = g.type === "Polygon" ? [g.coordinates] : (g.type === "MultiPolygon" ? g.coordinates : []);
             const shapes = [];
             polys.forEach(rings => { const ring = rings && rings[0]; if (ring && ring.length >= 3) shapes.push({ kind: "poly", pts: ring.map(c => [c[1], c[0]]) }); });   // GeoJSON is [lon,lat]
+            if (g.type === "Point" && Array.isArray(g.coordinates)) {
+              const prc = ft.properties || {};
+              let radp = null;
+              for (const k in prc) { if (/radius/i.test(k) && isFinite(parseFloat(prc[k]))) { radp = parseFloat(prc[k]); break; } }
+              if (radp) shapes.push({ kind: "circle", clat: g.coordinates[1], clon: g.coordinates[0], radNm: radp });
+            }
             if (!shapes.length) continue;
-            let all = []; shapes.forEach(sh => { all = all.concat(sh.pts); });
+            let all = []; shapes.forEach(sh => { if (sh.pts) all = all.concat(sh.pts); else if (sh.kind === "circle") all.push([sh.clat, sh.clon]); });
             const clat = all.reduce((s2, p) => s2 + p[0], 0) / all.length;
             const clon = all.reduce((s2, p) => s2 + p[1], 0) / all.length;
             let radNm = 0; all.forEach(p => { radNm = Math.max(radNm, distNm(clat, clon, p[0], p[1])); });
+            shapes.forEach(sh => { if (sh.kind === "circle") radNm = Math.max(radNm, sh.radNm); });
             if (!radNm) radNm = 3;
             const dist = distNm(posCoords.lat, posCoords.lon, clat, clon);
-            if (dist - radNm > TFR_SCAN_NM) continue;
+            if (dist - radNm > TFR_SCAN_NM) {
+              const edge = dist - radNm;
+              if (!farBest || edge < farBest.d) farBest = { d: edge, nm: nm || "TFR" };
+              continue;
+            }
             const brg = Math.round(bearingTo(posCoords.lat, posCoords.lon, clat, clon));
             const propStr = JSON.stringify(ft.properties || {});
             const nm = (propStr.match(/(\d\/\d{3,5})/) || [])[1] || null;
@@ -3924,13 +3937,16 @@ const [showComms, setShowComms] = useState(false);
             const pr = ft.properties || {};
             const exp = pr.dateExpire || pr.expire || pr.EXPIRE || pr.exp_date || null;
             const op = [posCoords.lat, posCoords.lon];
-            const inside = shapes.some(sh => inPoly(op, sh.pts));
-            out.push({ notam: nm || "TFR", type: ty, brg, dist, radNm, inside, shapes, exp: exp, eff: null });
+            const inside = shapes.some(sh => sh.kind === "circle" ? (distNm(op[0], op[1], sh.clat, sh.clon) <= sh.radNm) : inPoly(op, sh.pts));
+            const dupeKey = nm || (clat.toFixed(3) + "," + clon.toFixed(3));
+            if (out.some(o2 => o2._k === dupeKey)) continue;
+            out.push({ _k: dupeKey, notam: nm || "TFR", type: ty, brg, dist, radNm, inside, shapes, exp: exp, eff: null });
           } catch (e3) {}
         }
         if (seq !== tfrSeq.current) return;
         if (!wfsOk && found.length > 0) { setTfrStatus("shapes-unreachable:" + found.length); return; }   // never fake a clear
         out.sort((a, b) => (a.dist - a.radNm) - (b.dist - b.radNm));
+        setTfrFar(farBest);
         setTfrs(out); setTfrStatus("ok");
       } catch (e) { if (seq === tfrSeq.current) setTfrStatus("list-unreachable"); }
     };
@@ -4235,7 +4251,7 @@ const [showComms, setShowComms] = useState(false);
         color: tfrs.some(t => t.inside) ? "#FF3B30" : tfrs.length ? "#FF9F0A" : tfrStatus === "ok" ? "#8B949E" : "#64748B" } },
         tfrs.some(t => t.inside) ? ("TFR — INSIDE " + tfrs.filter(t => t.inside).map(t => t.notam).join(", "))
           : tfrs.length ? ("TFR — " + tfrs.length + " WITHIN " + TFR_SCAN_NM + "NM")
-          : tfrStatus === "ok" ? ("TFR — NONE WITHIN " + TFR_SCAN_NM + "NM")
+          : tfrStatus === "ok" ? ("TFR — NONE WITHIN " + TFR_SCAN_NM + "NM" + (tfrFar ? (" · NEAREST " + Math.round(tfrFar.d) + "NM (" + tfrFar.nm + ")") : ""))
           : tfrStatus === "checking" ? "TFR — CHECKING\u2026"
           : tfrStatus === "list-unreachable" ? "TFR — FAA LIST UNREACHABLE (WORKER/NETWORK)"
           : String(tfrStatus).indexOf("shapes-unreachable") === 0 ? ("TFR — " + String(tfrStatus).split(":")[1] + " ACTIVE IN TX · SHAPE DATA UNREACHABLE")
