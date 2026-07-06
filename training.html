@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Firehawk UAS — Training Record</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --line: #2b3444;
+    --text: #e6edf3;
+    --muted: #8b98a9;
+    --fire: #ff7a1a;
+    --fire-dim: #b35411;
+    --go: #3fb950;
+    --warn: #d29922;
+    --nogo: #f85149;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Barlow', -apple-system, sans-serif;
+    font-size: 16px; line-height: 1.45;
+    padding: 16px 14px calc(40px + env(safe-area-inset-bottom));
+    max-width: 760px; margin: 0 auto;
+  }
+
+  /* ---------- Header ---------- */
+  header { margin-bottom: 12px; }
+  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fire); }
+  h1 { font-family: 'Bebas Neue', sans-serif; font-size: 38px; line-height: 1; letter-spacing: 0.03em; margin: 4px 0 2px; }
+  .sub { color: var(--muted); font-size: 13.5px; }
+
+  /* ---------- Trainer bar ---------- */
+  .trainer-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 10px 12px; margin: 12px 0;
+  }
+  .trainer-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .trainer-bar.on .trainer-dot { background: var(--go); }
+  .trainer-info { flex: 1; font-size: 14px; }
+  .trainer-info strong { font-weight: 700; }
+  .trainer-info .dim { color: var(--muted); }
+  .mini-btn {
+    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text); font-family: 'Barlow', sans-serif;
+    font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .mini-btn.primary { background: var(--fire); border-color: var(--fire); color: #0d1117; }
+  .mini-btn:focus-visible, .btn:focus-visible, .block-head:focus-visible { outline: 2px solid var(--fire); outline-offset: 1px; }
+
+  /* ---------- Sync / trainee row ---------- */
+  .trainee-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: stretch; }
+  .trainee-row select {
+    flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--text); font-family: 'Barlow', sans-serif; font-size: 15px; padding: 10px 12px;
+  }
+  .sync { font-size: 11.5px; color: var(--muted); text-align: right; margin: -6px 0 10px; min-height: 15px; }
+  .sync.err { color: var(--nogo); }
+
+  /* ---------- Readiness ---------- */
+  .readiness { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; }
+  .readiness-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .readiness-label { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .readiness-pct { font-family: 'Bebas Neue', sans-serif; font-size: 34px; line-height: 1; color: var(--fire); }
+  .bar { height: 10px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--fire-dim), var(--fire)); border-radius: 6px; transition: width .35s ease; }
+  .status-line { margin-top: 10px; font-size: 13.5px; color: var(--muted); }
+  .status-line strong { color: var(--text); }
+  .status-flag {
+    display: inline-block; margin-top: 10px; padding: 4px 12px; border-radius: 999px;
+    font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 0.06em;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  }
+  .status-flag.ready { background: rgba(63,185,80,.12); border-color: var(--go); color: var(--go); }
+  .status-flag.progress { background: rgba(255,122,26,.10); border-color: var(--fire-dim); color: var(--fire); }
+  .status-flag.approved { background: rgba(63,185,80,.18); border-color: var(--go); color: var(--go); }
+
+  /* ---------- Blocks / items ---------- */
+  .block { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+  .block-head { width: 100%; display: flex; align-items: center; gap: 10px; background: none; border: none; color: var(--text); cursor: pointer; padding: 13px 14px; text-align: left; }
+  .block-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.04em; flex: 1; }
+  .block-count { font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .block-count.done { color: var(--go); border-color: var(--go); background: rgba(63,185,80,.1); }
+  .chev { color: var(--muted); transition: transform .2s; flex-shrink: 0; }
+  .block.open .chev { transform: rotate(90deg); }
+  .block-body { display: none; border-top: 1px solid var(--line); }
+  .block.open .block-body { display: block; }
+
+  .item { display: flex; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); align-items: flex-start; cursor: pointer; }
+  .item:last-child { border-bottom: none; }
+  .item:active { background: var(--panel-2); }
+  .cb { flex-shrink: 0; width: 24px; height: 24px; margin-top: 1px; border: 2px solid var(--muted); border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .item.checked .cb { background: var(--fire); border-color: var(--fire); }
+  .item.locked .cb { border-style: dashed; }
+  .cb svg { width: 14px; height: 14px; stroke: #0d1117; stroke-width: 3.5; fill: none; opacity: 0; }
+  .item.checked .cb svg { opacity: 1; }
+  .item-text { flex: 1; }
+  .item-label { font-size: 15.5px; font-weight: 500; }
+  .item.checked .item-label { color: var(--muted); }
+  .item-note { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .signoff { display: none; font-size: 12.5px; color: var(--go); margin-top: 4px; font-weight: 600; }
+  .item.checked .signoff { display: block; }
+  .item.gate .item-label::after { content: 'PASS REQUIRED'; margin-left: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--nogo); vertical-align: 1px; }
+  .item.pm .item-label::after { content: 'OWNER ONLY'; margin-left: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--warn); vertical-align: 1px; }
+
+  /* ---------- Actions ---------- */
+  .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  .btn { flex: 1; min-width: 130px; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-family: 'Barlow', sans-serif; font-size: 14.5px; font-weight: 600; cursor: pointer; }
+  .btn.primary { background: var(--fire); border-color: var(--fire); color: #0d1117; }
+  .footer-note { margin-top: 16px; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+  /* ---------- Modal ---------- */
+  .overlay { position: fixed; inset: 0; background: rgba(6,9,14,.78); display: none; align-items: flex-end; justify-content: center; z-index: 50; }
+  .overlay.show { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 14px 14px 0 0; width: 100%; max-width: 760px; padding: 18px 16px calc(22px + env(safe-area-inset-bottom)); }
+  .modal h2 { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .modal p { font-size: 13.5px; color: var(--muted); margin-bottom: 12px; }
+  .modal input { width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-family: 'Barlow', sans-serif; font-size: 18px; padding: 12px; margin-bottom: 10px; letter-spacing: 0.15em; }
+  .modal input.name { letter-spacing: normal; font-size: 16px; }
+  .modal .err { color: var(--nogo); font-size: 13px; margin: -4px 0 10px; min-height: 16px; }
+  .modal-row { display: flex; gap: 10px; }
+
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 9px 18px; font-size: 13.5px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 60; max-width: 90vw; text-align: center; }
+  .toast.show { opacity: 1; }
+
+  @media print {
+    body { background: #fff; color: #000; padding: 0; font-size: 12px; max-width: none; }
+    :root { --panel: #fff; --panel-2: #fff; --line: #999; --text: #000; --muted: #444; }
+    .block { break-inside: avoid; border: 1px solid #999; }
+    .block-body { display: block !important; border-top: 1px solid #999; }
+    .chev, .actions, .footer-note, .trainer-bar, .trainee-row .mini-btn, .sync, .overlay, .toast { display: none !important; }
+    h1, .block-title, .readiness-pct, .status-flag { color: #000; }
+    .bar-fill { background: #000; }
+    .item.checked .cb { background: #000; border-color: #000; }
+    .cb svg { stroke: #fff; }
+    .item.checked .item-label, .signoff { color: #000; }
+    .eyebrow { color: #000; }
+    .trainee-row select { border: 1px solid #999; color: #000; background: #fff; appearance: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">BC2FD &middot; Firehawk UAS Program</div>
+  <h1>Training Record</h1>
+  <div class="sub">Initial Operational Readiness curriculum (SOP Appendix E), individual delivery. Sign-offs sync live across devices.</div>
+</header>
+
+<div class="trainer-bar" id="trainerBar">
+  <span class="trainer-dot"></span>
+  <span class="trainer-info" id="trainerInfo"><span class="dim">Not signed in — sign in to record sign-offs</span></span>
+  <button class="mini-btn primary" id="btnSignIn">Sign In</button>
+</div>
+
+<div class="trainee-row">
+  <select id="traineeSel" aria-label="Trainee"></select>
+  <button class="mini-btn" id="btnNewTrainee">+ Trainee</button>
+  <button class="mini-btn" id="btnDelTrainee" style="display:none; color: var(--nogo);">Delete</button>
+</div>
+<div class="sync" id="syncLine"></div>
+
+<div class="readiness">
+  <div class="readiness-top">
+    <span class="readiness-label">Operational Readiness</span>
+    <span class="readiness-pct" id="pct">—</span>
+  </div>
+  <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+  <div class="status-line" id="statusLine">Select or add a trainee to begin</div>
+  <div class="status-flag" id="statusFlag">No Trainee</div>
+</div>
+
+<div id="blocks"></div>
+
+<div class="actions">
+  <button class="btn primary" id="btnCopy">Copy Summary</button>
+  <button class="btn" onclick="window.print()">Print Record</button>
+</div>
+<div class="footer-note">Sign-offs are recorded against the signed-in crew member. Final PM approval is restricted to owner-tier access and starts the six-month probation clock.</div>
+
+<!-- PIN modal -->
+<div class="overlay" id="pinOverlay">
+  <div class="modal">
+    <h2>Trainer Sign-In</h2>
+    <p>Enter your Firehawk Ops PIN. Your identity is stamped on every sign-off you make.</p>
+    <input id="pinInput" type="tel" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="PIN" aria-label="PIN">
+    <div class="err" id="pinErr"></div>
+    <div class="modal-row">
+      <button class="btn" id="pinCancel">Cancel</button>
+      <button class="btn primary" id="pinGo">Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- New trainee modal -->
+<div class="overlay" id="ntOverlay">
+  <div class="modal">
+    <h2>New Trainee</h2>
+    <p>Pick a crew member. Creates a shared training record and marks them In Training on the roster.</p>
+    <select id="ntCrew" class="name" style="width:100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-family: 'Barlow', sans-serif; font-size: 16px; padding: 12px; margin-bottom: 10px;" aria-label="Crew member"></select>
+    <input id="ntStart" class="name" type="date" aria-label="Start date">
+    <div class="err" id="ntErr"></div>
+    <div class="modal-row">
+      <button class="btn" id="ntCancel">Cancel</button>
+      <button class="btn primary" id="ntGo">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  // ── Config (mirrors index.html) ──────────────────────────────────────────
+  const FS_PROJECT = "firehawk-scheduler";
+  const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
+  const FS_BASE    = "https://firestore.googleapis.com/v1/projects/" + FS_PROJECT + "/databases/(default)/documents";
+  const AUTH       = "https://firehawk-auth.usafsentinel-45e.workers.dev";
+  const COL        = "firehawk";     // production collection (same as index.html)
+  const DOC        = "training";     // dedicated doc — does not touch schedule/crew/bulletins
+  const POLL_MS    = 10000;
+
+  // ── Firestore REST helpers (lifted verbatim from index.html — proven) ───
+  function fromFSVal(v) {
+    if (!v) return null;
+    if ("stringValue" in v) return v.stringValue;
+    if ("integerValue" in v) return parseInt(v.integerValue);
+    if ("doubleValue" in v) return v.doubleValue;
+    if ("booleanValue" in v) return v.booleanValue;
+    if ("nullValue" in v) return null;
+    if ("mapValue" in v) return fromFSFields(v.mapValue.fields || {});
+    if ("arrayValue" in v) return (v.arrayValue.values || []).map(fromFSVal);
+    return null;
+  }
+  function fromFSFields(fields) {
+    if (!fields) return null;
+    const out = {};
+    for (const k in fields) out[k] = fromFSVal(fields[k]);
+    return out;
+  }
+  function toFSVal(v) {
+    if (v === null || v === undefined) return { nullValue: null };
+    if (typeof v === "boolean") return { booleanValue: v };
+    if (typeof v === "number") return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+    if (typeof v === "string") return { stringValue: v };
+    if (Array.isArray(v)) return { arrayValue: { values: v.map(toFSVal) } };
+    if (typeof v === "object") {
+      const fields = {};
+      for (const k in v) fields[k] = toFSVal(v[k]);
+      return { mapValue: { fields } };
+    }
+    return { stringValue: String(v) };
+  }
+  function toFSFields(obj) {
+    const fields = {};
+    for (const k in obj) fields[k] = toFSVal(obj[k]);
+    return fields;
+  }
+  async function fsGet(col, doc) {
+    try {
+      const url = FS_BASE + "/" + col + "/" + doc + "?key=" + FS_API_KEY;
+      const res = await fetch(url, { method: "GET", headers: { "Accept": "application/json" } });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.fields ? fromFSFields(data.fields) : null;
+    } catch (e) { return null; }
+  }
+  async function fsUpdate(col, doc, obj, fieldPaths) {
+    try {
+      const mask = (fieldPaths || []).map(fp => "updateMask.fieldPaths=" + encodeURIComponent(fp)).join("&");
+      const url = FS_BASE + "/" + col + "/" + doc + "?" + (mask ? mask + "&" : "") + "key=" + FS_API_KEY;
+      const body = JSON.stringify({ fields: toFSFields(obj) });
+      const res = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body });
+      if (!res.ok) return { ok: false, status: res.status };
+      return { ok: true, status: res.status };
+    } catch (e) { return { ok: false, status: 0 }; }
+  }
+
+  // Backtick-quote a field-path segment that is not a bare identifier (numeric crew IDs).
+  function fpSeg(seg) { return /^[A-Za-z_][A-Za-z0-9_]*$/.test(seg) ? seg : "`" + String(seg).replace(/[`\\]/g, "\\$&") + "`"; }
+  // Write trainingStatus onto the crew roster (null deletes the value).
+  function setCrewTrainingStatus(crewId, status) {
+    const path = "membersById." + fpSeg(String(crewId)) + ".trainingStatus";
+    return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { trainingStatus: status } } }, [path]);
+  }
+  const GRANDFATHERED_IDS = [1, 3, 4];   // Sanchez, Bauchman, Thomas — original pilots, pre-Appendix E
+
+  // ── Curriculum ───────────────────────────────────────────────────────────
+  const BLOCKS = [
+    { id: 'prereq', title: 'Prerequisites', items: [
+      { id: 'p1', label: 'FAA Part 107 Certificate Verified', note: 'Valid; copy in training file' },
+      { id: 'p2', label: 'Added to DroneSense Roster' },
+      { id: 'p3', label: 'TAK Account Provisioned', note: 'DPS server, Bexar Co FD identity provider' },
+      { id: 'p4', label: 'Firehawk Ops App Access Issued' }
+    ]},
+    { id: 'b1', title: 'Block 1 — Program Foundations', items: [
+      { id: 'b1a', label: 'SOP Review: Structure, Authority, Roles', note: 'PM / RPIC / VO responsibilities' },
+      { id: 'b1b', label: 'Authorized Mission Types + Auto-Dispatch Criteria' },
+      { id: 'b1c', label: 'Flight Operation Standards + Safety/Emergency Procedures' },
+      { id: 'b1d', label: 'DFR and RTIC Concepts' },
+      { id: 'b1e', label: 'Documentation Requirements', note: 'Flight logs; ESO narrative before end of shift' }
+    ]},
+    { id: 'b2', title: 'Block 2 — Aircraft', items: [
+      { id: 'b2a', label: 'M30T Qualification', note: 'Setup, preflight, battery, flight modes, payloads, limitations, emergencies' },
+      { id: 'b2b', label: 'M4T Qualification', note: 'Same items' },
+      { id: 'b2c', label: 'Hands-On Flight: Basic Maneuvers, RTH, Lost-Link Behavior' }
+    ]},
+    { id: 'b3', title: 'Block 3 — Software', items: [
+      { id: 'b3a', label: 'DroneSense', note: 'Mission creation, flight logging, readiness tracking, media management' },
+      { id: 'b3b', label: 'MapNova', note: 'Interface, search grids, overlays, POIs, exports' },
+      { id: 'b3c', label: 'TAK', note: 'Connection, position sharing, DataSync/feeds' },
+      { id: 'b3d', label: 'Firehawk Ops App', note: 'Schedule, My Shifts, weather/airspace tools' }
+    ]},
+    { id: 'b4', title: 'Block 4 — Comms & ICS', items: [
+      { id: 'b4a', label: 'Tactical Radio Procedures + Launch/Landing Notifications' },
+      { id: 'b4b', label: 'Air-to-Ground Coordination + Airspace Advisories' },
+      { id: 'b4c', label: 'UAS as Technical Specialist Within ICS', note: 'Reporting flow to Operations Section' }
+    ]},
+    { id: 'b5', title: 'Block 5 — Airspace', items: [
+      { id: 'b5a', label: 'Local Airspace Classifications + LAANC Process' },
+      { id: 'b5b', label: 'TFRs, NOTAMs, Manned Deconfliction, Helispot Coordination' },
+      { id: 'b5c', label: 'Operational Risk Management / Go\u2013No-Go' }
+    ]},
+    { id: 'b6', title: 'Block 6 — Thermal & Search', items: [
+      { id: 'b6a', label: 'Thermal Fundamentals', note: 'Palettes, settings, heat signature interpretation' },
+      { id: 'b6b', label: 'Scan Patterns, False Positives, Day vs. Night' },
+      { id: 'b6c', label: 'Search Methodology', note: 'LKP, hasty vs. systematic, grid development, clue awareness' },
+      { id: 'b6d', label: 'Multi-Aircraft Operations (Tabletop)', note: 'Live two-ship deferred to next group opportunity' }
+    ]},
+    { id: 'b7', title: 'Block 7 — Scenario Evaluations', items: [
+      { id: 'b7a', label: 'Missing Person Search (Flown)' },
+      { id: 'b7b', label: 'Structure Fire Overwatch (Flown)' },
+      { id: 'b7c', label: 'Wildland/Brush Recon (Flown)' },
+      { id: 'b7d', label: 'Night Operation (Flown)' },
+      { id: 'b7e', label: 'Baseline Flight Proficiency Evaluation', gate: true }
+    ]},
+    { id: 'close', title: 'Closeout', items: [
+      { id: 'c1', label: 'All Items Logged in DroneSense Training Records' },
+      { id: 'c2', label: 'Course Debrief Completed' },
+      { id: 'c3', label: 'Program Manager Approval for Operational Status', pm: true, note: 'Six-month probation clock starts on this date' }
+    ]}
+  ];
+  const ALL_ITEMS = [];
+  BLOCKS.forEach(b => b.items.forEach(it => ALL_ITEMS.push(it)));
+  const totalItems = ALL_ITEMS.length;
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let db = null;                 // { trainees: { tid: {...} } }
+  let selTid = null;
+  let me = null;                 // { id, name, label, tier }
+  let openBlocks = { prereq: true };
+  let crewById = {};
+  let pendingItem = null;        // item awaiting sign-in
+
+  // ── Crew resolution ──────────────────────────────────────────────────────
+  async function loadCrew() {
+    const data = await fsGet(COL, "crew");
+    const byId = (data && data.membersById && typeof data.membersById === "object") ? data.membersById : {};
+    crewById = {};
+    for (const k in byId) {
+      const m = byId[k] || {};
+      crewById[String(k)] = {
+        id: m.id, name: m.name || ("Pilot " + k), first: m.first || "",
+        rank: m.rank || "", tier: m.tier || "staff", archived: !!m.archived,
+        trainingStatus: (m.trainingStatus === undefined ? null : m.trainingStatus)
+      };
+    }
+  }
+  function crewLabel(m) {
+    return ((m.rank ? m.rank + " " : "") + (m.first ? m.first + " " : "") + m.name).trim();
+  }
+
+  // ── Data load / poll ─────────────────────────────────────────────────────
+  async function refresh(first) {
+    const data = await fsGet(COL, DOC);
+    db = data || { trainees: {} };
+    if (!db.trainees || typeof db.trainees !== "object") db.trainees = {};
+    const ids = Object.keys(db.trainees);
+    if (!selTid || !db.trainees[selTid]) selTid = ids.length ? ids.sort()[ids.length - 1] : null;
+    setSync(data === null && !first ? "err" : "ok");
+    render();
+  }
+  function setSync(state) {
+    const el = document.getElementById("syncLine");
+    if (state === "err") { el.textContent = "Offline — showing last loaded data"; el.className = "sync err"; }
+    else { el.textContent = "Synced " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); el.className = "sync"; }
+  }
+
+  // ── Auth ─────────────────────────────────────────────────────────────────
+  async function doSignIn(pin) {
+    let j = null;
+    try {
+      const r = await fetch(AUTH + "/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: pin }) });
+      if (r.ok) j = await r.json();
+    } catch (e) {}
+    if (!j || !j.ok) return { ok: false, reason: "That PIN didn't authenticate" };
+    if (!Object.keys(crewById).length) await loadCrew();
+    const m = crewById[String(j.id)];
+    if (!m) return { ok: false, reason: "PIN valid but no crew record found" };
+    if (m.archived) return { ok: false, reason: "Archived members cannot sign off training" };
+    me = { id: m.id, name: m.name, label: crewLabel(m), tier: m.tier };
+    if (me.tier === "owner") seedGrandfathered();
+    return { ok: true };
+  }
+  // One-time, idempotent: stamp the original pilots as grandfathered if unset.
+  async function seedGrandfathered() {
+    const data = await fsGet(COL, "crew");
+    const byId = (data && data.membersById) || {};
+    for (const id of GRANDFATHERED_IDS) {
+      const m = byId[String(id)];
+      if (m && (m.trainingStatus === undefined || m.trainingStatus === null)) await setCrewTrainingStatus(id, "grandfathered");
+    }
+    await loadCrew();
+  }
+  function renderTrainer() {
+    const bar = document.getElementById("trainerBar");
+    const info = document.getElementById("trainerInfo");
+    const btn = document.getElementById("btnSignIn");
+    if (me) {
+      bar.classList.add("on");
+      info.innerHTML = "<strong></strong> <span class='dim'></span>";
+      info.querySelector("strong").textContent = me.label;
+      info.querySelector(".dim").textContent = me.tier === "owner" ? "· owner" : "";
+      btn.textContent = "Sign Out";
+      btn.classList.remove("primary");
+    } else {
+      bar.classList.remove("on");
+      info.innerHTML = "<span class='dim'>Not signed in — sign in to record sign-offs</span>";
+      btn.textContent = "Sign In";
+      btn.classList.add("primary");
+    }
+  }
+
+  // ── Sign-off writes ──────────────────────────────────────────────────────
+  function fp(tid, itemId) { return "trainees." + tid + ".items." + itemId; }
+  async function signOff(item) {
+    const t = db.trainees[selTid];
+    const rec = { by: me.label, byId: me.id, ts: new Date().toISOString() };
+    t.items = t.items || {};
+    t.items[item.id] = rec; render();
+    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { items: { [item.id]: rec } } } }, [fp(selTid, item.id)]);
+    if (!res.ok) { delete t.items[item.id]; render(); toast("Save failed — check connection"); }
+  }
+  async function removeSignOff(item) {
+    const t = db.trainees[selTid];
+    const prev = t.items[item.id];
+    delete t.items[item.id]; render();
+    // Mask includes the path, body omits it → Firestore deletes the field.
+    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { items: {} } } }, [fp(selTid, item.id)]);
+    if (!res.ok) { t.items[item.id] = prev; render(); toast("Save failed — check connection"); }
+  }
+  function onItemTap(item) {
+    if (!selTid) { toast("Add a trainee first"); return; }
+    if (!me) { pendingItem = item; showPin(); return; }
+    const t = db.trainees[selTid];
+    const existing = t.items && t.items[item.id];
+    if (item.pm) {
+      if (me.tier !== "owner") { toast("PM approval requires owner access"); return; }
+      const p = existing ? removeSignOff(item) : signOff(item);
+      if (t.crewId != null) Promise.resolve(p).then(() => setCrewTrainingStatus(t.crewId, existing ? "in_training" : "qualified")).then(() => loadCrew());
+      return p;
+    }
+    if (existing) {
+      if (parseInt(existing.byId) !== parseInt(me.id) && me.tier !== "owner") { toast("Signed off by " + existing.by + " — only they or the owner can remove it"); return; }
+      return removeSignOff(item);
+    }
+    signOff(item);
+  }
+
+  // ── Trainee management ───────────────────────────────────────────────────
+  let confirmDel = false, confirmDelT = null;
+  async function deleteTrainee() {
+    if (!me || me.tier !== "owner" || !selTid) return;
+    const tid = selTid, prev = db.trainees[tid];
+    delete db.trainees[tid]; selTid = null; confirmDel = false; render();
+    // Mask includes the trainee path, body omits it → Firestore deletes the record.
+    const res = await fsUpdate(COL, DOC, { trainees: {} }, ["trainees." + tid]);
+    if (!res.ok) { db.trainees[tid] = prev; selTid = tid; render(); toast("Delete failed — check connection"); return; }
+    if (prev && prev.crewId != null) { await setCrewTrainingStatus(prev.crewId, null); await loadCrew(); }
+    toast((prev.name || "Trainee") + " deleted");
+  }
+  function eligibleCrew() {
+    return Object.values(crewById).filter(m =>
+      !m.archived &&
+      m.trainingStatus !== "grandfathered" &&
+      !(db && db.trainees && db.trainees["c" + m.id])
+    ).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }
+  async function createTrainee(crewId, start) {
+    const m = crewById[String(crewId)];
+    if (!m) { toast("Crew member not found"); return false; }
+    const tid = "c" + m.id;
+    if (db.trainees[tid]) { toast(m.name + " already has a training record"); return false; }
+    const rec = { name: crewLabel(m), crewId: m.id, start: start || "", created: new Date().toISOString(), createdBy: me ? me.label : "", items: {} };
+    db.trainees[tid] = rec; selTid = tid; render();
+    const res = await fsUpdate(COL, DOC, { trainees: { [tid]: rec } }, ["trainees." + tid]);
+    if (!res.ok) { delete db.trainees[tid]; selTid = null; render(); toast("Save failed — trainee not created"); return false; }
+    const cs = await setCrewTrainingStatus(m.id, "in_training");
+    if (!cs.ok) toast("Record created, but roster status didn't update");
+    await loadCrew();
+    return true;
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  function fmtDate(iso) { const d = new Date(iso); return (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear(); }
+  function render() {
+    renderTrainer();
+    const delBtn = document.getElementById("btnDelTrainee");
+    delBtn.style.display = (me && me.tier === "owner" && selTid) ? "" : "none";
+    delBtn.textContent = confirmDel ? "Delete?" : "Delete";
+    // Trainee select
+    const sel = document.getElementById("traineeSel");
+    sel.innerHTML = "";
+    const ids = Object.keys(db && db.trainees || {}).sort();
+    if (!ids.length) {
+      const o = document.createElement("option"); o.textContent = "No Trainees Yet"; o.value = ""; sel.appendChild(o);
+    } else {
+      ids.forEach(tid => {
+        const o = document.createElement("option");
+        o.value = tid; o.textContent = db.trainees[tid].name || tid;
+        if (tid === selTid) o.selected = true;
+        sel.appendChild(o);
+      });
+    }
+
+    const root = document.getElementById("blocks");
+    root.innerHTML = "";
+    const t = selTid ? db.trainees[selTid] : null;
+    const checks = (t && t.items) || {};
+
+    BLOCKS.forEach(block => {
+      const done = block.items.filter(it => checks[it.id]).length;
+      const el = document.createElement("div");
+      el.className = "block" + (openBlocks[block.id] ? " open" : "");
+      const head = document.createElement("button");
+      head.className = "block-head";
+      head.setAttribute("aria-expanded", openBlocks[block.id] ? "true" : "false");
+      head.innerHTML =
+        '<span class="block-title"></span>' +
+        '<span class="block-count' + (done === block.items.length ? " done" : "") + '">' + done + " / " + block.items.length + "</span>" +
+        '<svg class="chev" width="14" height="14" viewBox="0 0 16 16"><path d="M5 3l6 5-6 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
+      head.querySelector(".block-title").textContent = block.title;
+      head.addEventListener("click", () => { openBlocks[block.id] = !openBlocks[block.id]; render(); });
+      el.appendChild(head);
+
+      const body = document.createElement("div");
+      body.className = "block-body";
+      block.items.forEach(it => {
+        const rec = checks[it.id];
+        const row = document.createElement("div");
+        row.className = "item" + (rec ? " checked" : "") + (it.gate ? " gate" : "") + (it.pm ? " pm" : "") + (!t ? " locked" : "");
+        row.setAttribute("role", "checkbox");
+        row.setAttribute("aria-checked", rec ? "true" : "false");
+        row.setAttribute("tabindex", "0");
+        row.innerHTML =
+          '<span class="cb"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg></span>' +
+          '<span class="item-text"><span class="item-label"></span>' +
+          (it.note ? '<span class="item-note"></span>' : "") +
+          '<span class="signoff"></span></span>';
+        row.querySelector(".item-label").textContent = it.label;
+        if (it.note) row.querySelector(".item-note").textContent = it.note;
+        if (rec) row.querySelector(".signoff").textContent = "Signed off · " + rec.by + " · " + fmtDate(rec.ts);
+        const tap = () => onItemTap(it);
+        row.addEventListener("click", tap);
+        row.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); tap(); } });
+        body.appendChild(row);
+      });
+      el.appendChild(body);
+      root.appendChild(el);
+    });
+
+    // Readiness
+    const done = ALL_ITEMS.filter(it => checks[it.id]).length;
+    const pct = t ? Math.round((done / totalItems) * 100) : 0;
+    document.getElementById("pct").textContent = t ? pct + "%" : "—";
+    document.getElementById("barFill").style.width = (t ? pct : 0) + "%";
+    document.getElementById("statusLine").innerHTML = t
+      ? "<strong>" + done + "</strong> of <strong>" + totalItems + "</strong> items signed off" + (t.start ? " · started " + t.start : "")
+      : "Select or add a trainee to begin";
+    const flag = document.getElementById("statusFlag");
+    const pmDone = !!checks["c3"];
+    if (!t) { flag.textContent = "No Trainee"; flag.className = "status-flag"; }
+    else if (pmDone) { flag.textContent = "Approved For Operational Status"; flag.className = "status-flag approved"; }
+    else if (pct === 100) { flag.textContent = "Ready For PM Approval"; flag.className = "status-flag ready"; }
+    else if (pct > 0) { flag.textContent = "Training In Progress"; flag.className = "status-flag progress"; }
+    else { flag.textContent = "Not Started"; flag.className = "status-flag"; }
+  }
+
+  // ── UI wiring ────────────────────────────────────────────────────────────
+  function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg; el.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove("show"), 2600);
+  }
+  function showPin() {
+    document.getElementById("pinErr").textContent = "";
+    document.getElementById("pinInput").value = "";
+    document.getElementById("pinOverlay").classList.add("show");
+    setTimeout(() => document.getElementById("pinInput").focus(), 60);
+  }
+  function hidePin() { document.getElementById("pinOverlay").classList.remove("show"); pendingItem = null; }
+
+  document.getElementById("btnSignIn").addEventListener("click", () => {
+    if (me) { me = null; render(); } else showPin();
+  });
+  document.getElementById("pinCancel").addEventListener("click", hidePin);
+  document.getElementById("pinGo").addEventListener("click", async () => {
+    const pin = document.getElementById("pinInput").value.trim();
+    if (!pin) return;
+    document.getElementById("pinGo").disabled = true;
+    const r = await doSignIn(pin);
+    document.getElementById("pinGo").disabled = false;
+    if (!r.ok) { document.getElementById("pinErr").textContent = r.reason; return; }
+    const item = pendingItem;
+    document.getElementById("pinOverlay").classList.remove("show");
+    pendingItem = null;
+    render();
+    if (item) onItemTap(item);
+  });
+  document.getElementById("pinInput").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("pinGo").click(); });
+
+  document.getElementById("traineeSel").addEventListener("change", function () { selTid = this.value || null; confirmDel = false; render(); });
+  document.getElementById("btnDelTrainee").addEventListener("click", () => {
+    if (!confirmDel) {
+      confirmDel = true; render();
+      clearTimeout(confirmDelT); confirmDelT = setTimeout(() => { confirmDel = false; render(); }, 4000);
+    } else { clearTimeout(confirmDelT); deleteTrainee(); }
+  });
+  document.getElementById("btnNewTrainee").addEventListener("click", async () => {
+    if (!me) { toast("Sign in to add a trainee"); showPin(); return; }
+    await loadCrew();
+    const sel = document.getElementById("ntCrew");
+    sel.innerHTML = "";
+    const opts = eligibleCrew();
+    if (!opts.length) { toast("No eligible crew — everyone is grandfathered or already has a record"); return; }
+    opts.forEach(m => {
+      const o = document.createElement("option");
+      o.value = String(m.id); o.textContent = crewLabel(m) + (m.trainingStatus === "qualified" ? " (Qualified — Retrain)" : "");
+      sel.appendChild(o);
+    });
+    document.getElementById("ntErr").textContent = "";
+    document.getElementById("ntStart").value = "";
+    document.getElementById("ntOverlay").classList.add("show");
+  });
+  document.getElementById("ntCancel").addEventListener("click", () => document.getElementById("ntOverlay").classList.remove("show"));
+  document.getElementById("ntGo").addEventListener("click", async () => {
+    const crewId = document.getElementById("ntCrew").value;
+    if (!crewId) { document.getElementById("ntErr").textContent = "Pick a crew member"; return; }
+    document.getElementById("ntGo").disabled = true;
+    const ok = await createTrainee(crewId, document.getElementById("ntStart").value);
+    document.getElementById("ntGo").disabled = false;
+    if (ok) document.getElementById("ntOverlay").classList.remove("show");
+  });
+
+  document.getElementById("btnCopy").addEventListener("click", function () {
+    const t = selTid ? db.trainees[selTid] : null;
+    if (!t) { toast("No trainee selected"); return; }
+    const checks = t.items || {};
+    const lines = [];
+    lines.push("FIREHAWK UAS ONBOARDING — TRAINING RECORD");
+    lines.push("Trainee: " + t.name + (t.start ? "  |  Start: " + t.start : ""));
+    lines.push("");
+    BLOCKS.forEach(block => {
+      lines.push(block.title.toUpperCase());
+      block.items.forEach(it => {
+        const r = checks[it.id];
+        lines.push("  [" + (r ? "X" : " ") + "] " + it.label + (r ? " — " + r.by + ", " + fmtDate(r.ts) : ""));
+      });
+      lines.push("");
+    });
+    const done = ALL_ITEMS.filter(it => checks[it.id]).length;
+    lines.push("Completion: " + done + "/" + totalItems + " (" + Math.round((done / totalItems) * 100) + "%)");
+    const text = lines.join("\n");
+    const btn = this;
+    const ok = () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = "Copy Summary"; }, 1500); };
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); ok(); } catch (e) {}
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fallback);
+    else fallback();
+  });
+
+  // ── Boot ─────────────────────────────────────────────────────────────────
+  (async () => {
+    await Promise.all([loadCrew(), refresh(true)]);
+    setInterval(() => refresh(false), POLL_MS);
+  })();
+})();
+</script>
+</body>
+</html>
