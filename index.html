@@ -1283,7 +1283,7 @@
         const res = await doSave(crew.map(x => x.id === editId ? { ...x, ...ident } : x), name + " updated");
         if (res && res.ok) closeAddForm();
       } else {
-        const member = { id: Date.now(), ...ident, tier: "staff", hasPin: false, part107: null, reserve: false, archived: false, availMonths: {} };
+        const member = { id: Date.now(), ...ident, tier: "staff", hasPin: false, part107: null, trainingStatus: "in_training", reserve: false, archived: false, availMonths: {} };
         const res = await doSave([...crew, member], "Added " + name);
         if (res && res.ok) closeAddForm();
       }
@@ -1333,13 +1333,12 @@
     const pillBtn = (on, hue) => { const col = hue || C.blue; return { fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?col:C.border), background: on?(col+"24"):C.panel2, color: on?col:C.dim, cursor:"pointer" }; };
     const openAdd = () => { setEditId(null); resetForm(); setFPhone(""); setFColor(availColors[0] || PALETTE[0]); setShowAdd(true); };
 
-    // Training status chip — read-only; state is written by training.html (SOP Appendix E record)
+    // Training status chip — read-only; state is written by training.html (SOP Appendix E record).
+    // Only In Training renders: no chip = qualified or grandfathered (PM direction, keeps rows uncluttered).
     const trainingChip = (c) => {
-      const ts = c.trainingStatus;
-      if (!ts) return null;
-      const map = { grandfathered: { label:"Grandfathered", col:C.blue }, in_training: { label:"In Training", col:"#d29922" }, qualified: { label:"Qualified", col:C.green } };
-      const m = map[ts]; if (!m) return null;
-      return h("span", { style:{ fontSize:10, letterSpacing:1, padding:"4px 8px", borderRadius:7, border:"1px solid "+m.col, background:m.col+"20", color:m.col, whiteSpace:"nowrap" } }, m.label);
+      if (c.trainingStatus !== "in_training") return null;
+      const col = "#d29922";
+      return h("span", { style:{ fontSize:10, letterSpacing:1, padding:"4px 8px", borderRadius:7, border:"1px solid "+col, background:col+"20", color:col, whiteSpace:"nowrap" } }, "In Training");
     };
     const memberRow = (c) => h("div", { key:c.id, style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"10px 12px", marginBottom:8, opacity: c.archived ? 0.6 : 1 } },
       h("div", { style:{ display:"flex", alignItems:"center", gap:8, marginBottom:8 } },

@@ -286,7 +286,9 @@ print("Syntax:", "OK" if r.returncode == 0 else "FAIL:\n" + r.stderr)
 
 ### index.html additions
 
-- `trainingChip(c)` in Crew Mgmt member rows — read-only chip: Grandfathered (blue) / In Training (amber) / Qualified (green). No chip when status is null.
+- **New pilots default to `trainingStatus: "in_training"`** when added in Crew Mgmt (saveMember add path) — the chip appears immediately and clears only when the PM taps PM Approval on their training record (writes `qualified`). Deleting a training record still clears status to null (no chip), which is correct for wrong entries but note it also clears a genuinely mid-training pilot's chip.
+
+- `trainingChip(c)` in Crew Mgmt member rows — renders **only** the amber **In Training** chip. No chip = qualified or grandfathered (PM direction: keep rows uncluttered). The `grandfathered`/`qualified` values still live in the data and still drive trainee-picker eligibility — they just don't render.
 - Orange **Pilot Training** bar on the Dashboard, same geometry as the Bulletin Board bar (accent `C.accent`, custom aviator-wings SVG data-URI icon (silver `%23C9D1D9`) per PM direction; Dashboard rows: Preflight WX `C.green`, Airspace `C.blue`; Bulletin Board bar uses 📋, Thermal Config dashboard row `C.red`). No Links-tab entry — an earlier Links entry + `training` icon were added and then removed in the same session per PM direction.
 - Shipped under **v2.6** (PM-set number; a brief v2.7 split was made and reverted in-session). What's New: one user-facing line for the Dashboard Pilot Training bar in the v2.6 entry alongside the My Shifts/OOS items (chip/roster mechanics excluded per changelog policy).
 - **Training status never touches role.** RPIC/VO stays manual — trainees serve as VOs during training; PM flips role after qualification.
