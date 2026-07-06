@@ -1904,7 +1904,7 @@ function WeatherModal({ onClose }) {
 
     // Header
     React.createElement("div", { style:{
-      background:"linear-gradient(135deg,rgba(74,144,217,0.15),transparent 60%)",
+      background:"linear-gradient(135deg,rgba(52,199,89,0.15),transparent 60%)",
       borderBottom:"1px solid rgba(255,255,255,0.06)",
       padding:"14px 18px", display:"flex", alignItems:"center",
       justifyContent:"space-between", position:"sticky", top:0,
@@ -1913,7 +1913,7 @@ function WeatherModal({ onClose }) {
       React.createElement("div", null,
         React.createElement("div", { style:{
           fontFamily:"'Bebas Neue',sans-serif", fontSize:16,
-          letterSpacing:3, color:"#4A90D9", fontWeight:900
+          letterSpacing:3, color:"#34C759", fontWeight:900
         }}, "PREFLIGHT WX"),
         React.createElement("div", { style:{fontSize:8, color:"#64748B", letterSpacing:2, marginTop:2}},
           wx && wx.station === "GPS"
@@ -4024,7 +4024,7 @@ const [showComms, setShowComms] = useState(false);
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "linear-gradient(135deg,rgba(52,199,89,0.12),transparent 55%)",
+      background: "linear-gradient(135deg,rgba(59,130,246,0.12),transparent 55%)",
       borderBottom: "1px solid rgba(255,255,255,0.06)",
       padding: "14px 18px",
       display: "flex",
@@ -4036,7 +4036,7 @@ const [showComms, setShowComms] = useState(false);
     style: {
       fontSize: 16,
       letterSpacing: 3,
-      color: "#34C759",
+      color: "#3B82F6",
       fontWeight: 900
     }
   }, "AIRSPACE"), /*#__PURE__*/React.createElement("div", {
@@ -5484,7 +5484,7 @@ function ThermalModal({onClose}) {
   const config = mission ? (mission.dayNight ? (dayNight === "day" ? mission.configDay : mission.configNight) : mission.config) : null;
 
   const hdr = {
-    background: "linear-gradient(135deg,rgba(255,107,53,0.15),transparent 55%)",
+    background: "linear-gradient(135deg,rgba(255,59,48,0.15),transparent 55%)",
     borderBottom: "1px solid rgba(255,255,255,0.06)",
     padding: "14px 18px",
     display: "flex",
@@ -5718,7 +5718,7 @@ function ThermalModal({onClose}) {
     // Header
     React.createElement("div", {style: hdr},
       React.createElement("div", null,
-        React.createElement("div", {style:{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:3,color:"#FF6B35",fontWeight:900}}, "THERMAL CONFIG"),
+        React.createElement("div", {style:{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:3,color:"#FF3B30",fontWeight:900}}, "THERMAL CONFIG"),
         React.createElement("div", {style:{fontSize:8,color:"#64748B",letterSpacing:3,marginTop:2}}, "Recommended thermal settings by mission type")
       ),
       React.createElement("div", {style:{display:"flex",gap:8,alignItems:"center"}},
@@ -5912,9 +5912,9 @@ function SARModal({
     style: {
       position: "sticky",
       top: 0,
-      background: "#0D1117",
-      borderBottom: "1px solid rgba(100,181,246,0.2)",
-      padding: "14px 20px",
+      background: "linear-gradient(135deg,rgba(255,193,7,0.12),transparent 55%) #0D1117",
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
+      padding: "14px 18px",
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
@@ -5922,10 +5922,11 @@ function SARModal({
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontFamily: "'Bebas Neue'",
-      fontSize: 22,
-      letterSpacing: 4,
-      color: "#FFC107"
+      fontFamily: "'Bebas Neue',sans-serif",
+      fontSize: 16,
+      letterSpacing: 3,
+      color: "#FFC107",
+      fontWeight: 900
     }
   }, "SAR OPERATIONS"), /*#__PURE__*/React.createElement("div", {
     style: {
