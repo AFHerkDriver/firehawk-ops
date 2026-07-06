@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Firehawk UAS — Training Record</title>
+<title>Firehawk UAS — Pilot Training</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -155,8 +155,8 @@
 
 <header>
   <div class="eyebrow">BC2FD &middot; Firehawk UAS Program</div>
-  <h1>Training Record</h1>
-  <div class="sub">Initial Operational Readiness curriculum (SOP Appendix E), individual delivery. Sign-offs sync live across devices.</div>
+  <h1>Pilot Training</h1>
+  <div class="sub">Initial Operational Readiness curriculum (SOP Appendix E). Sign in to open your training folder; instructor sign-offs sync live across devices.</div>
 </header>
 
 <div class="trainer-bar" id="trainerBar">
@@ -296,6 +296,11 @@
     return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { trainingStatus: status } } }, [path]);
   }
   const GRANDFATHERED_IDS = [1, 3, 4];   // Sanchez, Bauchman, Thomas — original pilots, pre-Appendix E
+  const INSTRUCTOR_IDS    = [1, 3, 6];   // Sanchez, Bauchman, Rait — only instructors may sign off (Rait inactive while archived)
+  function setCrewInstructor(crewId, on) {
+    const path = "membersById." + fpSeg(String(crewId)) + ".instructor";
+    return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { instructor: !!on } } }, [path]);
+  }
 
   // ── Curriculum ───────────────────────────────────────────────────────────
   const BLOCKS = [
@@ -374,6 +379,7 @@
       crewById[String(k)] = {
         id: m.id, name: m.name || ("Pilot " + k), first: m.first || "",
         rank: m.rank || "", tier: m.tier || "staff", archived: !!m.archived,
+        instructor: !!m.instructor,
         trainingStatus: (m.trainingStatus === undefined ? null : m.trainingStatus)
       };
     }
@@ -410,19 +416,30 @@
     const m = crewById[String(j.id)];
     if (!m) return { ok: false, reason: "PIN valid but no crew record found" };
     if (m.archived) return { ok: false, reason: "Archived members cannot sign off training" };
-    me = { id: m.id, name: m.name, label: crewLabel(m), tier: m.tier };
-    if (me.tier === "owner") seedGrandfathered();
+    me = { id: m.id, name: m.name, label: crewLabel(m), tier: m.tier, instructor: !!m.instructor };
+    if (me.tier === "owner") seedDefaults();
+    if (!me.instructor) selTid = "c" + me.id;   // trainees land on their own folder
     return { ok: true };
   }
-  // One-time, idempotent: stamp the original pilots as grandfathered if unset.
-  async function seedGrandfathered() {
+  // One-time, idempotent: stamp the original pilots as grandfathered and seed the instructor list.
+  async function seedDefaults() {
     const data = await fsGet(COL, "crew");
     const byId = (data && data.membersById) || {};
     for (const id of GRANDFATHERED_IDS) {
       const m = byId[String(id)];
       if (m && (m.trainingStatus === undefined || m.trainingStatus === null)) await setCrewTrainingStatus(id, "grandfathered");
     }
+    for (const id of INSTRUCTOR_IDS) {
+      const m = byId[String(id)];
+      if (m && m.instructor === undefined) {
+        await setCrewInstructor(id, true);
+        if (me && parseInt(me.id) === id) me.instructor = true;   // reflect own seed immediately
+      }
+    }
     await loadCrew();
+    const mine = crewById[String(me && me.id)];
+    if (me && mine && mine.instructor) me.instructor = true;
+    render();
   }
   function renderTrainer() {
     const bar = document.getElementById("trainerBar");
@@ -432,7 +449,7 @@
       bar.classList.add("on");
       info.innerHTML = "<strong></strong> <span class='dim'></span>";
       info.querySelector("strong").textContent = me.label;
-      info.querySelector(".dim").textContent = me.tier === "owner" ? "· owner" : "";
+      info.querySelector(".dim").textContent = me.instructor ? "· Instructor" : "· Trainee View";
       btn.textContent = "Sign Out";
       btn.classList.remove("primary");
     } else {
@@ -447,6 +464,7 @@
   function fp(tid, itemId) { return "trainees." + tid + ".items." + itemId; }
   async function signOff(item) {
     const t = db.trainees[selTid];
+    if (!t) { toast("Select a trainee first"); return; }
     const rec = { by: me.label, byId: me.id, ts: new Date().toISOString() };
     t.items = t.items || {};
     t.items[item.id] = rec; render();
@@ -455,6 +473,7 @@
   }
   async function removeSignOff(item) {
     const t = db.trainees[selTid];
+    if (!t || !t.items) return;
     const prev = t.items[item.id];
     delete t.items[item.id]; render();
     // Mask includes the path, body omits it → Firestore deletes the field.
@@ -462,9 +481,11 @@
     if (!res.ok) { t.items[item.id] = prev; render(); toast("Save failed — check connection"); }
   }
   function onItemTap(item) {
-    if (!selTid) { toast("Add a trainee first"); return; }
     if (!me) { pendingItem = item; showPin(); return; }
+    if (!me.instructor) { toast("Sign-offs are recorded by instructors"); return; }
+    if (!selTid) { toast("Add a trainee first"); return; }
     const t = db.trainees[selTid];
+    if (!t) { toast("Select a trainee first"); return; }
     const existing = t.items && t.items[item.id];
     if (item.pm) {
       if (me.tier !== "owner") { toast("PM approval requires owner access"); return; }
@@ -515,15 +536,58 @@
 
   // ── Render ───────────────────────────────────────────────────────────────
   function fmtDate(iso) { const d = new Date(iso); return (d.getMonth() + 1) + "/" + d.getDate() + "/" + d.getFullYear(); }
+  function gateCard(title, msg, showBtn) {
+    const root = document.getElementById("blocks");
+    root.innerHTML = "";
+    const card = document.createElement("div");
+    card.className = "block open";
+    card.innerHTML = '<div style="padding:26px 18px; text-align:center;">' +
+      '<div style="font-family:\'Bebas Neue\', sans-serif; font-size:24px; letter-spacing:0.05em; margin-bottom:6px;">' + title + '</div>' +
+      '<div style="color:var(--muted); font-size:14px; max-width:420px; margin:0 auto;">' + msg + '</div>' +
+      (showBtn ? '<div style="margin-top:16px;"><button class="btn primary" id="gateSignIn" style="max-width:220px;">Sign In</button></div>' : '') +
+      '</div>';
+    root.appendChild(card);
+    return card;
+  }
   function render() {
     renderTrainer();
+    const isInstructor = !!(me && me.instructor);
     const delBtn = document.getElementById("btnDelTrainee");
     delBtn.style.display = (me && me.tier === "owner" && selTid) ? "" : "none";
     delBtn.textContent = confirmDel ? "Delete?" : "Delete";
-    // Trainee select
+    document.getElementById("btnNewTrainee").style.display = isInstructor ? "" : "none";
+    document.getElementById("traineeSel").style.display = isInstructor ? "" : "none";
+
+    // ── Gate: no data until signed in ──
+    if (!me) {
+      document.getElementById("pct").textContent = "\u2014";
+      document.getElementById("barFill").style.width = "0%";
+      document.getElementById("statusLine").textContent = "Sign in to view training records";
+      const f0 = document.getElementById("statusFlag"); f0.textContent = "Signed Out"; f0.className = "status-flag";
+      const card = gateCard("Pilot Training", "Enter your Firehawk Ops PIN to open your training folder. Instructors see all trainees; everyone else sees their own record.", true);
+      const gb2 = card.querySelector("#gateSignIn") || document.getElementById("gateSignIn");
+      if (gb2 && gb2.addEventListener) gb2.addEventListener("click", showPin);
+      return;
+    }
+
+    // ── Trainees: locked to their own folder ──
+    if (!isInstructor) {
+      selTid = "c" + me.id;
+      if (!(db.trainees && db.trainees[selTid])) {
+        document.getElementById("pct").textContent = "\u2014";
+        document.getElementById("barFill").style.width = "0%";
+        document.getElementById("statusLine").textContent = "No training record yet";
+        const f1 = document.getElementById("statusFlag"); f1.textContent = "No Record"; f1.className = "status-flag";
+        gateCard("No Training Record Yet", "An instructor opens your record when your onboarding begins. Check back once training starts.", false);
+        return;
+      }
+    }
+
+    // Trainee select (instructors only)
     const sel = document.getElementById("traineeSel");
     sel.innerHTML = "";
     const ids = Object.keys(db && db.trainees || {}).sort();
+    if (isInstructor && selTid && ids.indexOf(selTid) < 0) selTid = ids.length ? ids[ids.length - 1] : null;
     if (!ids.length) {
       const o = document.createElement("option"); o.textContent = "No Trainees Yet"; o.value = ""; sel.appendChild(o);
     } else {
@@ -613,7 +677,7 @@
   function hidePin() { document.getElementById("pinOverlay").classList.remove("show"); pendingItem = null; }
 
   document.getElementById("btnSignIn").addEventListener("click", () => {
-    if (me) { me = null; render(); } else showPin();
+    if (me) { me = null; selTid = null; confirmDel = false; render(); } else showPin();
   });
   document.getElementById("pinCancel").addEventListener("click", hidePin);
   document.getElementById("pinGo").addEventListener("click", async () => {
@@ -669,7 +733,7 @@
     if (!t) { toast("No trainee selected"); return; }
     const checks = t.items || {};
     const lines = [];
-    lines.push("FIREHAWK UAS ONBOARDING — TRAINING RECORD");
+    lines.push("FIREHAWK UAS PILOT TRAINING — ONBOARDING RECORD");
     lines.push("Trainee: " + t.name + (t.start ? "  |  Start: " + t.start : ""));
     lines.push("");
     BLOCKS.forEach(block => {

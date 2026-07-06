@@ -1,8 +1,8 @@
 # Firehawk Ops
 
-Operational web tools for the Fire Hawk UAS Program, Bexar County ESD No. 2 (BC2FD), covering Districts 2 & 6. Two single-file web apps — a crew operations app and a read-only command status board — backed by Firebase Firestore and a Cloudflare Worker for live weather and alerts. No build step; deployed straight to GitHub Pages.
+Operational web tools for the Fire Hawk UAS Program, Bexar County ESD No. 2 (BC2FD), covering Districts 2 & 6. Three single-file web tools — a crew operations app, a read-only command status board, and a pilot training record — backed by Firebase Firestore and a Cloudflare Worker for live weather and alerts. No build step; deployed straight to GitHub Pages.
 
-**Live version:** v2.5 (July 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
+**Live version:** v2.6 (July 2026). The footer and the in-app **What's New** panel show the *user-facing* version, incremented on every user-facing change; behind-the-scenes reliability and access work ships between releases without its own number, so the sequence stays continuous for crew.
 
 ## Live URLs
 
@@ -10,12 +10,14 @@ Operational web tools for the Fire Hawk UAS Program, Bexar County ESD No. 2 (BC2
 |------|-----|----------|
 | Fire Hawk Ops (crew) | https://afherkdriver.github.io/firehawk-ops/ | UAS crew (PIN sign-in) |
 | Daily Status Board (command) | https://afherkdriver.github.io/firehawk-ops/chief.html | Battalion Chiefs / command (read-only) |
+| Pilot Training (crew onboarding) | https://afherkdriver.github.io/firehawk-ops/training.html | UAS crew / trainers (PIN sign-off) |
 
 ## Repository structure
 
 ```
 index.html    # Fire Hawk Ops — crew app (production)
 chief.html    # Daily Status Board — read-only command board
+training.html # Pilot Training — Appendix E onboarding checklist with trainer sign-offs
 legacy.html   # Previous monolithic build, retained for reference
 ```
 
@@ -30,7 +32,7 @@ legacy.html   # Previous monolithic build, retained for reference
 - **Crew roster** — RPIC / VO assignments, colors, and Part 107 currency.
 - **Preflight WX** — weather for the operator's exact GPS position, powered primarily by the **National Weather Service gridpoint forecast** (the official source of record), with a secondary model and airfield-observed METAR as automatic fallbacks; three-tier convective read (observed thunderstorm via METAR / NWS warning → ground; model-only signal → caution; none). A one-tap GPS banner on the Dashboard primes location access before it's needed in the field.
 - **Airspace** — live ADS-B traffic within 3NM read in **AGL above the launch site** (ground elevation pulled at the operator's GPS position; MSL shown secondary), smoothly interpolated between polls with tail number and type code per contact, AGL-based conflict / inbound alerting, **live FAA TFR awareness** (status line, nearby cards, and true boundary shapes drawn on the scope), LAANC, and FAA Part 71 airport class awareness.
-- **Thermal config**, **SAR operations** reference, **Bulletins**, and **Links**.
+- **Thermal config**, **SAR operations** reference, **Bulletins**, **Pilot Training** (Dashboard bar — opens the onboarding checklist), and **Links**.
 - **Sign-in** — PIN-based, role-aware access (owner / admin / staff). PINs are verified server-side and never stored in the app or schedule database. Archived members are locked out of sign-in until they're restored. Sign-ins are recorded in an access log with full name and fire rank.
 - **What's New** — collapsible changelog of user-facing improvements in the footer.
 
@@ -39,12 +41,21 @@ legacy.html   # Previous monolithic build, retained for reference
 - Today's date (day of week, month, calendar day), shift (A / B / C), and a 7-day coverage outlook strip.
 - Crew on duty grouped by aircraft (UAV121 / UAV124) using the same two-unit model as the scheduler, with large unit callsigns and per-unit temporary out-of-service windows.
 - Live weather banners — Red Flag Warning, Flood Warning, and Burn Ban — styled to match the crew app.
+- Day-level **UPSTAFF** section and a one-tap **Contact On-Duty RPIC** button alongside the program manager contact.
 - Auto-refreshes every 5 minutes.
+
+### Pilot Training (`training.html`)
+- Electronic delivery of the SOP Appendix E Initial Operational Readiness curriculum — Prerequisites, Blocks 1–7, and Closeout — built for individual training across multiple trainers and weeks.
+- Opened from the orange **Pilot Training** bar on the crew app Dashboard (below Bulletin Board).
+- Sign-in gated: crew enter their app PIN to open **their own training folder** (read-only). Designated **instructors** see all trainees, add new ones from the live roster (no free-text names, no duplicates), and are the only ones who can sign items off — every completed item is stamped **who signed it off and when**, visible to all devices within seconds. Instructor designation is an owner-set toggle in crew management.
+- Sign-offs can be removed only by their signer or the owner; the final **PM Approval** item is owner-only and marks the member **Qualified** on the roster (starting the six-month probation clock per SOP 12.2).
+- Crew management in the main app shows each member's training status chip — **Grandfathered / In Training / Qualified**. Training status never changes RPIC/VO roles; role assignment stays manual.
+- Copy Summary produces a plain-text record for DroneSense training files; Print Record produces a paper copy.
 
 ## Architecture
 
 - **Frontend** — single self-contained HTML file per tool. React via UMD CDN, `React.createElement` aliased as `h`, no JSX and no build step. Fonts: DM Mono and Bebas Neue.
-- **Backend** — Firebase Firestore (project `firehawk-scheduler`). Schedule documents are keyed `schedule_YYYY_M` (month is 0-indexed) and store the day map as a JSON string. Crew, availability, bulletins, and the access log live in the same collection. The crew roster is stored as a keyed map (`membersById` + `memberOrder`) and written with field-scoped updates so concurrent crew and availability edits don't overwrite one another.
+- **Backend** — Firebase Firestore (project `firehawk-scheduler`). Schedule documents are keyed `schedule_YYYY_M` (month is 0-indexed) and store the day map as a JSON string. Crew, availability, bulletins, the access log, and the training record (`training` doc, keyed by crew id with per-item signer stamps) live in the same collection; each crew member also carries a `trainingStatus` field (`grandfathered` / `in_training` / `qualified`) written only by the training page. The crew roster is stored as a keyed map (`membersById` + `memberOrder`) and written with field-scoped updates so concurrent crew and availability edits don't overwrite one another.
 - **Auth** — a Cloudflare Worker (`firehawk-auth`) verifies sign-in PINs against salted SHA-256 hashes held in Worker KV and returns the member's id and access tier. PIN hashes live only in the Worker, never in this repository.
 - **Weather / alerts** — a Cloudflare Worker (`firehawk-wx`) proxies Open-Meteo, the NWS API (`api.weather.gov`), and METAR, and exposes Red Flag, Flood, and Burn Ban status used by both tools.
 - **Hosting** — GitHub Pages, served from the repository root.
@@ -79,7 +90,8 @@ The footer and the in-app **What's New** panel show the **user-facing** version.
 - **v2.1** — **Part 107 currency advisory** on the Dashboard (amber inside 90 days, red inside 30, per-pilot days remaining), correctly sized desktop radar, and steadier traffic on a jittery GPS signal.
 - **v2.2** — **live TFR awareness**: Texas TFR scan every 10 minutes with an honest status line (clear / nearby / inside / unavailable), detail cards, and scope markers.
 - **v2.3** — **TFR boundary rendering**: the actual published polygon or circle paints on the scope when it reaches the 3NM window, and inside/outside is determined against the true boundary.
-- **v2.5** — **airspace overhaul**: the status card always shows the most restrictive condition — an active TFR at your position (red, NOTAM + end time) outranks everything including a LAANC grid, as does a National Security no-fly or surface Restricted area; high-floor special-use airspace no longer raises false alarms and flight-level floors read correctly; overlapping grids show the controlling (lowest) ceiling; data-source failures render CHECK INCOMPLETE instead of a false all-clear; special-use data comes directly from the FAA's published layer with an on-card provenance chip. An optional LAANC toggle on the traffic scope paints the FAA facility-map grid cells with their ceilings around your position; TFR geometry comes from the FAA's own GeoServer WFS. Weather is NWS-gridpoint-primary with model and observed-METAR fallbacks, and ground elevation for AGL is multi-sourced (cached per launch area, Open-Meteo, USGS). An owner-page diagnostics console live-tests every external data source. Decision logic is documented in `AIRSPACE_COMPLIANCE.md` (current release).
+- **v2.5** — **airspace overhaul**: the status card always shows the most restrictive condition — an active TFR at your position (red, NOTAM + end time) outranks everything including a LAANC grid, as does a National Security no-fly or surface Restricted area; high-floor special-use airspace no longer raises false alarms and flight-level floors read correctly; overlapping grids show the controlling (lowest) ceiling; data-source failures render CHECK INCOMPLETE instead of a false all-clear; special-use data comes directly from the FAA's published layer with an on-card provenance chip. An optional LAANC toggle on the traffic scope paints the FAA facility-map grid cells with their ceilings around your position; TFR geometry comes from the FAA's own GeoServer WFS. Weather is NWS-gridpoint-primary with model and observed-METAR fallbacks, and ground elevation for AGL is multi-sourced (cached per launch area, Open-Meteo, USGS). An owner-page diagnostics console live-tests every external data source. Decision logic is documented in `AIRSPACE_COMPLIANCE.md`.
+- **v2.6** — **Pilot Training** (`training.html`): the Appendix E onboarding checklist goes electronic with PIN-gated personal training folders, instructor-only sign-offs (owner-set Instructor toggle in crew management), crew-linked trainee records, owner-gated PM approval, and roster status chips; **My Shifts** auto-hides past dates and flags planned out-of-service windows on assigned aircraft; command board adds a day-level UPSTAFF section and an on-duty RPIC contact button (current release).
 
 ## Contact
 
