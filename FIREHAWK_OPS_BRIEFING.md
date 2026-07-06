@@ -251,7 +251,7 @@ print("Syntax:", "OK" if r.returncode == 0 else "FAIL:\n" + r.stderr)
 
 -----
 
-## Pilot Training System (added July 2026)
+## Pilot Training System (v2.6, July 2026)
 
 **File:** `training.html` — standalone single-file page, no React, plain JS + Firestore REST. Deployed alongside index.html at `/training.html`. Opened from the orange "Pilot Training" bar on the Dashboard (anchor `href="training.html"`, target `_blank`), placed directly below the Bulletin Board bar. Not in the Links tab.
 
@@ -266,7 +266,7 @@ print("Syntax:", "OK" if r.returncode == 0 else "FAIL:\n" + r.stderr)
 
 ### Auth & authority
 
-- Sign-in required to view anything: the page opens to a PIN gate. POST `firehawk-auth` Worker `/auth` with `{pin}` → `{ok, id}` → identity resolved from the live `firehawk/crew` doc (archived members rejected). Session is in-memory only.
+- Sign-in required to view anything: the page opens to a Restricted Access gate. **Shared session with index.html**: both pages use localStorage key `firehawk_dev_session` (crew id only — a PIN is never stored, matching the app's existing remember-login). Signed into the app = walks straight into training; PIN entry is the fallback; Sign Out on either page clears the shared session. POST `firehawk-auth` Worker `/auth` with `{pin}` → `{ok, id}` → identity resolved from the live `firehawk/crew` doc (archived members rejected). Session is in-memory only.
 - **Instructor model (July 2026):** only crew with `instructor: true` on their roster record can sign off, add trainees, or browse all records. Everyone else gets a read-only view of their own folder (`c<their id>`), or a "No Training Record Yet" card. Sign-off removal: original signer or owner.
 - Instructor seed: `INSTRUCTOR_IDS = [1, 3, 6]` (Sanchez, Bauchman, Rait) — seeded idempotently alongside the grandfather seed on owner sign-in; fills only unset flags. Rait stays archived, so his instructor flag is dormant until restored (archived members can't sign in).
 - Instructor designation is managed day-to-day via the Crew Mgmt **Instructor** pill (owner toggles; managers see it read-only). Field: `membersById.<id>.instructor` — carried in `memberShape`/`normalizeMember` (same preservation class as `trainingStatus`).
@@ -287,8 +287,8 @@ print("Syntax:", "OK" if r.returncode == 0 else "FAIL:\n" + r.stderr)
 ### index.html additions
 
 - `trainingChip(c)` in Crew Mgmt member rows — read-only chip: Grandfathered (blue) / In Training (amber) / Qualified (green). No chip when status is null.
-- Orange **Pilot Training** bar on the Dashboard, same geometry as the Bulletin Board bar (accent `C.accent`, custom aviator-wings SVG data-URI icon per PM direction; Bulletin Board bar uses 📋, Thermal Config dashboard row is `C.red`). No Links-tab entry — an earlier Links entry + `training` icon were added and then removed in the same session per PM direction.
-- v2.6 What's New: one user-facing line for the Dashboard Pilot Training bar (chip/roster mechanics excluded per changelog policy).
+- Orange **Pilot Training** bar on the Dashboard, same geometry as the Bulletin Board bar (accent `C.accent`, custom aviator-wings SVG data-URI icon (silver `%23C9D1D9`) per PM direction; Dashboard rows: Preflight WX `C.green`, Airspace `C.blue`; Bulletin Board bar uses 📋, Thermal Config dashboard row `C.red`). No Links-tab entry — an earlier Links entry + `training` icon were added and then removed in the same session per PM direction.
+- Shipped under **v2.6** (PM-set number; a brief v2.7 split was made and reverted in-session). What's New: one user-facing line for the Dashboard Pilot Training bar in the v2.6 entry alongside the My Shifts/OOS items (chip/roster mechanics excluded per changelog policy).
 - **Training status never touches role.** RPIC/VO stays manual — trainees serve as VOs during training; PM flips role after qualification.
 
 ### chief.html

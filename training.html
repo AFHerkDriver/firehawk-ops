@@ -231,6 +231,7 @@
   const COL        = "firehawk";     // production collection (same as index.html)
   const DOC        = "training";     // dedicated doc — does not touch schedule/crew/bulletins
   const POLL_MS    = 10000;
+  const SESSION_KEY = "firehawk_dev_session";   // shared with index.html remember-login (crew id only, never a PIN)
 
   // ── Firestore REST helpers (lifted verbatim from index.html — proven) ───
   function fromFSVal(v) {
@@ -405,6 +406,23 @@
   }
 
   // ── Auth ─────────────────────────────────────────────────────────────────
+  function sessionGet() { try { const v = localStorage.getItem(SESSION_KEY); return v ? Number(v) : null; } catch (e) { return null; } }
+  function sessionSet(id) { try { if (id == null) localStorage.removeItem(SESSION_KEY); else localStorage.setItem(SESSION_KEY, String(id)); } catch (e) {} }
+  function adoptMember(m) {
+    me = { id: m.id, name: m.name, label: crewLabel(m), tier: m.tier, instructor: !!m.instructor };
+    if (me.tier === "owner") seedDefaults();
+    if (!me.instructor) selTid = "c" + me.id;
+  }
+  // Restore the shared app session — signed into Firehawk Ops means signed in here.
+  async function restoreSession() {
+    const id = sessionGet();
+    if (id == null) return false;
+    if (!Object.keys(crewById).length) await loadCrew();
+    const m = crewById[String(id)];
+    if (!m || m.archived) { sessionSet(null); return false; }
+    adoptMember(m);
+    return true;
+  }
   async function doSignIn(pin) {
     let j = null;
     try {
@@ -416,9 +434,8 @@
     const m = crewById[String(j.id)];
     if (!m) return { ok: false, reason: "PIN valid but no crew record found" };
     if (m.archived) return { ok: false, reason: "Archived members cannot sign off training" };
-    me = { id: m.id, name: m.name, label: crewLabel(m), tier: m.tier, instructor: !!m.instructor };
-    if (me.tier === "owner") seedDefaults();
-    if (!me.instructor) selTid = "c" + me.id;   // trainees land on their own folder
+    adoptMember(m);
+    sessionSet(m.id);
     return { ok: true };
   }
   // One-time, idempotent: stamp the original pilots as grandfathered and seed the instructor list.
@@ -564,7 +581,7 @@
       document.getElementById("barFill").style.width = "0%";
       document.getElementById("statusLine").textContent = "Sign in to view training records";
       const f0 = document.getElementById("statusFlag"); f0.textContent = "Signed Out"; f0.className = "status-flag";
-      const card = gateCard("Pilot Training", "Enter your Firehawk Ops PIN to open your training folder. Instructors see all trainees; everyone else sees their own record.", true);
+      const card = gateCard("Restricted Access", "Pilot training records are limited to Firehawk crew. Sign in with your Firehawk Ops PIN to proceed \u2014 if you're already signed into the app on this device, you'll be let straight through.", true);
       const gb2 = card.querySelector("#gateSignIn") || document.getElementById("gateSignIn");
       if (gb2 && gb2.addEventListener) gb2.addEventListener("click", showPin);
       return;
@@ -677,7 +694,7 @@
   function hidePin() { document.getElementById("pinOverlay").classList.remove("show"); pendingItem = null; }
 
   document.getElementById("btnSignIn").addEventListener("click", () => {
-    if (me) { me = null; selTid = null; confirmDel = false; render(); } else showPin();
+    if (me) { me = null; selTid = null; confirmDel = false; sessionSet(null); render(); } else showPin();
   });
   document.getElementById("pinCancel").addEventListener("click", hidePin);
   document.getElementById("pinGo").addEventListener("click", async () => {
@@ -762,6 +779,8 @@
   // ── Boot ─────────────────────────────────────────────────────────────────
   (async () => {
     await Promise.all([loadCrew(), refresh(true)]);
+    await restoreSession();
+    render();
     setInterval(() => refresh(false), POLL_MS);
   })();
 })();
