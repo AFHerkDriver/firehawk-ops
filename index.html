@@ -3952,15 +3952,25 @@ const [showComms, setShowComms] = useState(false);
     const dLat = 3.5 / 60, dLon = dLat / Math.cos(posCoords.lat * Math.PI / 180);
     const env = (posCoords.lon - dLon) + "," + (posCoords.lat - dLat) + "," + (posCoords.lon + dLon) + "," + (posCoords.lat + dLat);
     const u = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?geometry=" + encodeURIComponent(env)
-      + "&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=true&outSR=4326&geometryPrecision=5&outFields=*&f=json";
+      + "&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=true&outSR=4326&geometryPrecision=5&outFields=*&resultRecordCount=500&f=json";
     fetch(u).then(r => r.json()).then(d => {
       if (!d || !Array.isArray(d.features)) return;   // display layer only — fail silent, card verdict unaffected
-      setGridCells(d.features.slice(0, 150).map(ft => {
+      // Facility maps OVERLAP (KSAT + KSKF grid the same squares) — dedupe by cell
+      // footprint and keep the MINIMUM (controlling) ceiling, same doctrine as the card.
+      const seen = {};
+      d.features.slice(0, 500).forEach(ft => {
         const at = ft.attributes || {};
         let ceil = null;
         for (const k in at) { if (/CEILING/i.test(k) && at[k] != null && isFinite(parseInt(at[k]))) { ceil = parseInt(at[k]); break; } }
-        return { ceiling: ceil, rings: (ft.geometry && ft.geometry.rings) || [] };
-      }));
+        const rings = (ft.geometry && ft.geometry.rings) || [];
+        if (!rings.length || !rings[0] || !rings[0].length) return;
+        const p0 = rings[0][0];
+        const key = p0[0].toFixed(4) + "," + p0[1].toFixed(4);
+        const prev = seen[key];
+        if (!prev) seen[key] = { ceiling: ceil, rings: rings };
+        else if (ceil != null && (prev.ceiling == null || ceil < prev.ceiling)) prev.ceiling = ceil;
+      });
+      setGridCells(Object.values(seen).slice(0, 250));
     }).catch(() => {});
   }, [gridOn, posCoords]);
 
