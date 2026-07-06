@@ -999,6 +999,7 @@
     const LOG = [
       { v:"2.6", date:"July 2026", items:[
         "My Shifts now shows only today and upcoming assignments \u2014 past dates drop off the list automatically, so what you see is always what's ahead.",
+        "Quick-Zoom on the traffic scope \u2014 tap 0.5NM for a close-in view of the immediate area; the button counts down and the scope returns to 3NM automatically after 20 seconds (tap again to return early).",
         "My Shifts also flags planned out-of-service windows on your assigned aircraft \u2014 an amber note under the shift shows the window and reason, and it carries into the calendar export."
       ]},
       { v:"2.5", date:"July 2026", items:[
@@ -3942,6 +3943,19 @@ const [showComms, setShowComms] = useState(false);
   const [gridOn, setGridOn] = useState(false);
   const [gridCells, setGridCells] = useState([]);
   const gridGate = useRef(null);
+  // Quick-Zoom — momentary 0.5NM close-in view of the immediate area, auto-returns to 3NM
+  const [scopeRange, setScopeRange] = useState(3);
+  const [zoomLeft, setZoomLeft] = useState(0);
+  const zoomTimer = useRef(null);
+  const toggleZoom = () => {
+    if (scopeRange !== 3) { clearInterval(zoomTimer.current); setScopeRange(3); setZoomLeft(0); return; }
+    setScopeRange(0.5); setZoomLeft(20);
+    clearInterval(zoomTimer.current);
+    zoomTimer.current = setInterval(() => {
+      setZoomLeft(z => { if (z <= 1) { clearInterval(zoomTimer.current); setScopeRange(3); return 0; } return z - 1; });
+    }, 1000);
+  };
+  useEffect(() => () => clearInterval(zoomTimer.current), []);
   useEffect(() => {
     if (!gridOn) { setGridCells([]); gridGate.current = null; return; }
     if (!posCoords) return;
@@ -4275,7 +4289,18 @@ const [showComms, setShowComms] = useState(false);
           border: gridOn ? "1px solid rgba(255,159,10,0.4)" : "1px solid rgba(255,255,255,0.08)",
           color: gridOn ? "#FF9F0A" : "#64748B"
         }
-      }, "LAANC")
+      }, "LAANC"),
+      /*#__PURE__*/React.createElement("button", {
+        key: "qzoom",
+        onClick: toggleZoom,
+        style: {
+          flex: 1, padding: "7px 0", borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
+          fontSize: 9, letterSpacing: 1, textAlign: "center",
+          background: scopeRange !== 3 ? "rgba(74,144,217,0.15)" : "rgba(255,255,255,0.04)",
+          border: scopeRange !== 3 ? "1px solid rgba(74,144,217,0.4)" : "1px solid rgba(255,255,255,0.08)",
+          color: scopeRange !== 3 ? "#4A90D9" : "#64748B"
+        }
+      }, scopeRange !== 3 ? ("3NM \u00b7 " + zoomLeft + "s") : "0.5NM")
     ),
 
     /* Heading readout — track-up only */
@@ -4309,9 +4334,9 @@ const [showComms, setShowComms] = useState(false);
           /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 155, r: 40,  fill: "none", stroke: "rgba(255,255,255,0.05)", strokeWidth: 1 }),
           /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 155, r: 80,  fill: "none", stroke: "rgba(255,255,255,0.05)", strokeWidth: 1 }),
           /*#__PURE__*/React.createElement("circle", { cx: 160, cy: 155, r: 120, fill: "none", stroke: "rgba(255,255,255,0.08)", strokeWidth: 1 }),
-          /*#__PURE__*/React.createElement("text", { x: 163, y: 119, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, "1NM"),
-          /*#__PURE__*/React.createElement("text", { x: 163, y:  79, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, "2NM"),
-          /*#__PURE__*/React.createElement("text", { x: 163, y:  39, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, "3NM"),
+          scopeRange === 3 && /*#__PURE__*/React.createElement("text", { x: 163, y: 119, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, "1NM"),
+          scopeRange === 3 && /*#__PURE__*/React.createElement("text", { x: 163, y:  79, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, "2NM"),
+          /*#__PURE__*/React.createElement("text", { x: 163, y:  39, fill: "rgba(255,255,255,0.13)", fontSize: 7, fontFamily: "monospace" }, scopeRange === 3 ? "3NM" : "0.5NM"),
 
           ...Array.from({length: 12}, function(_, i) {
             var deg = i * 30;
@@ -4347,7 +4372,7 @@ const [showComms, setShowComms] = useState(false);
                 var proj = function(la, lo) {
                   var d = distNm(posCoords.lat, posCoords.lon, la, lo);
                   var bb = (bearingTo(posCoords.lat, posCoords.lon, la, lo) - 90) * Math.PI / 180;
-                  var r = (d / 3) * 120;
+                  var r = (d / scopeRange) * 120;
                   return [160 + r * Math.cos(bb), 155 + r * Math.sin(bb)];
                 };
                 var ring = cell.rings[0];
@@ -4372,12 +4397,12 @@ const [showComms, setShowComms] = useState(false);
               var proj = function(la, lo) {
                 var d = distNm(posCoords.lat, posCoords.lon, la, lo);
                 var bb = (bearingTo(posCoords.lat, posCoords.lon, la, lo) - 90) * Math.PI / 180;
-                var r = (d / 3) * 120;
+                var r = (d / scopeRange) * 120;
                 return [160 + r * Math.cos(bb), 155 + r * Math.sin(bb)];
               };
               return /*#__PURE__*/React.createElement("g", { key: "tfrshape" + t.notam, clipPath: "url(#fhScopeClip)" },
                 t.shapes.map(function(s, si) {
-                  if (s.kind === "circle") { var c = proj(s.clat, s.clon); return /*#__PURE__*/React.createElement("circle", { key: si, cx: c[0], cy: c[1], r: (s.radNm / 3) * 120, fill: fill, stroke: col, strokeWidth: 1.5 }); }
+                  if (s.kind === "circle") { var c = proj(s.clat, s.clon); return /*#__PURE__*/React.createElement("circle", { key: si, cx: c[0], cy: c[1], r: (s.radNm / scopeRange) * 120, fill: fill, stroke: col, strokeWidth: 1.5 }); }
                   var pstr = s.pts.map(function(p) { var q = proj(p[0], p[1]); return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" ");
                   return /*#__PURE__*/React.createElement("polygon", { key: si, points: pstr, fill: fill, stroke: col, strokeWidth: 1.5 });
                 }));
@@ -4386,7 +4411,8 @@ const [showComms, setShowComms] = useState(false);
             adsbTraffic.map(function(ac) {
             var color = effAlt(ac) <= CONFLICT_AGL ? "#FF3B30" : effAlt(ac) <= NEARBY_AGL ? "#FF9F0A" : "#34C759";
             var rad = (ac.brg - 90) * Math.PI / 180;
-            var r = (ac.dist / 3) * 120;
+            if (ac.dist > scopeRange * 1.05) return null;
+            var r = (ac.dist / scopeRange) * 120;
             var x = 160 + r * Math.cos(rad); var y = 155 + r * Math.sin(rad);
             return /*#__PURE__*/React.createElement("g", { key: ac.call, transform: "translate(" + x + "," + y + ") rotate(" + ac.hdg + ")" },
               /*#__PURE__*/React.createElement("polygon", { points: "0,-7 -4,6 0,3 4,6", fill: color })
@@ -4395,7 +4421,8 @@ const [showComms, setShowComms] = useState(false);
           adsbTraffic.map(function(ac) {
             var color = effAlt(ac) <= CONFLICT_AGL ? "#FF3B30" : effAlt(ac) <= NEARBY_AGL ? "#FF9F0A" : "#34C759";
             var rad = (ac.brg - 90) * Math.PI / 180;
-            var r = (ac.dist / 3) * 120;
+            if (ac.dist > scopeRange * 1.05) return null;
+            var r = (ac.dist / scopeRange) * 120;
             var x = 160 + r * Math.cos(rad); var y = 155 + r * Math.sin(rad);
             return /*#__PURE__*/React.createElement("g", { key: ac.call + "_lbl" },
               /*#__PURE__*/React.createElement("text", { x: x + 8, y: y - 2, fill: color, fontSize: 9, fontFamily: "monospace" }, ac.call),
@@ -4405,7 +4432,7 @@ const [showComms, setShowComms] = useState(false);
           tfrs.slice(0, 3).map(function(t) {
             var col = t.inside ? "#FF3B30" : "#FF9F0A";
             var rad = (t.brg - 90) * Math.PI / 180;
-            var r = (Math.min(t.dist, 3.05) / 3) * 120;
+            var r = (Math.min(t.dist, scopeRange * 1.017) / scopeRange) * 120;
             var x = 160 + r * Math.cos(rad); var y = 155 + r * Math.sin(rad);
             return /*#__PURE__*/React.createElement("g", { key: "tfr" + t.notam },
               /*#__PURE__*/React.createElement("polygon", { points: (x) + "," + (y - 6) + " " + (x + 5) + "," + (y) + " " + (x) + "," + (y + 6) + " " + (x - 5) + "," + (y), fill: "none", stroke: col, strokeWidth: 1.5 }),
