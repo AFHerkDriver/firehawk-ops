@@ -1,129 +1,302 @@
-# Firehawk Ops — Handoff Briefing
-**Current live build: v2.5 — FINAL, closed Jul 3 2026.** One consolidated release covering the full airspace audit (most-restrictive ladder, fail-loud, TFR Layer 0 via FAA GeoServer WFS, FAA-provenance SUA + corrected NSR layers), AGL traffic with multi-source elevation, NWS-primary weather with OM aloft-enrichment and METAR backstop, GPS priming, LAANC scope overlay, currency advisory, YTD stats, Finalized/Draft states, and the owner diagnostics console. Open items carried forward: crew PWA re-add campaign (Bulletin posted?), Open-Meteo range penalty ages out on its own, Class-airspace floor-aware filtering parked. Upload this + `index.html` (and `chief.html` if touching the command board) to a fresh chat to resume.
+# Firehawk Ops — Developer Briefing Document
 
-> This brief replaces the older "Firehawk Ops v2 / ops.html rebuild" handoff. That rebuild is **done** — it cut over and *is* the production `index.html` now (`DEV_COL = "firehawk"`, cutover complete). There is no separate dev file. Disregard any prior brief that talks about `ops.html`, `firehawk_dev`, or a pending swap.
+**BC2FD Firehawk UAS Program — `index.html` Reference**
+Last updated: July 2026 (training system integration)
 
----
+-----
 
-## What this is
-Aaron Sanchez (UAS Program Manager, BC2FD, badge 2118) runs the Fire Hawk UAS scheduling/ops platform: two single-file web apps deployed to GitHub Pages, backed by Firebase Firestore and two Cloudflare Workers. No build step.
+## CRITICAL RULES — READ BEFORE TOUCHING ANYTHING
 
-| Tool | File | URL | Audience |
-|------|------|-----|----------|
-| Fire Hawk Ops (crew) | `index.html` | afherkdriver.github.io/firehawk-ops/ | UAS crew (PIN sign-in) |
-| Daily Status Board | `chief.html` | afherkdriver.github.io/firehawk-ops/chief.html | Battalion Chiefs / command (read-only) |
-| Legacy build | `legacy.html` | (in repo, reference/rollback only) | — |
+1. **Never edit `index.html` structurally without a syntax check.** After every change, extract the `<script>` block and run `node --check` on it. Silent render failures are the #1 cause of broken pages.
+1. **This is compiled output — not source JSX.** All code is `React.createElement(...)` calls, not JSX syntax. Do not introduce JSX angle-bracket syntax.
+1. **Paren balance is critical.** Every `React.createElement(` must have a matching `)`. Off-by-one parens cause silent blank renders with no error.
+1. **Make surgical edits only.** Use Python string replacement on exact text matches. Never rewrite large blocks unless absolutely necessary. If you must rewrite a full function, write it to a temp file, run `node --check`, then splice it in.
+1. **Always verify the match count before replacing.** `assert old_text in html` before every replace. If not found, stop and investigate — do not guess at alternate text.
+1. **ops.html is a separate file — ignore it** unless explicitly asked to edit it.
 
-Repo: `AFHerkDriver/firehawk-ops`, served from root.
+-----
 
----
+## File Overview
 
-## Architecture (settled — don't relitigate without cause)
-- **One self-contained file per tool.** React via UMD CDN, `React.createElement` aliased `h`, **no JSX, no Babel, no build step.** Rationale: trivial to re-upload to resume a chat; Claude edits surgically (grep → `str_replace`) so a large single file stays maintainable.
-- **Frontend:** `index.html` ≈ 6,068 lines, `chief.html` ≈ 524 lines. Fonts: DM Mono, Bebas Neue.
-- **Backend:** Firebase Firestore, project `firehawk-scheduler`, collection **`firehawk`** (this is `DEV_COL`, now pointed at production). Helpers: `fsGet/fsSet/fsListen(col, doc)`, `fsGetPath/fsSetPath(docPath)`. The public Firestore web key in source is client-side and protected by security rules — no secrets/PINs in the repo.
-- **Auth:** Cloudflare Worker `firehawk-auth` verifies PINs against salted SHA-256 hashes in Worker KV; returns member id + tier. Hashes live only in the Worker.
-- **Weather/alerts:** Cloudflare Worker `firehawk-wx` (`https://firehawk-wx.usafsentinel-45e.workers.dev`) — `/burnban` (TFS, hourly), `/redflag` (NWS, 30 min), flood via `/?url=` proxy to api.weather.gov for TXZ205/TXC029 (30 min). All fail-silent. **Not reachable from the Claude sandbox** — verify banners on-device.
-- **Hosting:** GitHub Pages from repo root.
+- **File:** `index.html` — single-file React app, no build step required
+- **Deployed at:** `https://afherkdriver.github.io/firehawk-ops/`
+- **Companion file:** `chief.html` — read-only Battalion Chief view (separate file, same Firebase backend)
+- **Runtime:** React via UMD CDN, plain `React.createElement` (aliased `h`) — no JSX, no Babel, no build step
+- **Second companion file:** `training.html` — "Pilot Training" — crew onboarding checklist with trainer sign-offs (separate file, same Firebase backend + auth Worker)
 
----
+-----
 
-## Data model (the part that bites if you forget it)
-**Crew** — stored in Firestore doc `crew` as a keyed map `membersById` + explicit `memberOrder`. Written with **field-scoped updates** so concurrent crew/availability edits don't overwrite each other. App works with the array form (`crew`), members have: `id` (numeric), `name`, `first`, `rank`, `title`, `role` (RPIC/VO), `tier` (owner/admin/staff), `initials`, `color`, `part107`, `archived`. `isActive = c => !c.archived` (reserve concept removed; field vestigial). `LEAD_PILOT_ID = 1` = Sanchez = UAV121.
+## Architecture
 
-**Schedule** — one doc per month: `firehawk/schedule_{YYYY}_{M}` (**M is 0-indexed**). Stored as `{ days }` (object keyed by day-of-month) or a `daysJson` string; `fsGetPath` normalizes both.
+### Firebase (Firestore REST API)
 
-**Two-unit day model** — each day decodes via `decodeDay(day, crew)` → `{ u121:{active,vo}, u124:{rpic,vo}, upstaff:[] }` plus `day.confirmed` (finalized flag):
-- **UAV121** (lead unit): `u121.active` means Sanchez/`LEAD_PILOT_ID` flies it as RPIC; `u121.vo` is the observer.
-- **UAV124** (primary): `u124.rpic` + `u124.vo`.
-- **Upstaff**: day-level extra/training crew, independent of a second aircraft.
-- `encodeDay(u121,u124,upstaff)` writes the stored shape `{rpic, vo, vo2, lead, extra}`. `decodeDay` also reads a **legacy format** (no `lead` field — infers UAV121 from `rpic === LEAD_PILOT_ID`), so historical months still parse.
+- **Project:** `firehawk-scheduler`
+- **Functions:** `fsGet(collection, doc)`, `fsSet(collection, doc, data)`, `fsListen(collection, doc, callback)`
+- **Collections used:**
+  - `firehawk / schedule` — monthly schedule data keyed by `YYYY_M_D`
+  - `firehawk / crew` — crew roster
+  - `firehawk / bulletins` — bulletin board posts
+  - `firehawk / access_log` — manager login history (last 50 entries)
+- **`USE_JSON_STRING = true`** — all data serialized as JSON string in a single Firestore field
 
-**Availability** — Firestore doc `availability` (field-scoped, month-keyed) + `availability_locks` doc. **Locked by default**; owner/admin unlock a month via the Lock/Unlock button so crew can input. Access log in doc `access_log` (owner-only, capped, full name + fire rank).
+### Cloudflare Worker
 
-**Shift rotation** (module scope): `ANCHOR_DATE = Date.UTC(2026,0,1)`, `SHIFT_PATTERN = ["A","A","B","B","C","C"]`, `getShift(y,m,d)`, `todayShift()` (shift flips at 0700). `SHIFT_COLORS` A=red, B=blue, C=green.
+- Proxies NWS weather alerts (burn ban, Red Flag Warning) with KV caching
+- Referenced in `FirehawkOps` useEffect for `burnBan` and `redFlag` state
 
-**Theme `C`** (top of script): bg `#0D1117`, panel `#161B22`, panel2 `#1C2230`, border `#30363D`, text `#E6EDF3`, dim `#8B949E`, accent `#FF6B35` (Aaron reads as "red"/bad), blue `#3B82F6`, green `#34C759`, amber `#FFC107`, red `#FF3B30`.
+-----
 
----
+## Top-Level Constants (module scope, defined before any function)
 
-## App layout (`index.html`)
-- **Top nav:** Dashboard · Schedule · Links.
-- **Dashboard** nav-rows: 🌤️ Preflight WX · ✈️ Airspace · 🌡️ Thermal Config · 🔦 SAR Operations (each opens a modal). Plus Bulletins.
-- **Schedule** sub-tabs: **Calendar** (read-only for signed-out/staff; manager grid + auto-propose for owner/admin) · **Crew** (owner/admin only) or **My Shifts** (staff) · **Availability**. The sub-tab row is hidden when signed out.
-- **Sign-in:** PIN-based, tiers **owner / admin / staff**. Sanchez = owner, Bauchman = admin (both show ADMIN pill). Archived members locked out of sign-in.
-- **Footer:** version + collapsible **What's New** (user-facing changelog only).
-- **`chief.html`:** read-only, no sign-in. Today's date/shift, 7-day coverage strip, crew on duty grouped by UAV121/UAV124 (same two-unit model), per-unit OOS windows, live weather banners. Auto-refresh every 5 min.
+```
+FS_PROJECT, FS_API_KEY, FS_BASE, USE_JSON_STRING
+CREW_DEFAULT          — default crew array with id/name/role/color/initials
+LEAD_PILOT_ID = 1     — Aaron Sanchez; always UAV121
+UNIT_LEAD = "UAV121"
+UNIT_PRIMARY = "UAV124"
+LOGO_B64              — base64 encoded logo
+STATUS_STYLE          — shared style object
+PIN = "241408"        — legacy, kept for back-compat
+MANAGER_PINS          — { "241408": {name, admin:true}, "0336": {name, admin:false} }
+                        241408 = Aaron Sanchez (Program Manager, full admin)
+                        0336   = Ryan Bauchman (Program Coordinator, manager but not admin)
+CREW_MEMBERS          — production crew list
+HISTORY               — static historical schedule data (keyed "YYYY_M_D")
+SHIFT_COLORS          — A/B/C shift color definitions
+SHIFT_PATTERN         — rotating shift array
+ANCHOR_DATE           — shift rotation anchor
+MONTHS, DAYS          — display label arrays
+NIFOG_GROUPS          — national interop frequency data (VFIRE/VTAC/VMED/VLAW/SAR)
+MISSIONS              — 12 mission type objects for ThermalModal
+PALETTES              — 4 thermal palette objects (White Hot, Black Hot, Iron Bow, Rainbow)
+```
 
----
+-----
 
-## Version history (user-facing)
-The footer/What's New show the **user-facing** version; behind-the-scenes reliability work ships between releases without its own number, so the visible sequence stays continuous for crew.
+## Component Tree
 
-- **v1.0** — go-live: production crew app + redesigned command board, shield branding/favicon, fire-rank access log, What's New panel.
-- **v1.1** — Class E reads clear-to-fly (no auth for standard Part 107 to 400 ft AGL).
-- **v1.2** — installable home-screen PWA with the Fire Hawk badge icon.
-- **v1.3–v1.4** — Availability calendar: reliable concurrent saving (field-scoped writes); months locked until the program opens them.
-- **v1.5** — personal **My Shifts** view; add shifts to phone calendar (ICS).
-- **v1.6** — **YTD Stats.** Button under the calendar opens a full-screen, legacy-styled stats page: one count per person of **finalized** days worked this calendar year (UAV121 + UAV124 collapsed, upstaff counts, one tally per person per day), a Total Crew-Days / Active Crew summary, per-person bar vs. the busiest crew, and a Jan–Dec mini-bar. Visible to all signed-in crew (no secrets). Button sits in MANAGER CONTROLS next to Lock/Unlock for owner/admin; under the calendar (no lock button) for staff. Component `YtdStatsModal`; lazy-fetches 12 months of `schedule_{year}_{m}` on open.
-- **v1.7 (current)** — **Finalized / Draft day states.** A day reads **Finalized** (green) or **Draft** (amber) everywhere — legend, day card (manager toggle now "✓ Finalized / ● Draft" instead of ON/OFF, and read-only status). **Auto-draft on edit:** changing crew or an OOS window on a finalized day re-opens it as Draft (via the single `editDay` mutation point — `confirmed`-bearing patches, i.e. the finalize toggle and bulk Finalize/Unfinalize, are exempt). Footer shows a **status dot**: green when every crewed day is finalized, amber while any day is Draft. Single-day finalize is the existing day-card toggle. Month-level Finalize/Unfinalize unchanged (bulk-sets per-day `confirmed`; no separate month flag exists).
-- **v1.8** — **Smoother ADS-B tracker.** Airspace 3NM traffic polls airplanes.live every 5s (was 10s) and **interpolates between polls** on a 500ms tick — each blip is dead-reckoned forward from its last real fix using ground speed + track, then range/bearing recomputed to the operator, so blips glide instead of jumping (zero extra API load; re-syncs every poll). Also fixed a **latent crash**: the conflict/inbound audio refs (`prevConflictIds`, `inboundTimer`) were used but never declared, so alert tones threw and were swallowed on any real low-altitude contact — now declared properly. New helper `projectAircraft(b, nowMs)`; raw `lat/lon/gs/track/t0` kept in an `adsbBase` ref.
-- **v1.9** — **Tail number + type in traffic list.** Each traffic row shows raw **tail · type** (`r` = registration, `t` = ICAO type code from the feed), hidden when the feed omits both (anonymized/PIA/some military). List-only; not on the scope blips. Poll bumped **5s → 3s** for smoother movement (still inside airplanes.live's 1 req/sec limit; 3s is the most aggressive rate run to date — watch for `429`).
-- **v2.0** — **AGL traffic altitudes.** On GPS lock the app fetches ground elevation at the operator (Open-Meteo `/v1/elevation`, ft = m×3.28084, `groundElevFt` state + `groundElevRef`); `projectAircraft` adds `agl`, `effAlt(ac)=agl??alt`. Thresholds `CONFLICT_AGL=500`, `NEARBY_AGL=1000`; SFC-1k/5k/10k filter, blip colors/labels, row display (AGL big + MSL sub), conflict/inbound alerts all keyed to AGL; clean MSL-only fallback when elevation fetch fails (header shows which mode). AGL is relative to ground *under the operator*, not under the aircraft.
-- **v2.1** — **Scrub-fix batch + currency advisory.** Fixed: GPS-jitter thrash (`posGateRef` ~20 m gate before `setPosCoords` — jitter was tearing down the ADS-B effects and polling at GPS rate), stale `altMax` closure (fetch effect deps now `[posCoords, altMax]`), iOS-silent alert tones (WebAudio primed on first touch/pointer), out-of-order poll overwrites (`fetchSeq` guard). Dashboard **Part 107 currency banner**: red <30 d (incl. expired), amber 30–90 d, per-pilot days, worst-tier coloring. Desktop radar capped `maxWidth:420` centered. **chief.html**: removed legacy `HISTORY` force-confirm override (board must mirror scheduler truth) and renamed badges to ✓ FINALIZED / DRAFT.
-- **v2.2** — **Live TFR awareness.** FAA ArcGIS has **no live TFR layer** — live TFRs come from tfr.faa.gov, fetched through the `firehawk-wx` `/?url=` proxy (CORS). **Post-ship fix:** `tfr2/list.html` was deprecated (redirects to a dataless JS shell) — list source is now the JSON API `tfrapi/exportTfrList` (fields `notam_id/type/state`, TX-filtered, cache-busted; legacy scrape kept as fallback), shape XMLs still at `save_pages/detail_X_XXXX.xml` (verified live static store). All fetches have AbortController timeouts (12 s list / 8 s detail), details run in parallel, and if the list shows TX TFRs but zero detail XMLs are reachable the status reads **UNAVAILABLE** — never a false all-clear. Cap 8, 10-min refresh + on GPS lock, expired dropped, upcoming kept. Status line above scope, detail cards (NOTAM, type, brg, dist-to-edge, end time CT), diamond markers clamped at ring edge. ⚠ If the worker allowlists domains, add `tfr.faa.gov` or status shows UNAVAILABLE.
-- **v2.3 (current)** — **True TFR boundaries.** Per-shape parsing (polys per `abdMergedArea` `geoLat/geoLong`; circles per `geoLatCen/geoLongCen` + `valRadiusArc`), shapes rendered on the scope (SVG `clipPath` `fhScopeClip` at the 3 NM ring, inside the track-up rotated group, beneath blips) when the boundary reaches ~3.2 NM; ray-cast point-in-polygon / circle radius test now decides **inside**, centroid-circle only as fallback.
-- **v2.5 (current) — consolidated airspace release.** Internal sequence 2.4→2.6 collapsed to one user-facing number at Aaron's direction (**policy: one release number per deploy session; Aaron sets the final number before deploy**). Components:
-  - **SUA floor-relevance filter.** MOA/Restricted/Warning polygons only surface if their floor is reachable by a Part 107 op (`floorAGL(...) <= 3000`, AMSL converted via `groundElevRef`, unknown floors treated as SFC). Fixed the false alarm where a 14,000 MSL MOA showed as an actionable caution.
-  - **Airspace audit (ladder + fail-loud).** Findings fixed: (1) *priority inversion* — LAANC grid used to short-circuit BEFORE the National Security check; ladder is now most-restrictive-first (NSR → P/R SUA → LAANC → advisory SUA → Class → clear); (2) *false all-clear on failure* — `safeFetch` now marks failures/`{error}` payloads `__failed`; all-fail → status `"incomplete"` (red CHECK INCOMPLETE card, verify via B4UFLY); partial-fail → warning line, and green Class G requires all 4 sources to have answered; (3) overlapping LAANC grids show the **minimum** (controlling) ceiling; (4) advisory SUA over a grid rides the LAANC card as `suaNote` instead of vanishing.
-  - **LAANC grid overlay (display-only).** `gridOn` toggle (default OFF) beside North-Up/Track-Up; envelope query (±3.5 NM) of `FAA_UAS_FacilityMap_Data` with `returnGeometry`, rate-gated (0.01° move / 5-min floor per the GPS-rate rule), cells rendered beneath TFR shapes + blips, clipped at the ring, ceiling number per cell (0=red, ≤100 amber, else blue). Fail-silent; never affects the card verdict. Also Title-Case label pass: 'Launch Ground', 'Ground Elev Unavailable', '(MODEL UNAVAILABLE)'.
-  - **Named failure diagnostics (post-deploy fix).** Partial warnings name the failed source(s) (`partialNames`); `laancDown` flips class-card wording to LAANC UNKNOWN (never assert NO GRID when the grid source is down); TFR status splits `list-unreachable` vs `shapes-unreachable:N`. Removed the exportTfrList `?_=` cache-buster (delta vs the user's working manual worker test). FAA SUA query now `outFields=*` — the earlier named field list was asserted from a web_fetch that had only returned a page title (**lesson: never claim schema verification without seeing fields**). RESOLVED: the worker answers the app/browser fine (origin filtering rejects non-browser fetchers only); worker code never needed changes all day — fully exonerated.
-  - **Diagnostics findings + SECURITY layer fix (Jul 2026).** In-app source diagnostics (RUN SOURCE DIAGNOSTICS, Airspace/Status) found: (1) the NSR service `NationalSecurityUAS_FlightRestrictions` NEVER EXISTED on FAA's server (ArcGIS “Invalid URL”) — replaced with merged `DoD_Mar_13` (full-time §99.7) + `Part_Time_National_Security_UAS_Flight_Restrictions` via `fetchNSR()`, tolerant NAME field reads; (2) `save_pages/detail_*.xml` 404s for LIVE NOTAMs — diag now probes 4 candidate shape endpoints (save_pages×2, `tfrapi/getTfrDetail`, `tfrapi/exportTfrDetail`) with a GEO-sniff; wire the winner once the user's next diag screenshot identifies it. Worker exonerated (proxy answered the device fine; external 400 was origin filtering). ArcGIS queries now direct→worker-proxy fallback (`safeFetch`+`AGP`). Live validation: N70LC PA-18 at 457 AGL correctly tripped the red conflict advisory.
-  - **NWS promoted to PRIMARY weather source (Jul 2026, user-approved).** Chain is now: **NWS gridpoint at exact GPS** (no banner — it's the norm) → OM direct → OM proxy (banner: OPEN-METEO MODEL — NWS gridpoint unavailable) → METAR observed. `wxPrimary` tracks the serving source; when it's `nws`, a **background fire-and-forget OM fetch** (direct→proxy, 6 s each) upgrades `windAloft3k` via `setWx(prev…)` for true 80 m winds-aloft — never blocks the GO card. Header subtitle now says NWS Gridpoint. Windy: no free data API (paid point-forecast product) — link-out only, cannot substitute for 80 m wind. ⚠ Splice lesson: a reassembled catch-chain lost one closing brace (caught by node --check before deploy; a broken intermediate briefly hit outputs and was replaced) — brace-audit assembled regions.
-  - **NWS gridpoint forecast leg (Jul 2026).** Preflight WX chain is now OM direct → OM via worker → **NWS gridpoint hourly at the operator's exact GPS** (`api.weather.gov/points/{lat},{lon}` → `forecastHourly` periods[0]; direct-then-proxy per call, 7 s timeouts) → METAR observed. NWS mapping: temp F direct; dewpoint C→F; windSpeed string parsed (“5 to 15 mph” → 5 + gust 15); cardinal→degrees map; shortForecast → weather_code (/thunder/→95 first) + cloud % + fog→vis 2SM; pressure_msl null (altim defaults 29.92 std). Banner: `NWS FORECAST — GPS GRID {gridId} {x,y}`. Quad-source error names all four legs. Diag row: NWS GRIDPOINT · GPS WX.
-  - **GPS priming banner + suspension-aware diagnostics (Jul 2026).** Root cause of the second “OM timeout”: the iOS geolocation permission modal SUSPENDS the page — in-flight diag probes freeze and lose their timeout race on resume (not an Open-Meteo block). Fixes: (1) Dashboard banner (in `DashboardView` — NOT App; the harness caught a ReferenceError white-screen from wrong scope before deploy) requests location on a user tap with states ask/asking/denied/unsupported/ok, `localStorage fh_gps_primed`, denied-state shows the iOS Settings path; (2) diag probes flag `timeout` with wall-clock >20 s as “interrupted — app was suspended mid-check · re-run”.
-  - **Elevation made Open-Meteo-proof (Jul 2026).** OM timed out again same-day (green 16:36 → dead 18:34; their peak shedding / lingering IP-range blocks — NOT re-triggered by the diag panel, which sends 2 req/tap). AGL ground elevation now chains: `localStorage` cache `fh_elev_cache` (hit within 0.005°) → OM direct → OM via worker → **USGS EPQS** (`epqs.nationalmap.gov/v1/json?x=&y=&units=Feet`, value field, reject <−1000 sentinel) → EPQS via worker; successful fetch writes the cache, so a launch area needs the network exactly once, ever. Owner diag: OM rows now dual-leg (`probe2` — reports direct + worker legs separately) + new USGS EPQS row.
-  - **Diagnostics migrated to the owner page + WFS layer ranking (Jul 2026).** Airspace-local diag REMOVED; full-suite `SourceDiagnostics` component (module scope, owner-gated) mounts below `AccessLogPanel` — 18 probes covering Firestore, auth worker, wx worker (/burnban, /redflag, NWS proxy), all 6 ArcGIS layers, TFR list + WFS shapes, airplanes.live, Open-Meteo ×2, what3words, METAR proxy; fixed district ref point 29.591/-98.600, ALL SOURCES OK / N FAILING summary with timestamp. **Critical WFS fix:** the GeoServer workspace prefixes every layer `TFR:` (live layers: airport, boundary, navaid), so /tfr/i matched `TFR:airport` first — layer selection now ranks (`bound` > `notam|:tfr$` > other > airport/navaid last) and only accepts a candidate that returns polygonal features (or is empty but boundary-named); `tfrCandidates` ref caches the ranking. Shapes layer = `TFR:boundary`.
-  - **TFR shapes via GeoServer WFS (final fix, Jul 2026).** In-app bundle-reading diagnostics extracted the tfr3 map's real endpoints from the FAA's own JS: `geoserver/TFR/ows` (WFS). Pipeline: list (`exportTfrList`) for TX count/labels + WFS 1.0.0 GetFeature (`outputFormat=application/json`, bbox ±0.4° lon,lat order, maxFeatures=60) for geometry; `tfrTypeName` self-discovered from GetCapabilities per session (`<Name>` regex, prefers /tfr/i). GeoJSON coords are [lon,lat] → flipped to [lat,lon]; NOTAM id best-effort from properties regex `\d/\d{3,5}` joined to list for type; WFS failure with a non-empty list → `shapes-unreachable:N` (never a fake clear). save_pages is dead — do not resurrect. Diag rows: TFR WFS CAPABILITIES (lists live layer names) + GETFEATURE.
-  - **TFR as Layer 0 + FAA provenance.** Render-time derive (`insideTfr`/`dispData`/`dispStatus`, all card reads renamed to `disp*` — state decls unchanged): standing inside an active TFR overrides EVERY verdict with a red `TFR {notam} — FLIGHT PROHIBITED` card (NOTAM + end time CT). SUA source migrated to the FAA AIS `Special_Use_Airspace` layer (schema: `TYPE_CODE/LOWER_DESC/LOWER_VAL/UOM/CODE/TIMESOFUSE/CONT_AGENT`, verified live, data-edit May 2026) with `fetchSUA()` falling back to the TAMU NASR mirror only on failure; `normSua()` normalizes both schemas; cards carry a `SRC · FAA-AIS|TAMU-NASR|tfr.faa.gov` provenance chip. `floorAGL` now handles flight levels (`FL180` → 18,000 MSL). Compliance doc `AIRSPACE_COMPLIANCE.md` lives in the repo root — **any change to sources/ladder/thresholds/failure semantics must update it in the same commit.**
+```
+FirehawkOps()                  — main app, manages all top-level state
+  ├── SchedulerPanel()         — handles all tab content except dashboard modals
+  │     ├── AutoFillTab()      — autofill scheduling logic
+  │     └── CrewAvatar()       — crew member avatar display
+  ├── LoginHistoryPanel()      — admin-only, shown in Crew Mgmt tab
+  ├── NIFOGPanel()             — collapsible interop frequency reference
+  ├── WeatherModal()           — weather overlay modal
+  ├── ThermalModal()           — thermal config modal (see section below)
+  ├── AirspaceModal()          — airspace status modal (LAANC, ADS-B, NIFOG)
+  └── SARModal()               — SAR search pattern reference modal
+```
 
----
+-----
 
-## Validation workflow (non-negotiable, every change)
-1. Extract the last `<script>` and `node --check` it:
-   `python3 -c "import re; open('_c.js','w').write(re.findall(r'<script>(.*?)</script>', open('index.html').read(), re.S)[-1])" && node --check _c.js && rm -f _c.js`
-2. **Bump `APP_VERSION`** only on user-facing change (footer renders it); add a What's New line. Copy-only/internal fixes don't bump.
-3. Surgical edits: `str_replace` on unique anchors; assert replacement count == 1. Multi-occurrence → python global replace with count asserts.
-4. Unit-test pure logic in node before presenting (e.g. the YTD tally was tested against explicit + legacy day formats incl. dedup).
-5. **Headless render smoke (mandatory since Jul 2026):** `node --check` is necessary but NOT sufficient — it misses runtime crashes. Claude now also executes the bundle via `render_smoke.js` (jsdom + npm react@18.3.1/react-dom, realm-bridged `global.window`, all-fail fetch stub, geolocation stub): a passing run = root innerHTML >500 chars and zero captured errors. Rebuild the harness in a fresh sandbox with `npm i react@18.3.1 react-dom@18.3.1 jsdom`. iOS-specific layout/inputs still need on-device confirmation.
-6. **Deploy verification (mandatory):** after every GitHub-mobile push, check the file page shows the expected size (~680 KB, 6,500+ lines), NOT 0 bytes — a failed mobile upload once committed git's empty blob (`e69de29b`) and white-screened the site with perfectly good code. Claude can verify post-deploy via `raw.githubusercontent.com` + the GitHub contents API (`size` field) from the sandbox.
-7. Aaron deploys himself. Claude produces complete, validated files and `present_files` them.
+## FirehawkOps — Key State Variables
 
-Working files: `/home/claude/firehawk_extract/`. Outputs: `/mnt/user-data/outputs/`.
+|State         |Purpose                                                            |
+|--------------|-------------------------------------------------------------------|
+|`tab`         |Active tab: `"dashboard"` (default)                                |
+|`isManager`   |True after correct PIN entry                                       |
+|`isAdmin`     |True only for PIN 241408 (Aaron). Controls login history visibility|
+|`showPin`     |PIN entry modal visibility                                         |
+|`showThermal` |ThermalModal visibility                                            |
+|`showAirspace`|AirspaceModal visibility                                           |
+|`showWeather` |WeatherModal visibility                                            |
+|`showSAR`     |SARModal visibility                                                |
+|`burnBan`     |Burn ban alert from Cloudflare worker                              |
+|`redFlag`     |Red Flag Warning from Cloudflare worker                            |
+|`crew`        |Live crew roster from Firebase                                     |
+|`bulletins`   |Live bulletin board from Firebase                                  |
 
----
+-----
 
-## Comms & working style
-- **Lead every message with a `🚩 **For you**` block** — decisions Aaron must make + heads-ups. Build detail goes below it.
-- Aaron is terse ("works, next"). **Surface structural issues and tradeoffs BEFORE building; never assume approval.** Aaron makes all product decisions.
-- Check available project files before asking; ask only what's still unclear.
-- Title Case for buttons/labels, sentence-case prose, minimal bold. Own mistakes without groveling.
-- What's New / LOG is **user-facing (VO/RPIC) only** — describe only what a signed-in user sees or does; exclude owner/admin mechanics (crew mgmt, PIN/access tiers).
-- UI: archive button gray, remove button red (red reserved for destructive actions only). Real department data over placeholders where it's a useful reference.
+## Tab Structure
 
----
+**Manager tabs (PIN required):**
+`Dashboard · Schedule · Crew Mgmt · Bulletin Board · Links`
 
-## Deployment
-GitHub mobile app only. After deploy, iOS PWA needs **remove-then-re-add** on the home screen (not just hard refresh) to clear stale installs — old pre-fix code in a home-screen PWA is a known silent killer of regressions.
+**Staff tabs (no PIN):**
+`Dashboard · Schedule · YTD Stats · Bulletin Board · Links`
 
----
+- **Dashboard tab** — UAV unit status panels, OOS flags, weather/airspace buttons, Thermal Config button
+- **Schedule tab** — SchedulerPanel calendar. Manager can edit days; staff can tap days for read-only view
+- **Crew Mgmt tab** — crew cards with RPIC/VO toggles, archive/restore. Admin-only: Login History panel at top
+- **YTD Stats tab** — staff only, not visible to manager
+- **Bulletin Board** — shared, both views
+- **Links** — shared quick links
 
-## Known follow-ups / on the horizon
-- **⚠ Incident (Jul 2026) — GPS-rate API flooding, root-caused and guarded:** effects keyed on `posCoords` (20 m gate) refired network calls at driving speed — Open-Meteo elevation ~1 req/s sustained → **Open-Meteo silently IP-blocks abusive ranges** (their issue #1651: "timeout depends on the public IP"), which killed Preflight WX on *all* the user's devices (direct leg) and risked the worker egress (proxy leg). Guards now in code: elevation ≤1 attempt/5 min (or >0.005° move), TFR run ≤1/2 min (or >0.02° move), ADS-B floored at 2.5 s spacing via `lastAdsbAt`. **Rule for all future features: nothing network-facing may key its rate off raw GPS movement.** Blocks on the device/CGNAT IP may take time to clear; the WX proxy leg (Cloudflare egress) is the recovery path meanwhile.
-- **YTD Stats on-device check:** confirm 12-month totals against a known month; test the staff button with a staff PIN (not just owner).
-- **PIN clash check** — Worker-side fix outstanding (client is ready to surface the error).
-- **DFR program:** DJI Dock 3 stations DFR121–125, targeting late 2026–early 2027; DroneSense dashboard live at dashboard.dronesense.com/bc2fdfirehawk.
-- **SOP / FAA COA:** Firehawk UAS SOP v2 in Chiefs Review; SOP signature is the prerequisite for the FAA Certificate of Authorization/waiver (targeted fall). Captain designation resolution ongoing.
+-----
 
-## Resuming
-Upload `index.html` + this brief to a new chat. Claude greps to the relevant spot and edits surgically — it does not re-read the whole file each turn, which is why a single large file stays workable.
+## SchedulerPanel — Key Details
+
+Props: `isManager, isAdmin, crew, setCrew`
+
+Internal states: `month, year, schedule, tab, selectedDay, editingCrew, availInput, staffMember, proposals, autoPreview, autoApplied, confirmClear, pushConfirmed`
+
+- Schedule data stored in Firebase keyed as `YYYY_M_D` (e.g. `"2026_5_25"`)
+- Each day object: `{ rpic, vo, vo2, extra[], confirmed, oos: { UAV121: {active, reason, start, end, remark}, UAV124: {...} } }`
+- **OOS fields:** reason = “Personnel” or “Training”, start/end = time strings (CST/CDT), remark = optional free text
+- Manager taps a day → opens editor with crew assignment + OOS flags
+- Staff taps a day → opens read-only chief-style view showing UAV121/UAV124 unit groupings
+
+-----
+
+## Unit Grouping Logic — `groupAssignmentByUnit(a, crewList)`
+
+**Critical rules:**
+
+- Sanchez (LEAD_PILOT_ID = 1) **always** goes to UAV121, regardless of which field he’s in (`rpic`, `vo`, `vo2`, or `extra[]`)
+- All Firebase IDs must be coerced with `parseInt()` before comparison — Firebase returns strings, crew IDs are integers
+- **Single-unit day:** `vo` pairs with the active RPIC on that unit
+- **Two-unit day:** `vo` (VO1) → UAV124, `vo2` (VO2) → UAV121 (Sanchez’s unit)
+- UAV124 RPIC = non-Sanchez person in `rpic` field, OR first RPIC found in `extra[]`
+
+-----
+
+## ThermalModal — Complete Rebuild Reference
+
+**If ThermalModal is broken or missing, use the saved file `thermal_modal_rebuild.js`.**
+
+That file contains:
+
+- Full `MISSIONS` array (12 missions)
+- Full `PALETTES` object (4 palettes)
+- Complete `ThermalModal` function
+
+**Insertion points in `index.html`:**
+
+1. `MISSIONS` and `PALETTES` — place at module level, just before `function ThermalModal(`
+1. `ThermalModal` function — place between `PALETTES` and `function WeatherModal(`
+
+**Structure rules (critical — violations cause invisible modal):**
+
+```
+ThermalModal return:
+  div [position:fixed, inset:0, display:flex, flexDirection:column]   ← outer
+    div [flexShrink:0]                                                  ← header (fixed)
+    div [flex:1, minHeight:0, overflowY:auto, WebkitOverflowScrolling:touch]  ← scrollable content
+```
+
+- `minHeight:0` is mandatory for iOS Safari flex scrolling
+- Without `flexShrink:0` on header, the header will scroll away
+- Without `minHeight:0` on content, the modal renders invisible on mobile
+
+**Water Rescue special case:**
+
+- Uses `dayNight: true` toggle but with custom labels
+- `dayLabel: "THERMAL"` → Iron Bow palette (victim detection)
+- `nightLabel: "RIPPLE"` → Rainbow palette (water disturbance/submerged)
+
+**Quick view:** `⚡ Quick` button in header toggles `quickView` state → compact 3-column card showing Gain / Palette+color bar / Isotherm, plus Altitude and Zoom below
+
+**Subtitle:** “Recommended thermal settings by mission type”
+
+-----
+
+## AirspaceModal — Key Details
+
+- Tabs: `Status · Airports · Quick Links`
+- Status tab contains: position panel, airfield distances (KSKF·KSAT·KSSF fixed order), ADS-B radar scope, traffic list, NIFOGPanel (collapsible), COA note
+- ADS-B scope: 3 rings at 1/2/3 NM (labels uppercase: “1NM”, “2NM”, “3NM”)
+- North-up: all 12 degree labels every 30°; Track-up: N/E/S/W only
+- 3-tier traffic colors: red ≤400ft (CONFLICT), amber 400–1000ft (NEARBY), green >1000ft (HIGH TRAFFIC)
+- Airfield distance colors: red <2nm, amber 2–5nm, green >5nm
+- W3W API key: `J4FL5TE7` (first responder key, referrer restricted to `afherkdriver.github.io`)
+- Opening ThermalModal must close AirspaceModal: `setShowThermal(true); setShowAirspace(false);`
+
+-----
+
+## chief.html — Battalion Chief View
+
+- Separate file, read-only companion to `index.html`
+- Same Firebase backend — reads `firehawk/schedule` and `firehawk/crew`
+- Shows UAV121 and UAV124 unit panels for current and upcoming days
+- OOS amber banners shown per unit when `oos.UAV121.active` or `oos.UAV124.active` is true
+- No PIN required — display only, no edit capability
+- Uses same `groupAssignmentByUnit` logic as staff day detail view
+
+-----
+
+## Safe Edit Workflow
+
+```python
+# Standard pattern for every edit:
+html = open('/mnt/user-data/outputs/index.html').read()
+
+old = '''exact text to replace'''
+new = '''replacement text'''
+
+assert old in html, "Not found — stop and investigate"
+assert html.count(old) == 1, "Multiple matches — be more specific"
+html = html.replace(old, new, 1)
+
+open('/mnt/user-data/outputs/index.html', 'w').write(html)
+
+# Syntax check — run after EVERY edit
+import re, subprocess
+scripts = [m.group(1) for m in re.finditer(r'<script[^>]*>(.*?)</script>', html, re.S)]
+open('/tmp/v.js','w').write(scripts[-1])
+r = subprocess.run(['node','--check','/tmp/v.js'], capture_output=True, text=True)
+print("Syntax:", "OK" if r.returncode == 0 else "FAIL:\n" + r.stderr)
+```
+
+-----
+
+## Known Pitfalls
+
+- **Firebase ID type mismatch:** Firebase returns IDs as strings; crew IDs in the app are integers. Always use `parseInt()` when looking up crew by ID from Firebase data.
+- **Stale deploy:** GitHub Pages caches aggressively. Always hard-refresh or test in incognito after deploying.
+- **Two-unit day display:** The staff day detail and chief view both use `groupAssignmentByUnit`. If a unit isn’t showing, the ID coercion or field lookup is the likely culprit — not a rendering issue.
+- **Modal invisible on mobile:** Almost always a CSS flex issue. The pattern `flex:1 + minHeight:0 + overflowY:auto` on the scroll wrapper is required. `position:sticky` headers do not work reliably inside `overflowY:auto` containers on iOS Safari — use `flexShrink:0` instead.
+- **Never use `overflowY:auto` on the outer modal div if using flex column layout** — the scroll must be on the inner content wrapper, not the outer container.
+
+-----
+
+## Pilot Training System (added July 2026)
+
+**File:** `training.html` — standalone single-file page, no React, plain JS + Firestore REST. Deployed alongside index.html at `/training.html`. Opened from the orange "Pilot Training" bar on the Dashboard (anchor `href="training.html"`, target `_blank`), placed directly below the Bulletin Board bar. Not in the Links tab.
+
+**Purpose:** electronic delivery of the SOP Appendix E Initial Operational Readiness curriculum, individually delivered, with authenticated trainer sign-offs. Curriculum lives as a `BLOCKS` array in the file: Prerequisites + Blocks 1–7 + Closeout, 34 items total. Item labels are Title Case; notes are sentence case.
+
+### Data
+
+- **Doc:** `firehawk / training` — `{ trainees: { c<crewId>: { name, crewId, start, created, createdBy, items: { <itemId>: { by, byId, ts } }, ... } } }`
+- Trainee keys are `"c" + crewId` (crew-linked, prevents duplicates). Legacy `t<timestamp>` free-text records render fine but never write to the crew doc.
+- All writes are field-masked PATCHes (`fsUpdate`) — trainers on different devices cannot clobber each other. Sign-off removal = mask includes the path, body omits the field (Firestore deletes it).
+- Page polls the doc every 10s (`fsListen`-style poll).
+
+### Auth & authority
+
+- Sign-in required to view anything: the page opens to a PIN gate. POST `firehawk-auth` Worker `/auth` with `{pin}` → `{ok, id}` → identity resolved from the live `firehawk/crew` doc (archived members rejected). Session is in-memory only.
+- **Instructor model (July 2026):** only crew with `instructor: true` on their roster record can sign off, add trainees, or browse all records. Everyone else gets a read-only view of their own folder (`c<their id>`), or a "No Training Record Yet" card. Sign-off removal: original signer or owner.
+- Instructor seed: `INSTRUCTOR_IDS = [1, 3, 6]` (Sanchez, Bauchman, Rait) — seeded idempotently alongside the grandfather seed on owner sign-in; fills only unset flags. Rait stays archived, so his instructor flag is dormant until restored (archived members can't sign in).
+- Instructor designation is managed day-to-day via the Crew Mgmt **Instructor** pill (owner toggles; managers see it read-only). Field: `membersById.<id>.instructor` — carried in `memberShape`/`normalizeMember` (same preservation class as `trainingStatus`).
+- **PM Approval (item `c3`) is owner-tier only** — flips the record to "Approved For Operational Status" and starts the 6-month probation clock (12.2).
+- **Delete Trainee is owner-only**, double-tap "Delete?" confirm (4s window, same pattern as Crew Mgmt).
+
+### Crew roster integration (`trainingStatus`)
+
+- New per-member field on `firehawk/crew` → `membersById.<id>.trainingStatus`: `"grandfathered" | "in_training" | "qualified" | null`.
+- **CRITICAL: `memberShape` and `normalizeMember` in index.html now carry `trainingStatus`.** Per-member crew saves write the whole member slot from `memberShape` — removing the field from that whitelist would silently wipe training status on any crew edit (same preservation class as `part107`).
+- Lifecycle (written by training.html only; index.html is read-only for this field):
+  - Create trainee → `in_training`
+  - PM Approval tap → `qualified` (un-tap reverts to `in_training`)
+  - Delete trainee → `null`
+- **Grandfathered seed:** `GRANDFATHERED_IDS = [1, 3, 4]` (Sanchez, Bauchman, Thomas). Seeded idempotently on first owner sign-in to training.html; only fills members whose status is unset. Goddu (2) and Rodriguez (5) go through the checklist.
+- Numeric crew IDs in Firestore field paths must be backtick-quoted — `fpSeg()` exists in both files; always use it.
+
+### index.html additions
+
+- `trainingChip(c)` in Crew Mgmt member rows — read-only chip: Grandfathered (blue) / In Training (amber) / Qualified (green). No chip when status is null.
+- Orange **Pilot Training** bar on the Dashboard, same geometry as the Bulletin Board bar (accent `C.accent`, custom aviator-wings SVG data-URI icon per PM direction; Bulletin Board bar uses 📋, Thermal Config dashboard row is `C.red`). No Links-tab entry — an earlier Links entry + `training` icon were added and then removed in the same session per PM direction.
+- v2.6 What's New: one user-facing line for the Dashboard Pilot Training bar (chip/roster mechanics excluded per changelog policy).
+- **Training status never touches role.** RPIC/VO stays manual — trainees serve as VOs during training; PM flips role after qualification.
+
+### chief.html
+
+- Unaffected and verified: zero write paths (read-only), unknown member fields ignored. No edits made.
+
+### Validation ritual for training.html
+
+- Extract last `<script>` block → `node --check`.
+- Smoke test with mocked Firestore + auth Worker (see session harness): boot, PIN sign-in, grandfather seed paths, picker eligibility (excludes archived/grandfathered/existing records), crew-linked create + `in_training` write, PM approval + `qualified` write, delete + roster clear, masked-delete body shape.
+- index.html render smoke harness (jsdom + npm React 18.3.1, all-fail fetch stub) remains mandatory on every index.html build.
