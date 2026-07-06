@@ -50,7 +50,7 @@ legacy.html   # Previous monolithic build, retained for reference
 - Sign-in gated with shared app session: crew already signed into Fire Hawk Ops walk straight into **their own training folder** (read-only); otherwise a restricted-access screen asks for their app PIN. Designated **instructors** see all trainees, add new ones from the live roster (no free-text names, no duplicates), and are the only ones who can sign items off — every completed item is stamped **who signed it off and when**, visible to all devices within seconds. Instructor designation is an owner-set toggle in crew management.
 - Sign-offs can be removed only by their signer or the owner; the final **PM Approval** item is owner-only and marks the member **Qualified** on the roster (starting the six-month probation clock per SOP 12.2).
 - Crew management in the main app flags members **In Training** with an amber chip; no chip means qualified or grandfathered. New pilots start In Training by default and clear on PM sign-off. Training status never changes RPIC/VO roles; role assignment stays manual.
-- Signed-in crew see their UAS Pilot Insignia in the header — gold wings for officers, silver for all other crew.
+- The UAS Pilot Insignia renders above the record being viewed — gold wings for officer-rank trainees, silver for all other crew.
 - Copy Summary produces a plain-text record for DroneSense training files; Print Record produces a paper copy.
 
 ## Architecture

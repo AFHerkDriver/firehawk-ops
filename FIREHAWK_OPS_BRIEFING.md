@@ -299,7 +299,7 @@ print("Syntax:", "OK" if r.returncode == 0 else "FAIL:\n" + r.stderr)
 
 ### Insignia (July 2026)
 
-- The real Appendix A UAS Pilot Insignia (PM-supplied PNGs, backgrounds removed via border-connected flood fill, downscaled to 380px, base64-embedded) renders in the training.html header on sign-in: **gold for officers, silver for everyone else**. Officer detection: exact rank match on the PM-defined officer set (`Lt, Capt, BC, DC, AC, Chief`) — FF and blank ranks get silver. Hidden when signed out. File size grew to ~278KB from the two embedded PNGs (intentional: single-file deploys stay atomic).
+- The real Appendix A UAS Pilot Insignia (PM-supplied PNGs, backgrounds removed via border-connected flood fill, downscaled to 380px, base64-embedded) renders in the training.html header keyed to the **selected trainee's** rank (not the signed-in user): **gold for officer-rank trainees, silver for everyone else**; hidden on the gate, no-record, and legacy-record (no crewId) paths. Officer detection: exact rank match on the PM-defined officer set (`Lt, Capt, BC, DC, AC, Chief`). Inner ring whites are also removed (seeded flood at the two donut openings; metalwork highlights untouched) — FF and blank ranks get silver. Hidden when signed out. File size grew to ~278KB from the two embedded PNGs (intentional: single-file deploys stay atomic).
 
 ### Validation ritual for training.html
 
