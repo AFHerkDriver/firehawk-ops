@@ -3910,11 +3910,23 @@ const [showComms, setShowComms] = useState(false);
             const polys = g.type === "Polygon" ? [g.coordinates] : (g.type === "MultiPolygon" ? g.coordinates : []);
             const shapes = [];
             polys.forEach(rings => { const ring = rings && rings[0]; if (ring && ring.length >= 3) shapes.push({ kind: "poly", pts: ring.map(c => [c[1], c[0]]) }); });   // GeoJSON is [lon,lat]
+            // NOTAM id + property blob computed FIRST — used by both the far-TFR branch and the record below
+            const propStr = JSON.stringify(ft.properties || {});
+            const nm = (propStr.match(/(\d\/\d{3,5})/) || [])[1] || null;
+
             if (g.type === "Point" && Array.isArray(g.coordinates)) {
               const prc = ft.properties || {};
+              // Prefer exact, known FAA radius field names; only fall back to a loose "radius"
+              // match if nothing exact is found, and NEVER trust a value outside a sane TFR
+              // range (largest real TFRs run ~2-300NM for hurricanes; cap generously at 500,
+              // reject the rest as a mismatched field rather than rendering a false shape).
+              const exactKeys = ["RADIUS_NM", "RADIUS_VAL", "RAD_NM", "RADIUS"];
               let radp = null;
-              for (const k in prc) { if (/radius/i.test(k) && isFinite(parseFloat(prc[k]))) { radp = parseFloat(prc[k]); break; } }
-              if (radp) shapes.push({ kind: "circle", clat: g.coordinates[1], clon: g.coordinates[0], radNm: radp });
+              for (const ek of exactKeys) { if (prc[ek] != null && isFinite(parseFloat(prc[ek]))) { radp = parseFloat(prc[ek]); break; } }
+              if (radp == null) {
+                for (const k in prc) { if (/radius/i.test(k) && isFinite(parseFloat(prc[k]))) { const v = parseFloat(prc[k]); if (v > 0 && v <= 50) { radp = v; break; } } }   // loose match: tight cap — a field merely CONTAINING "radius" is unverified, so only accept plausible local-TFR sizes
+              }
+              if (radp != null && radp > 0 && radp <= 500) shapes.push({ kind: "circle", clat: g.coordinates[1], clon: g.coordinates[0], radNm: radp });
             }
             if (!shapes.length) continue;
             let all = []; shapes.forEach(sh => { if (sh.pts) all = all.concat(sh.pts); else if (sh.kind === "circle") all.push([sh.clat, sh.clon]); });
@@ -3922,25 +3934,26 @@ const [showComms, setShowComms] = useState(false);
             const clon = all.reduce((s2, p) => s2 + p[1], 0) / all.length;
             let radNm = 0; all.forEach(p => { radNm = Math.max(radNm, distNm(clat, clon, p[0], p[1])); });
             shapes.forEach(sh => { if (sh.kind === "circle") radNm = Math.max(radNm, sh.radNm); });
-            if (!radNm) radNm = 3;
+            if (!radNm || radNm > 500) radNm = 3;   // guard rail — never let a bad parse become a giant phantom ring
             const dist = distNm(posCoords.lat, posCoords.lon, clat, clon);
             if (dist - radNm > TFR_SCAN_NM) {
               const edge = dist - radNm;
-              if (!farBest || edge < farBest.d) farBest = { d: edge, nm: nm || "TFR" };
+              if (!farBest || edge < farBest.d) farBest = { d: edge, nm: nm || null };
               continue;
             }
             const brg = Math.round(bearingTo(posCoords.lat, posCoords.lon, clat, clon));
-            const propStr = JSON.stringify(ft.properties || {});
-            const nm = (propStr.match(/(\d\/\d{3,5})/) || [])[1] || null;
             const listHit = nm ? found.find(f2 => f2.notam === nm) : null;
             const ty = listHit ? listHit.type : ((propStr.match(/(HAZARD\w*|SECURITY|VIP|SPORT\w*|SPACE\w*|EMERG\w*)/i) || [, "TFR"])[1].toUpperCase());
             const pr = ft.properties || {};
             const exp = pr.dateExpire || pr.expire || pr.EXPIRE || pr.exp_date || null;
             const op = [posCoords.lat, posCoords.lon];
             const inside = shapes.some(sh => sh.kind === "circle" ? (distNm(op[0], op[1], sh.clat, sh.clon) <= sh.radNm) : inPoly(op, sh.pts));
-            const dupeKey = nm || (clat.toFixed(3) + "," + clon.toFixed(3));
-            if (out.some(o2 => o2._k === dupeKey)) continue;
-            out.push({ _k: dupeKey, notam: nm || "TFR", type: ty, brg, dist, radNm, inside, shapes, exp: exp, eff: null });
+            // Dedupe: same NOTAM id, OR same rough position (~0.6NM) when no id was extracted —
+            // collapses the same real-world TFR appearing in multiple merged layers into one card.
+            const dupeKey = nm || null;
+            if (dupeKey && out.some(o2 => o2._k === dupeKey)) continue;
+            if (!dupeKey && out.some(o2 => !o2._k && Math.abs(o2._clat - clat) < 0.01 && Math.abs(o2._clon - clon) < 0.01)) continue;
+            out.push({ _k: dupeKey, _clat: clat, _clon: clon, notam: nm, type: ty, brg, dist, radNm, inside, shapes, exp: exp, eff: null });
           } catch (e3) {}
         }
         if (seq !== tfrSeq.current) return;
@@ -4009,11 +4022,11 @@ const [showComms, setShowComms] = useState(false);
   const dispStatus = insideTfr ? "loaded" : laancStatus;
   const dispData = insideTfr ? {
     source: "sua", suaType: "P", suaLabel: "TFR",
-    facility: "TFR " + insideTfr.notam,
+    facility: insideTfr.notam ? ("TFR " + insideTfr.notam) : "TFR (ID UNAVAILABLE)",
     ceiling: 0, auth: "TFR \u00b7 " + (insideTfr.type || "ACTIVE"),
     lower: "SFC", upper: null,
     times: insideTfr.exp ? ("TO " + new Date(insideTfr.exp + (insideTfr.exp.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Chicago" }) + " CT") : "ACTIVE",
-    agency: "FAA NOTAM " + insideTfr.notam,
+    agency: insideTfr.notam ? ("FAA NOTAM " + insideTfr.notam) : "FAA TFR \u2014 NOTAM ID unavailable, verify via tfr.faa.gov",
     suaSrc: "tfr.faa.gov",
     partial: (laancData && laancData.partial) || 0,
     suaNote: null
@@ -4249,7 +4262,7 @@ const [showComms, setShowComms] = useState(false);
         background: tfrs.some(t => t.inside) ? "#FF3B30" : tfrs.length ? "#FF9F0A" : tfrStatus === "ok" ? "#34C759" : "#64748B" } }),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, letterSpacing: 1.5,
         color: tfrs.some(t => t.inside) ? "#FF3B30" : tfrs.length ? "#FF9F0A" : tfrStatus === "ok" ? "#8B949E" : "#64748B" } },
-        tfrs.some(t => t.inside) ? ("TFR — INSIDE " + tfrs.filter(t => t.inside).map(t => t.notam).join(", "))
+        tfrs.some(t => t.inside) ? ("TFR — INSIDE " + tfrs.filter(t => t.inside).map(t => t.notam || "ID UNAVAIL").join(", "))
           : tfrs.length ? ("TFR — " + tfrs.length + " WITHIN " + TFR_SCAN_NM + "NM")
           : tfrStatus === "ok" ? ("TFR — NONE WITHIN " + TFR_SCAN_NM + "NM" + (tfrFar ? (" · NEAREST " + Math.round(tfrFar.d) + "NM (" + tfrFar.nm + ")") : ""))
           : tfrStatus === "checking" ? "TFR — CHECKING\u2026"
@@ -4264,9 +4277,9 @@ const [showComms, setShowComms] = useState(false);
       tfrs.slice(0, 3).map(function(t) {
         var col = t.inside ? "#FF3B30" : "#FF9F0A";
         var when = t.exp ? (" \u00b7 to " + new Date(t.exp + (t.exp.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Chicago" })) : "";
-        return /*#__PURE__*/React.createElement("div", { key: t.notam, style: { display: "flex", alignItems: "center", gap: 8, background: t.inside ? "rgba(255,59,48,0.1)" : "rgba(255,159,10,0.07)", border: "1px solid " + (t.inside ? "rgba(255,59,48,0.4)" : "rgba(255,159,10,0.3)"), borderLeft: "3px solid " + col, borderRadius: 8, padding: "7px 10px" } },
+        return /*#__PURE__*/React.createElement("div", { key: t.notam || (t._clat + "," + t._clon), style: { display: "flex", alignItems: "center", gap: 8, background: t.inside ? "rgba(255,59,48,0.1)" : "rgba(255,159,10,0.07)", border: "1px solid " + (t.inside ? "rgba(255,59,48,0.4)" : "rgba(255,159,10,0.3)"), borderLeft: "3px solid " + col, borderRadius: 8, padding: "7px 10px" } },
           /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: col, fontWeight: 700 } }, "TFR " + t.notam + " \u00b7 " + t.type),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: col, fontWeight: 700 } }, (t.notam ? ("TFR " + t.notam) : "TFR") + " \u00b7 " + t.type),
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#8B949E", marginTop: 2 } },
               (t.inside ? "INSIDE \u2014 boundary ~" + t.radNm.toFixed(1) + "nm" : t.brg + "\u00b0 \u00b7 " + Math.max(0, t.dist - t.radNm).toFixed(1) + "nm to edge") + when)),
           t.inside ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: col, letterSpacing: 1, fontWeight: 700 } }, "NO UAS") : null);
@@ -4416,7 +4429,7 @@ const [showComms, setShowComms] = useState(false);
                 var r = (d / scopeRange) * 120;
                 return [160 + r * Math.cos(bb), 155 + r * Math.sin(bb)];
               };
-              return /*#__PURE__*/React.createElement("g", { key: "tfrshape" + t.notam, clipPath: "url(#fhScopeClip)" },
+              return /*#__PURE__*/React.createElement("g", { key: "tfrshape" + (t.notam || t._clat), clipPath: "url(#fhScopeClip)" },
                 t.shapes.map(function(s, si) {
                   if (s.kind === "circle") { var c = proj(s.clat, s.clon); return /*#__PURE__*/React.createElement("circle", { key: si, cx: c[0], cy: c[1], r: (s.radNm / scopeRange) * 120, fill: fill, stroke: col, strokeWidth: 1.5 }); }
                   var pstr = s.pts.map(function(p) { var q = proj(p[0], p[1]); return q[0].toFixed(1) + "," + q[1].toFixed(1); }).join(" ");
@@ -4450,7 +4463,7 @@ const [showComms, setShowComms] = useState(false);
             var rad = (t.brg - 90) * Math.PI / 180;
             var r = (Math.min(t.dist, scopeRange * 1.017) / scopeRange) * 120;
             var x = 160 + r * Math.cos(rad); var y = 155 + r * Math.sin(rad);
-            return /*#__PURE__*/React.createElement("g", { key: "tfr" + t.notam },
+            return /*#__PURE__*/React.createElement("g", { key: "tfr" + (t.notam || t._clat) },
               /*#__PURE__*/React.createElement("polygon", { points: (x) + "," + (y - 6) + " " + (x + 5) + "," + (y) + " " + (x) + "," + (y + 6) + " " + (x - 5) + "," + (y), fill: "none", stroke: col, strokeWidth: 1.5 }),
               /*#__PURE__*/React.createElement("text", { x: x, y: y - 9, fill: col, fontSize: 7, fontFamily: "monospace", textAnchor: "middle", fontWeight: "bold" }, "TFR")
             );
