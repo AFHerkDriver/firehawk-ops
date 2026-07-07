@@ -1440,7 +1440,7 @@
                   h("button", { onClick: () => setTierDraft("staff"), style: pillBtn(tierDraft === "staff") }, "STAFF")),
                 h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, tierHint(tierDraft))),
           fieldLabel("Sign-in PIN"),
-          h("input", { value:pinDraft, onChange: e => { setPinDraft(e.target.value); if (e.target.value.trim()) setClearPin(false); }, inputMode:"numeric", placeholder: accessEdit.hasPin ? "Leave blank to keep current" : "Blank = no sign-in", maxLength:12,
+          h("input", { value:pinDraft, onChange: e => { setPinDraft(e.target.value); if (e.target.value.trim()) setClearPin(false); }, type:"password", inputMode:"numeric", placeholder: accessEdit.hasPin ? "Leave blank to keep current" : "Blank = no sign-in", maxLength:12,
             style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+(clash?C.red:C.border), borderRadius:8, padding:"9px 11px", fontSize:14, letterSpacing:3, colorScheme:"dark" } }),
           clash
             ? h("div", { style:{ fontSize:12, color:C.red, marginTop:6 } }, "PIN already used by " + clash.name)
@@ -3303,7 +3303,7 @@ const [showComms, setShowComms] = useState(false);
   const QUICK_LINKS = [{
     label: "Aloft LAANC",
     sub: "Instant LAANC authorization",
-    url: "https://www.aloft.ai/",
+    url: "https://air.aloft.ai/login",
     icon: "✈️",
     color: "#4A90D9"
   }, {
@@ -5009,7 +5009,7 @@ const [showComms, setShowComms] = useState(false);
       textAlign: "center"
     }
   }, grid.alt === 0 ? "0ft" : `${grid.alt}ft`)))), selectedAirport.laanc ? /*#__PURE__*/React.createElement("a", {
-    href: "https://www.aloft.ai/",
+    href: "https://air.aloft.ai/login",
     target: "_blank",
     rel: "noopener noreferrer",
     style: {
