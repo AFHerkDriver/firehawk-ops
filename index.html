@@ -3667,6 +3667,11 @@ const [showComms, setShowComms] = useState(false);
     if (audioCtxRef.current.state === "suspended") { try { audioCtxRef.current.resume(); } catch (e) {} }
     return audioCtxRef.current;
   };
+  // True only when tones will actually be heard. iOS keeps the context "suspended"
+  // until the first screen touch — alerts must NOT be marked as delivered before then.
+  const audioReady = () => {
+    try { return getAudioCtx().state === "running"; } catch (e) { return false; }
+  };
 
   // iOS unlock — WebAudio must be created/resumed inside a user gesture or alert tones stay silent.
   useEffect(() => {
@@ -3720,8 +3725,7 @@ const [showComms, setShowComms] = useState(false);
   };
 
   // ── ADS-B refs ───────────────────────────────────────────────────────────
-  const prevConflictIds = useRef(new Set());   // call signs already alerted (debounces repeat tones)
-  const inboundTimer    = useRef(null);
+  const prevConflictIds = useRef(new Set());   // call signs already given their entry advisory
   const adsbBase        = useRef([]);          // last real fix per aircraft (lat/lon/gs/track/t0) for interpolation
   const fetchSeq        = useRef(0);           // drops out-of-order poll responses (slow cell fetch overtaken by a newer one)
   const lastAdsbAt      = useRef(0);           // GPS movement restarts this effect — dedupe the immediate refires
@@ -3772,20 +3776,22 @@ const [showComms, setShowComms] = useState(false);
           const conflictAc = ac.filter(a => effAlt(a) <= CONFLICT_AGL);
           const currentIds = new Set(conflictAc.map(a => a.call));
           const newConflicts = conflictAc.filter(a => !prevConflictIds.current.has(a.call));
-          if (newConflicts.length > 0) {
-            const hasInbound = newConflicts.some(a => isInbound(a));
-            if (hasInbound) {
-              playInboundTone();
-              clearTimeout(inboundTimer.current);
-              inboundTimer.current = setTimeout(() => {
-                const stillInbound = ac.some(a => effAlt(a) <= CONFLICT_AGL && isInbound(a));
-                if (stillInbound) playInboundTone();
-              }, 2000);
-            } else {
-              playConflictTone();
-            }
+          const converging = conflictAc.some(a => isInbound(a));
+          if (audioReady()) {
+            // Converging conflict traffic re-tones on EVERY position update (3s poll)
+            // until it turns away or leaves the conflict band. New non-converging
+            // traffic gets a single entry advisory.
+            if (converging) playInboundTone();
+            else if (newConflicts.length > 0) playConflictTone();
+            prevConflictIds.current = currentIds;
+          } else {
+            // Audio still locked (no screen touch yet) — do NOT burn the entry
+            // advisory. Keep only already-alerted ids so unalerted traffic
+            // retries on the next poll after the first tap unlocks audio.
+            prevConflictIds.current = new Set(
+              conflictAc.filter(a => prevConflictIds.current.has(a.call)).map(a => a.call)
+            );
           }
-          prevConflictIds.current = currentIds;
         }).catch(() => setAdsbLoading(false));
     };
     fetchADSB();
