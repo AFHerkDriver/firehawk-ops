@@ -3979,6 +3979,25 @@ const [showComms, setShowComms] = useState(false);
             const exp = pr.dateExpire || pr.expire || pr.EXPIRE || pr.exp_date || null;
             const op = [posCoords.lat, posCoords.lon];
             const inside = shapes.some(sh => sh.kind === "circle" ? (distNm(op[0], op[1], sh.clat, sh.clon) <= sh.radNm) : inPoly(op, sh.pts));
+            // True distance (NM) from ownship to the nearest boundary of the actual published
+            // shape — works whether inside or outside. Circles: |radius - dist-to-center|.
+            // Polygons: min point-to-segment over edges via a local equirectangular projection
+            // (accurate at TFR scale). Replaces the old radius-as-boundary approximation.
+            let edgeNm = Infinity;
+            const _cos0 = Math.cos(op[0] * Math.PI / 180);
+            const _xy = (la, lo) => [(lo - op[1]) * _cos0 * 60, (la - op[0]) * 60];
+            const _segNM = (a, b) => {
+              const A = _xy(a[0], a[1]), B = _xy(b[0], b[1]);
+              const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+              let tt = L2 ? -(A[0] * dx + A[1] * dy) / L2 : 0; tt = Math.max(0, Math.min(1, tt));
+              const px = A[0] + tt * dx, py = A[1] + tt * dy;
+              return Math.sqrt(px * px + py * py);
+            };
+            shapes.forEach(sh => {
+              if (sh.kind === "circle") { edgeNm = Math.min(edgeNm, Math.abs(sh.radNm - distNm(op[0], op[1], sh.clat, sh.clon))); }
+              else if (sh.pts && sh.pts.length) { for (let i3 = 0, j3 = sh.pts.length - 1; i3 < sh.pts.length; j3 = i3++) { edgeNm = Math.min(edgeNm, _segNM(sh.pts[j3], sh.pts[i3])); } }
+            });
+            if (!isFinite(edgeNm)) edgeNm = Math.max(0, dist - radNm);   // fallback to bounding estimate
             // Dedupe: same NOTAM id, OR same rough position (~0.6NM) when no id was extracted —
             // collapses the same real-world TFR appearing in multiple merged layers into one card.
             // Reject phantom geometry: a feature with NO NOTAM id AND an implausible radius
@@ -3989,7 +4008,7 @@ const [showComms, setShowComms] = useState(false);
             const dupeKey = nm || null;
             if (dupeKey && out.some(o2 => o2._k === dupeKey)) continue;
             if (!dupeKey && out.some(o2 => !o2._k && Math.abs(o2._clat - clat) < 0.01 && Math.abs(o2._clon - clon) < 0.01)) continue;
-            out.push({ _k: dupeKey, _clat: clat, _clon: clon, notam: nm, type: ty, raw: rawTxt, brg, dist, radNm, inside, shapes, exp: exp, eff: null });
+            out.push({ _k: dupeKey, _clat: clat, _clon: clon, notam: nm, type: ty, raw: rawTxt, brg, dist, radNm, inside, edgeNm, shapes, exp: exp, eff: null });
           } catch (e3) {}
         }
         clearTimeout(wd); if (seq !== tfrRunSeq.current) return;
@@ -4352,13 +4371,13 @@ const [showComms, setShowComms] = useState(false);
     /* TFR detail cards — only when something is in the scan window */
     tfrs.length > 0 && /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
       tfrs.slice(0, 3).map(function(t) {
-        var col = t.inside ? tfrCol(t) : (isFireTfr(t) ? "#FFB84D" : "#FF9F0A");
+        var col = tfrCol(t);
         var when = t.exp ? (" \u00b7 to " + new Date(t.exp + (t.exp.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Chicago" })) : "";
-        return /*#__PURE__*/React.createElement("div", { key: t.notam || (t._clat + "," + t._clon), style: { display: "flex", alignItems: "center", gap: 8, background: t.inside ? "rgba(255,59,48,0.1)" : "rgba(255,159,10,0.07)", border: "1px solid " + (t.inside ? "rgba(255,59,48,0.4)" : "rgba(255,159,10,0.3)"), borderLeft: "3px solid " + col, borderRadius: 8, padding: "7px 10px" } },
+        return /*#__PURE__*/React.createElement("div", { key: t.notam || (t._clat + "," + t._clon), style: { display: "flex", alignItems: "center", gap: 8, background: isFireTfr(t) ? (t.inside ? "rgba(255,159,10,0.12)" : "rgba(255,159,10,0.07)") : (t.inside ? "rgba(255,59,48,0.12)" : "rgba(255,59,48,0.07)"), border: "1px solid " + (isFireTfr(t) ? (t.inside ? "rgba(255,159,10,0.4)" : "rgba(255,159,10,0.3)") : (t.inside ? "rgba(255,59,48,0.4)" : "rgba(255,59,48,0.3)")), borderLeft: "3px solid " + col, borderRadius: 8, padding: "7px 10px" } },
           /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: col, fontWeight: 700 } }, (t.notam ? ("TFR " + t.notam) : "TFR") + " \u00b7 " + t.type),
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#8B949E", marginTop: 2 } },
-              (t.inside ? "INSIDE \u2014 boundary ~" + t.radNm.toFixed(1) + "nm" : t.brg + "\u00b0 \u00b7 " + Math.max(0, t.dist - t.radNm).toFixed(1) + "nm to edge") + when)),
+              (t.inside ? "INSIDE \u2014 " + (t.edgeNm < 0.05 ? "<0.1" : t.edgeNm.toFixed(1)) + "nm to edge" : t.brg + "\u00b0 \u00b7 " + (t.edgeNm < 0.05 ? "<0.1" : t.edgeNm.toFixed(1)) + "nm to edge") + when)),
           t.inside ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: col, letterSpacing: 1, fontWeight: 700 } }, isFireTfr(t) ? "COORD" : "NO UAS") : null);
       })),
 
@@ -4498,8 +4517,8 @@ const [showComms, setShowComms] = useState(false);
             tfrs.slice(0, 3).map(function(t) {
               if (!t.shapes || !t.shapes.length) return null;
               if (t.dist - t.radNm > 3.2) return null;   // boundary can't reach the 3NM window
-              var col = t.inside ? tfrCol(t) : (isFireTfr(t) ? "#FFB84D" : "#FF9F0A");
-              var fill = t.inside ? "rgba(255,59,48,0.10)" : "rgba(255,159,10,0.08)";
+              var col = tfrCol(t);
+              var fill = isFireTfr(t) ? "rgba(255,159,10,0.08)" : "rgba(255,59,48,0.10)";
               var proj = function(la, lo) {
                 var d = distNm(posCoords.lat, posCoords.lon, la, lo);
                 var bb = (bearingTo(posCoords.lat, posCoords.lon, la, lo) - 90) * Math.PI / 180;
@@ -4536,7 +4555,7 @@ const [showComms, setShowComms] = useState(false);
             );
           }),
           tfrs.slice(0, 3).map(function(t) {
-            var col = t.inside ? tfrCol(t) : (isFireTfr(t) ? "#FFB84D" : "#FF9F0A");
+            var col = tfrCol(t);
             var rad = (t.brg - 90) * Math.PI / 180;
             var r = (Math.min(t.dist, scopeRange * 1.017) / scopeRange) * 120;
             var x = 160 + r * Math.cos(rad); var y = 155 + r * Math.sin(rad);
