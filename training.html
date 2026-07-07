@@ -152,8 +152,14 @@
     .chev, .actions, .footer-note, .trainer-bar, .trainee-row .mini-btn, .sync, .overlay, .toast { display: none !important; }
     h1, .block-title, .readiness-pct, .status-flag { color: #000; }
     .bar-fill { background: #000; }
-    .item.checked .cb { background: #000; border-color: #000; }
-    .cb svg { stroke: #fff; }
+    /* Force background/color printing so filled checkboxes actually appear on paper */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .cb { border: 2px solid #000 !important; }
+    .item.checked .cb { background: #000 !important; border-color: #000 !important; }
+    /* Checked items: show the checkmark (base rule sets opacity:0; make it visible + white on the black fill) */
+    .item.checked .cb svg { opacity: 1 !important; stroke: #fff !important; }
+    /* Unchecked items print as a clean empty box (no stray mark) */
+    .item:not(.checked) .cb svg { opacity: 0 !important; }
     .item.checked .item-label, .signoff { color: #000; }
     .eyebrow { color: #000; }
     .trainee-row select { border: 1px solid #999; color: #000; background: #fff; appearance: none; }
