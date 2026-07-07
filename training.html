@@ -195,7 +195,7 @@
 
 <div id="blocks"></div>
 
-<div class="actions">
+<div class="actions" id="actionsBar" style="display:none;">
   <button class="btn primary" id="btnCopy">Copy Summary</button>
   <button class="btn" onclick="window.print()">Print Record</button>
 </div>
@@ -344,7 +344,7 @@
       { id: 'b3b', label: 'MapNova', note: 'Interface, search grids, overlays, POIs, exports' },
       { id: 'b3c', label: 'TAK', note: 'Connection, position sharing, DataSync/feeds' },
       { id: 'b3d', label: 'Firehawk Ops App', note: 'Schedule, My Shifts, weather/airspace tools' },
-      { id: 'b3e', label: 'DJI Pilot 2 \u2014 Mapping Missions & Settings', note: 'Area Route / Waypoint Route programming, overlap, altitude, camera settings; M30T + M4T (extends to M4TD on delivery)' }
+      { id: 'b3e', label: 'DJI Pilot', note: 'Mapping missions & settings \u2014 Area Route / Waypoint Route programming, overlap, altitude, camera settings; M30T + M4T (extends to M4TD on delivery)' }
     ]},
     { id: 'b4', title: 'Block 4 — Comms & ICS', items: [
       { id: 'b4a', label: 'Tactical Radio Procedures + Launch/Landing Notifications' },
@@ -497,11 +497,13 @@
       info.querySelector(".dim").textContent = me.instructor ? "· Instructor" : "· Trainee View";
       btn.textContent = "Sign Out";
       btn.classList.remove("primary");
+      btn.style.display = "";
+      document.getElementById("actionsBar").style.display = "";
     } else {
       bar.classList.remove("on");
       info.innerHTML = "<span class='dim'>Not signed in — sign in to record sign-offs</span>";
-      btn.textContent = "Sign In";
-      btn.classList.add("primary");
+      btn.style.display = "none";
+      document.getElementById("actionsBar").style.display = "none";
     }
   }
 
