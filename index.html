@@ -4386,7 +4386,7 @@ const [showComms, setShowComms] = useState(false);
         color: tfrs.some(t => t.inside) ? "#FF3B30" : tfrs.length ? "#FF9F0A" : tfrStatus === "ok" ? "#8B949E" : "#64748B" } },
         tfrs.some(t => t.inside) ? ("TFR — INSIDE " + tfrs.filter(t => t.inside).map(t => t.notam || "ID UNAVAIL").join(", "))
           : tfrs.length ? ("TFR — " + tfrs.length + " WITHIN " + TFR_SCAN_NM + "NM")
-          : tfrStatus === "ok" ? ("TFR — NONE WITHIN " + TFR_SCAN_NM + "NM" + (tfrFar ? (" · NEAREST " + Math.round(tfrFar.d) + "NM (" + tfrFar.nm + ")") : ""))
+          : tfrStatus === "ok" ? ("TFR — NONE WITHIN " + TFR_SCAN_NM + "NM" + (tfrFar ? (" · NEAREST " + Math.round(tfrFar.d) + "NM" + (tfrFar.nm ? (" (" + tfrFar.nm + ")") : "")) : ""))
           : tfrStatus === "checking" ? "TFR — CHECKING\u2026"
           : tfrStatus === "list-unreachable" ? "TFR — FAA LIST UNREACHABLE (WORKER/NETWORK)"
           : String(tfrStatus).indexOf("shapes-unreachable") === 0 ? ("TFR — " + String(tfrStatus).split(":")[1] + " ACTIVE IN TX · SHAPE DATA UNREACHABLE")
