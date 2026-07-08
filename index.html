@@ -3854,7 +3854,7 @@ const [showComms, setShowComms] = useState(false);
   // ── TFR scan (tfr.faa.gov via firehawk-wx proxy · TX list + per-NOTAM shape XML) ──
   const [tfrs, setTfrs] = useState([]);
   const [tfrStatus, setTfrStatus] = useState("checking");   // checking | ok | unavailable
-  const TFR_SCAN_NM = 15;
+  const TFR_SCAN_NM = 5;
   const tfrSeq = useRef(0);
   const tfrGate = useRef(null);   // last run {lat,lon,t} — GPS movement must not multiply worker/FAA traffic
   const tfrTypeName = useRef(null);   // WFS layer name, self-discovered from GetCapabilities once per session
@@ -3885,7 +3885,7 @@ const [showComms, setShowComms] = useState(false);
           const list = await fetchT(prox("https://tfr.faa.gov/tfrapi/exportTfrList"), 12000).then(r => { if (!r.ok) throw 0; return r.json(); });
           const seen = {};
           (Array.isArray(list) ? list : []).forEach(row => {
-            if (!row || row.state !== "TX" || !row.notam_id) return;
+            if (!row || !row.notam_id) return;
             const id = String(row.notam_id).replace("/", "_");
             if (seen[id]) return; seen[id] = 1;
             found.push({ id, notam: row.notam_id, type: String(row.type || "TFR").toUpperCase() });
@@ -3898,7 +3898,6 @@ const [showComms, setShowComms] = useState(false);
             const id = mm[1] + "_" + mm[2];
             if (seen[id]) continue; seen[id] = 1;
             const chunk = html.slice(mm.index, mm.index + 900);
-            if (!/>\s*TX\s*</.test(chunk)) continue;
             const ty = (chunk.match(/(HAZARDS?|SECURITY|VIP|SPORTING\s*EVENTS?|AIR ?SHOW|SPACE\s*OPERATIONS?|EMERGENCY|SPECIAL)/i) || [,"TFR"])[1].toUpperCase();
             found.push({ id, notam: mm[1] + "/" + mm[2], type: ty });
           }
@@ -3998,6 +3997,12 @@ const [showComms, setShowComms] = useState(false);
               else if (sh.pts && sh.pts.length) { for (let i3 = 0, j3 = sh.pts.length - 1; i3 < sh.pts.length; j3 = i3++) { edgeNm = Math.min(edgeNm, _segNM(sh.pts[j3], sh.pts[i3])); } }
             });
             if (!isFinite(edgeNm)) edgeNm = Math.max(0, dist - radNm);   // fallback to bounding estimate
+            // Scan gate on the TRUE nearest edge: a TFR only counts as "within " + TFR_SCAN_NM + "NM"
+            // when its real boundary is that close — keeps the banner consistent with the to-edge readout.
+            if (!inside && edgeNm > TFR_SCAN_NM) {
+              if (!farBest || edgeNm < farBest.d) farBest = { d: edgeNm, nm: nm || null };
+              continue;
+            }
             // Dedupe: same NOTAM id, OR same rough position (~0.6NM) when no id was extracted —
             // collapses the same real-world TFR appearing in multiple merged layers into one card.
             // Reject phantom geometry: a feature with NO NOTAM id AND an implausible radius
@@ -4026,6 +4031,7 @@ const [showComms, setShowComms] = useState(false);
   // ── LAANC grid overlay (display-only) — FAA UASFM cells around the operator, toggle default OFF ──
   const [gridOn, setGridOn] = useState(false);
   const [gridCells, setGridCells] = useState([]);
+  const [gridPartial, setGridPartial] = useState(false);
   const gridGate = useRef(null);
   // Quick-Zoom — momentary 0.5NM close-in view of the immediate area, auto-returns to 3NM
   const [scopeRange, setScopeRange] = useState(3);
@@ -4041,7 +4047,7 @@ const [showComms, setShowComms] = useState(false);
   };
   useEffect(() => () => clearInterval(zoomTimer.current), []);
   useEffect(() => {
-    if (!gridOn) { setGridCells([]); gridGate.current = null; return; }
+    if (!gridOn) { setGridCells([]); setGridPartial(false); gridGate.current = null; return; }
     if (!posCoords) return;
     const g = gridGate.current;
     const moved = !g || Math.abs(posCoords.lat - g.lat) > 0.01 || Math.abs(posCoords.lon - g.lon) > 0.01;   // ~0.6nm
@@ -4049,14 +4055,32 @@ const [showComms, setShowComms] = useState(false);
     gridGate.current = { lat: posCoords.lat, lon: posCoords.lon, t: Date.now() };
     const dLat = 3.5 / 60, dLon = dLat / Math.cos(posCoords.lat * Math.PI / 180);
     const env = (posCoords.lon - dLon) + "," + (posCoords.lat - dLat) + "," + (posCoords.lon + dLon) + "," + (posCoords.lat + dLat);
-    const u = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?geometry=" + encodeURIComponent(env)
-      + "&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=true&outSR=4326&geometryPrecision=5&outFields=*&resultRecordCount=500&f=json";
-    fetch(u).then(r => r.json()).then(d => {
-      if (!d || !Array.isArray(d.features)) return;   // display layer only — fail silent, card verdict unaffected
-      // Facility maps OVERLAP (KSAT + KSKF grid the same squares) — dedupe by cell
-      // footprint and keep the MINIMUM (controlling) ceiling, same doctrine as the card.
+    const base = "https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/FAA_UAS_FacilityMap_Data/FeatureServer/0/query?geometry=" + encodeURIComponent(env)
+      + "&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=true&outSR=4326&geometryPrecision=5&outFields=*&resultRecordCount=1000&f=json";
+    // Facility maps OVERLAP near hubs (several airports grid the same squares), so a single
+    // capped query truncates and — because ArcGIS returns features in OBJECTID order, not
+    // spatially — leaves SCATTERED holes. Paginate to pull every cell, then dedupe by footprint
+    // keeping the MINIMUM (controlling) ceiling, same doctrine as the card.
+    (async () => {
+      const feats = []; let offset = 0, pages = 0, truncated = false, lastKey = null;
+      try {
+        while (pages < 8) {
+          const d = await fetch(base + "&resultOffset=" + offset).then(r => r.json());
+          if (!d || !Array.isArray(d.features) || !d.features.length) break;
+          const f0 = d.features[0], fk = f0 && f0.geometry && f0.geometry.rings && f0.geometry.rings[0] && f0.geometry.rings[0][0];
+          const pk = fk ? fk.join(",") : ("p" + pages);
+          if (pk === lastKey) { truncated = true; break; }   // resultOffset not honored — stop refetching
+          lastKey = pk;
+          for (const f of d.features) feats.push(f);
+          pages++;
+          if (!d.exceededTransferLimit) break;
+          offset += d.features.length;
+          if (pages >= 8) truncated = true;
+        }
+      } catch (e) {}   // display layer only — fail silent, card verdict unaffected
+      if (!feats.length) return;
       const seen = {};
-      d.features.slice(0, 500).forEach(ft => {
+      feats.forEach(ft => {
         const at = ft.attributes || {};
         let ceil = null;
         for (const k in at) { if (/CEILING/i.test(k) && at[k] != null && isFinite(parseInt(at[k]))) { ceil = parseInt(at[k]); break; } }
@@ -4068,8 +4092,10 @@ const [showComms, setShowComms] = useState(false);
         if (!prev) seen[key] = { ceiling: ceil, rings: rings };
         else if (ceil != null && (prev.ceiling == null || ceil < prev.ceiling)) prev.ceiling = ceil;
       });
-      setGridCells(Object.values(seen).slice(0, 250));
-    }).catch(() => {});
+      const cells = Object.values(seen);
+      setGridCells(cells.slice(0, 600));
+      setGridPartial(truncated || cells.length > 600);   // fail-loud: overlay is incomplete
+    })();
   }, [gridOn, posCoords]);
 
   // ── Layer 0 (render-time): an ACTIVE TFR at the operator's position outranks every other verdict ──
@@ -4375,7 +4401,7 @@ const [showComms, setShowComms] = useState(false);
         var when = t.exp ? (" \u00b7 to " + new Date(t.exp + (t.exp.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Chicago" })) : "";
         return /*#__PURE__*/React.createElement("div", { key: t.notam || (t._clat + "," + t._clon), style: { display: "flex", alignItems: "center", gap: 8, background: isFireTfr(t) ? (t.inside ? "rgba(255,159,10,0.12)" : "rgba(255,159,10,0.07)") : (t.inside ? "rgba(255,59,48,0.12)" : "rgba(255,59,48,0.07)"), border: "1px solid " + (isFireTfr(t) ? (t.inside ? "rgba(255,159,10,0.4)" : "rgba(255,159,10,0.3)") : (t.inside ? "rgba(255,59,48,0.4)" : "rgba(255,59,48,0.3)")), borderLeft: "3px solid " + col, borderRadius: 8, padding: "7px 10px" } },
           /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: col, fontWeight: 700 } }, (t.notam ? ("TFR " + t.notam) : "TFR") + " \u00b7 " + t.type),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: col, fontWeight: 700 } }, "TFR " + (t.notam ? t.notam : "\u2014 ID UNAVAIL") + " \u00b7 " + (t.type && t.type !== "TFR" ? t.type : "VERIFY")),
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: "#8B949E", marginTop: 2 } },
               (t.inside ? "INSIDE \u2014 " + (t.edgeNm < 0.05 ? "<0.1" : t.edgeNm.toFixed(1)) + "nm to edge" : t.brg + "\u00b0 \u00b7 " + (t.edgeNm < 0.05 ? "<0.1" : t.edgeNm.toFixed(1)) + "nm to edge") + when)),
           t.inside ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 8, color: col, letterSpacing: 1, fontWeight: 700 } }, isFireTfr(t) ? "COORD" : "NO UAS") : null);
@@ -4602,6 +4628,8 @@ const [showComms, setShowComms] = useState(false);
       )
     )
     ),
+
+    gridOn && gridPartial && /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#FF9F0A", textAlign: "center", padding: "2px 0 6px", fontFamily: "monospace", letterSpacing: 0.5 } }, "\u26A0 LAANC GRID PARTIAL \u2014 VERIFY B4UFLY"),
 
     /* Traffic list */
     adsbTraffic.length === 0
