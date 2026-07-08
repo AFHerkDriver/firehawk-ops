@@ -4561,17 +4561,24 @@ const [showComms, setShowComms] = useState(false);
                 var px = A[0]+t*dx, py = A[1]+t*dy;
                 return { d: Math.sqrt(px*px+py*py), lat: posCoords.lat + py/60, lon: posCoords.lon + px/(cos0*60) };
               };
-              var win = scopeRange + 4, runs = [], nearest = Infinity, nearPt = null;
+              // Densify each border segment that comes near the scope, then keep only the points
+              // within the scope window. This draws a continuous, correctly-curved line even where
+              // simplification left vertices far apart (a straight border becomes 2 sparse points).
+              var runs = [], nearest = Infinity, nearPt = null;
               US_BORDER.forEach(function(line){
                 var run = [];
-                for (var i=0;i<line.length;i++){
-                  var v = line[i];
-                  var inWin = distNm(posCoords.lat, posCoords.lon, v[0], v[1]) <= win;
-                  if (inWin) run.push(proj(v[0], v[1]));
-                  else if (run.length){ if (run.length>1) runs.push(run); run = []; }
-                  if (i>0){
-                    var prevIn = distNm(posCoords.lat, posCoords.lon, line[i-1][0], line[i-1][1]) <= win;
-                    if (inWin || prevIn){ var s = segNear(line[i-1], v); if (s.d < nearest){ nearest = s.d; nearPt = s; } }
+                for (var i=0;i<line.length-1;i++){
+                  var a = line[i], b = line[i+1];
+                  var s = segNear(a, b);
+                  if (s.d < nearest){ nearest = s.d; nearPt = s; }
+                  if (s.d > scopeRange + 1.5){ if (run.length>1) runs.push(run); run = []; continue; }
+                  var segLen = distNm(a[0], a[1], b[0], b[1]);
+                  var steps = Math.max(1, Math.min(800, Math.ceil(segLen / 0.2)));
+                  for (var k=0;k<=steps;k++){
+                    var f = k/steps;
+                    var la = a[0] + (b[0]-a[0])*f, lo = a[1] + (b[1]-a[1])*f;
+                    if (distNm(posCoords.lat, posCoords.lon, la, lo) <= scopeRange + 1) run.push(proj(la, lo));
+                    else if (run.length){ if (run.length>1) runs.push(run); run = []; }
                   }
                 }
                 if (run.length>1) runs.push(run);
