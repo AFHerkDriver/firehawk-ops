@@ -7187,6 +7187,12 @@ function SARModal({
       document.addEventListener('visibilitychange', function(){
         if (!document.hidden){ try { reg.update().catch(function(){}); } catch(_){} }
       });
+      // Silent periodic re-check for devices left open (e.g. station iPad on shift):
+      // every 15 min while visible, fetch sw.js (~3KB) and surface the Reload banner
+      // if a new build is waiting. Skipped while hidden - the foreground handler covers that.
+      setInterval(function(){
+        if (!document.hidden){ try { reg.update().catch(function(){}); } catch(_){} }
+      }, 15 * 60 * 1000);
     }).catch(function(){});
   }
   fhRegisterSW();
