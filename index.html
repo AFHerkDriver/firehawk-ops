@@ -291,6 +291,7 @@
       id: c.id, name: c.name, first: c.first || "", rank: c.rank || "", title: c.title || "", role: c.role, tier: c.tier || "staff",
       hasPin: !!c.hasPin, color: c.color,
       initials: c.initials, part107: (c.part107 == null ? null : c.part107),
+      cert107No: (c.cert107No == null ? null : c.cert107No),   // FAA cert number — owner-only display
       trainingStatus: (c.trainingStatus == null ? null : c.trainingStatus),
       instructor: !!c.instructor,
       reserve: !!c.reserve, archived: !!c.archived
@@ -339,6 +340,7 @@
       color: src.color || fb.color || "#888",
       initials: src.initials || fb.initials || "",
       part107: (src.part107 !== undefined ? src.part107 : (fb.part107 !== undefined ? fb.part107 : null)),
+      cert107No: (src.cert107No !== undefined ? src.cert107No : null),
       trainingStatus: (src.trainingStatus !== undefined ? src.trainingStatus : null),
       instructor: !!src.instructor,
       reserve: !!src.reserve,
@@ -1237,6 +1239,7 @@
     const [editId, setEditId] = useState(null);   // null = add mode; member id = edit mode
     const [certEdit, setCertEdit] = useState(null);   // pilot whose 107 is being edited
     const [certInput, setCertInput] = useState("");   // entered completion / issue date
+    const [certNoInput, setCertNoInput] = useState("");   // FAA certificate number (owner-only)
     const [accessEdit, setAccessEdit] = useState(null); // owner-only: pilot whose PIN / tier is being edited
     const [tierDraft, setTierDraft]   = useState("staff");
     const [pinDraft, setPinDraft]     = useState("");
@@ -1292,11 +1295,15 @@
         if (res && res.ok) closeAddForm();
       }
     };
-    const openCert = (c) => { setCertInput(""); setCertEdit(c); };
+    const openCert = (c) => { setCertInput(""); setCertNoInput(isOwner ? (c.cert107No || "") : ""); setCertEdit(c); };
+    const certDirty = () => !!certInput || (!!certEdit && isOwner && certNoInput.trim() !== (certEdit.cert107No || ""));
     const saveCert = async () => {
-      if (!certInput || !certEdit) return;
-      const res = await doSave(crew.map(x => x.id === certEdit.id ? { ...x, part107: addYears(certInput, 2) } : x), certEdit.name + " 107 updated");
-      if (res && res.ok) { setCertEdit(null); setCertInput(""); }
+      if (!certEdit || !certDirty()) return;
+      // Owner-only spread: staff/admin saves can never write (or wipe) the cert number.
+      const res = await doSave(crew.map(x => x.id === certEdit.id ? { ...x,
+        part107: certInput ? addYears(certInput, 2) : x.part107,
+        ...(isOwner ? { cert107No: (certNoInput.trim() || null) } : {}) } : x), certEdit.name + " 107 updated");
+      if (res && res.ok) { setCertEdit(null); setCertInput(""); setCertNoInput(""); }
     };
     const clearCert = async () => {
       if (!certEdit) return;
@@ -1421,11 +1428,17 @@
           h("input", { type:"date", value:certInput, onChange: e => setCertInput(e.target.value),
             style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark", textAlign:"left", WebkitAppearance:"none", appearance:"none" } }),
           certInput ? h("div", { style:{ fontSize:12, color:C.green, marginTop:8 } }, "→ Expires " + fmtCert(addYears(certInput, 2)) + "  (24 months)") : null,
+          isOwner ? h(React.Fragment, null,
+            fieldLabel("FAA certificate no. \u2014 owner only"),
+            h("input", { type:"text", inputMode:"numeric", autoComplete:"off", value:certNoInput, placeholder:"e.g. 4123456",
+              onChange: ev => setCertNoInput(ev.target.value),
+              style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13 } }),
+            h("div", { style:{ fontSize:10, color:C.dim, marginTop:5 } }, "Program records only \u2014 never shown on schedules, rosters, or the chief board.")) : null,
           h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
             certEdit.part107 ? h("button", { onClick: clearCert, disabled:busy, style:{ borderRadius:8, padding:"9px 12px", fontSize:13, background:"none", border:"1px solid "+C.border, color:C.red, cursor:"pointer" } }, "Clear") : null,
             h("button", { onClick: () => setCertEdit(null), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
-            h("button", { onClick: saveCert, disabled: busy || !certInput,
-              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: certInput ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(certInput?C.blue:C.border), color: certInput?C.blue:C.dim, cursor: certInput?"pointer":"default" } }, busy ? "…" : "Save")))) : null,
+            h("button", { onClick: saveCert, disabled: busy || !certDirty(),
+              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: certDirty() ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(certDirty()?C.blue:C.border), color: certDirty()?C.blue:C.dim, cursor: certDirty()?"pointer":"default" } }, busy ? "…" : "Save")))) : null,
 
       accessEdit ? h("div", { onClick: () => setAccessEdit(null), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
         h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:340, background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
