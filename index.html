@@ -1371,8 +1371,9 @@
         h("div", { style:{ fontSize:14, color:C.text, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, (c.first ? c.first + " " : "") + c.name),
         h("div", { style:{ fontSize:9.5, color:C.dim, letterSpacing:0.5, marginTop:2 } },
           c.archived ? "ARCHIVED" : ((c.rank ? c.rank + " · " : "") + c.role))),
-      c.instructor ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1, alignSelf:"center" } }, "INSTRUCTOR") : null,
-      c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1, alignSelf:"center" } }, "IN TRAINING") : null,
+      h("div", { style:{ width:108, display:"flex", justifyContent:"center", alignItems:"center", gap:4, flexShrink:0 } },
+        c.instructor ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1 } }, "INSTRUCTOR") : null,
+        c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1 } }, "IN TRAINING") : null),
       h("span", { title:"Part 107 status", style:{ width:8, height:8, borderRadius:"50%", background: c.part107 ? certColor(c.part107) : C.dim, flexShrink:0 } }),
       h("span", { style:{ fontSize:16, color:C.dim, lineHeight:1 } }, "›"));
 
@@ -1451,11 +1452,12 @@
         h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:360, maxHeight:"88vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
           h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, editId != null ? "EDIT · " + fName : "ADD PILOT"),
           editId == null ? h("div", { style:{ fontSize:11, color:C.dim } }, "New pilots start as Staff with no PIN. The owner sets PIN and tier from the badge on each row.") : null,
-          fieldLabel("First name"),
-          textInput(fFirst, setFFirst, "First name", 20),
-          fieldLabel("Last name (shown on roster)"),
-          textInput(fName, setFName, "Last name", 24),
-          textInput(fPhone, setFPhone, "Phone \u00b7 optional \u00b7 shown to Chiefs when on duty", 18),
+          fieldLabel("First Name"),
+          textInput(fFirst, setFFirst, "", 20),
+          fieldLabel("Last Name"),
+          textInput(fName, setFName, "", 24),
+          fieldLabel("Phone"),
+          textInput(fPhone, setFPhone, "", 18),
           fieldLabel("Rank"),
           (function(){
             const RANKS = ["FF","Eng","Lt","Capt","BC","DC","AC","Chief"];
@@ -1465,8 +1467,8 @@
               h("option", { value:"" }, "\u2014 no rank \u2014"),
               opts.map(r => h("option", { key:r, value:r }, r)));
           })(),
-          fieldLabel("Title (optional)"),
-          textInput(fTitle, setFTitle, "blank uses role (e.g. Program Manager)", 28),
+          fieldLabel("Title"),
+          textInput(fTitle, setFTitle, "", 28),
           fieldLabel("Initials"),
           textInput(fInit, setFInit, fName.trim() ? fName.trim().slice(0, 2).toUpperCase() : "e.g. JD", 3),
           fieldLabel("Color"),
