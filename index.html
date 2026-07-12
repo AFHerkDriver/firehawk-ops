@@ -294,6 +294,8 @@
       cert107No: (c.cert107No == null ? null : c.cert107No),   // FAA cert number — owner-only display
       trainingStatus: (c.trainingStatus == null ? null : c.trainingStatus),
       instructor: !!c.instructor,
+      seniorPilot: !!c.seniorPilot,
+      nwcg: Array.isArray(c.nwcg) ? c.nwcg : [],
       reserve: !!c.reserve, archived: !!c.archived
     };
   }
@@ -343,6 +345,8 @@
       cert107No: (src.cert107No !== undefined ? src.cert107No : null),
       trainingStatus: (src.trainingStatus !== undefined ? src.trainingStatus : null),
       instructor: !!src.instructor,
+      seniorPilot: !!src.seniorPilot,
+      nwcg: (Array.isArray(src.nwcg) ? src.nwcg : (Array.isArray(fb.nwcg) ? fb.nwcg : [])),
       reserve: !!src.reserve,
       archived: !!src.archived,
       availMonths: (src.availMonths && typeof src.availMonths === "object") ? src.availMonths : {}
@@ -1237,6 +1241,8 @@
     const [fRank, setFRank]   = useState("");
     const [fTitle, setFTitle] = useState("");
     const [fInstr, setFInstr] = useState(false);      // instructor toggle draft
+    const [fSenior, setFSenior] = useState(false);    // senior pilot toggle draft
+    const [fNwcg, setFNwcg] = useState([]);           // NWCG quals draft (UASM/UASD/UASL)
     const [colorPop, setColorPop] = useState(false);   // color spectrum popover
     const [editId, setEditId] = useState(null);   // null = add mode; member id = edit mode
     const [certEdit, setCertEdit] = useState(null);   // pilot whose 107 is being edited
@@ -1280,9 +1286,9 @@
     const editBtn = (c) => isOwner
       ? h("button", { onClick: () => openEdit(c), disabled:busy, style:{ fontSize:10, color:C.dim, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Edit")
       : null;
-    const resetForm = () => { setFName(""); setFInit(""); setFFirst(""); setFRank(""); setFTitle(""); setFRole("RPIC"); setFInstr(false); setCertInput(""); setCertNoInput(""); setPinDraft(""); setClearPin(false); setColorPop(false); };
+    const resetForm = () => { setFName(""); setFInit(""); setFFirst(""); setFRank(""); setFTitle(""); setFRole("RPIC"); setFInstr(false); setFSenior(false); setFNwcg([]); setCertInput(""); setCertNoInput(""); setPinDraft(""); setClearPin(false); setColorPop(false); };
     const closeAddForm = () => { setShowAdd(false); setEditId(null); resetForm(); };
-    const openEdit = (c) => { setEditId(c.id); setFName(c.name || ""); setFInit(c.initials || ""); setFFirst(c.first || ""); setFRank(c.rank || ""); setFTitle(c.title || ""); setFRole(c.role || "RPIC"); setFColor(c.color || ""); setFPhone(c.phone || ""); setFInstr(!!c.instructor); setCertInput(""); setCertNoInput(isOwner ? (c.cert107No || "") : ""); setTierDraft(c.tier || "staff"); setPinDraft(""); setClearPin(false); setAuthDraft(sessionPin || ""); setColorPop(false); setShowAdd(true); };
+    const openEdit = (c) => { setEditId(c.id); setFName(c.name || ""); setFInit(c.initials || ""); setFFirst(c.first || ""); setFRank(c.rank || ""); setFTitle(c.title || ""); setFRole(c.role || "RPIC"); setFColor(c.color || ""); setFPhone(c.phone || ""); setFInstr(!!c.instructor); setFSenior(!!c.seniorPilot); setFNwcg(Array.isArray(c.nwcg) ? c.nwcg.slice() : []); setCertInput(""); setCertNoInput(isOwner ? (c.cert107No || "") : ""); setTierDraft(c.tier || "staff"); setPinDraft(""); setClearPin(false); setAuthDraft(sessionPin || ""); setColorPop(false); setShowAdd(true); };
     const saveMember = async () => {
       const editing = editId != null ? crew.find(x => x.id === editId) : null;
       const name = fName.trim();
@@ -1314,7 +1320,7 @@
       }
       const init = (fInit.trim() || (name || "XX").slice(0, 2)).toUpperCase().slice(0, 3);
       const ident = isOwner
-        ? { name, first: fFirst.trim(), rank: fRank.trim(), title: fTitle.trim(), role: fRole, phone: fPhone.trim() || null, color: fColor || (editing && editing.color) || availColors[0] || PALETTE[0], initials: init, instructor: fInstr }
+        ? { name, first: fFirst.trim(), rank: fRank.trim(), title: fTitle.trim(), role: fRole, phone: fPhone.trim() || null, color: fColor || (editing && editing.color) || availColors[0] || PALETTE[0], initials: init, instructor: fInstr, seniorPilot: fSenior, nwcg: fNwcg }
         : { role: fRole };   // admin: role + 107 date only — same permissions as before
       const certPatch = Object.assign({}, certInput ? { part107: addYears(certInput, 2) } : {}, isOwner ? { cert107No: (certNoInput.trim() || null) } : {});
       if (editing) {
@@ -1346,9 +1352,11 @@
         h("div", { style:{ fontSize:14, color:C.text, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, (c.first ? c.first + " " : "") + c.name),
         h("div", { style:{ fontSize:9.5, color:C.dim, letterSpacing:0.5, marginTop:2 } },
           c.archived ? "ARCHIVED" : ((c.rank ? c.rank + " · " : "") + c.role))),
-      h("div", { style:{ width:108, display:"flex", justifyContent:"center", alignItems:"center", gap:4, flexShrink:0 } },
-        c.instructor ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1 } }, "INSTRUCTOR") : null,
-        c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1 } }, "IN TRAINING") : null),
+      h("div", { style:{ maxWidth:186, display:"flex", flexWrap:"wrap", justifyContent:"center", alignItems:"center", gap:4, flexShrink:0 } },
+        c.instructor ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1 } }, "INSTRUCTOR") : null,
+        c.seniorPilot ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.blue, background:C.blue+"2A", color:C.blue, flexShrink:0, fontWeight:800, lineHeight:1 } }, "SENIOR PILOT") : null,
+        c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1 } }, "IN TRAINING") : null,
+        (Array.isArray(c.nwcg) ? c.nwcg : []).map(function(q){ return h("span", { key:q, style:{ fontSize:7.5, letterSpacing:0.5, padding:"3px 6px", borderRadius:6, border:"1px solid #16A085", background:"rgba(22,160,133,0.22)", color:"#16A085", flexShrink:0, fontWeight:800, lineHeight:1 } }, q); })),
       h("span", { title:"Part 107 status", style:{ width:8, height:8, borderRadius:"50%", background: c.part107 ? certColor(c.part107) : C.dim, flexShrink:0 } }),
       h("span", { style:{ fontSize:16, color:C.dim, lineHeight:1 } }, "›"));
 
@@ -1359,6 +1367,8 @@
     const pickHue = (e) => { const r = e.currentTarget.getBoundingClientRect(); const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); setFColor(hslToHex(Math.round(x*360)%360, 72, 55)); };
     const fcol = (lbl, el) => h("div", { style:{ flex:1, minWidth:0 } }, fieldLabel(lbl), el);
     const secLbl = (t) => h("div", { style:{ fontSize:8.5, color:C.dim, letterSpacing:2, margin:"16px 0 2px" } }, t);
+    const NWCG = [["UASM","UAS Manager"],["UASL","UAS Module Leader"],["UASD","UAS Data Specialist"]];
+    const toggleNwcg = (q) => setFNwcg(prev => prev.indexOf(q) === -1 ? prev.concat(q) : prev.filter(x => x !== q));
 
     const clash   = null;   // PIN collision can no longer be checked client-side
     const editingM = editId != null ? (crew.find(x => x.id === editId) || null) : null;
@@ -1407,8 +1417,12 @@
                 fieldLabel("Color"),
                 h("button", { onClick: () => setColorPop(true), title:"Pick color",
                   style:{ width:34, height:34, borderRadius:"50%", background: fColor || "#4B5563", border:"2px solid "+C.border, cursor:"pointer", padding:0, display:"block" } }))),
-            h("div", { style:{ marginTop:14 } },
-              h("button", { onClick: () => setFInstr(!fInstr), style: { ...pillBtn(fInstr, C.accent), padding:"7px 14px" } }, "INSTRUCTOR"))) : h(React.Fragment, null,
+            h("div", { style:{ display:"flex", gap:8, marginTop:14, flexWrap:"wrap" } },
+              h("button", { onClick: () => setFInstr(!fInstr), style: { ...pillBtn(fInstr, C.accent), padding:"7px 14px" } }, "INSTRUCTOR"),
+              h("button", { onClick: () => setFSenior(!fSenior), style: { ...pillBtn(fSenior, C.blue), padding:"7px 14px" } }, "SENIOR PILOT")),
+            secLbl("NWCG QUALS"),
+            h("div", { style:{ display:"flex", gap:8, flexWrap:"wrap", marginTop:6 } },
+              NWCG.map(function(q){ return h("button", { key:q[0], title:q[1], onClick: () => toggleNwcg(q[0]), style: { ...pillBtn(fNwcg.indexOf(q[0]) !== -1, "#16A085"), padding:"7px 14px" } }, q[0]); }))) : h(React.Fragment, null,
             fcol("Role", h("div", { style:{ display:"flex", gap:6, paddingTop:4 } },
               h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC") }, "RPIC"),
               h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "VO")))),
@@ -1430,7 +1444,7 @@
                   h("button", { onClick: () => setTierDraft("admin"), style: pillBtn(tierDraft === "admin") }, "ADMIN"),
                   h("button", { onClick: () => setTierDraft("staff"), style: pillBtn(tierDraft === "staff") }, "STAFF")),
             h("div", { style:{ display:"flex", gap:10, alignItems:"flex-end" } },
-              fcol("Sign-In PIN", h("input", { value:pinDraft, onChange: e => { setPinDraft(e.target.value); if (e.target.value.trim()) setClearPin(false); }, type:"password", inputMode:"numeric", placeholder: (editingM && editingM.hasPin) ? "Blank keeps current" : "Blank = no sign-in", maxLength:12,
+              fcol("Sign-In PIN", h("input", { value:pinDraft, onChange: e => { setPinDraft(e.target.value); if (e.target.value.trim()) setClearPin(false); }, type:"password", inputMode:"numeric", placeholder: "Enter New Pin to Change", maxLength:12,
                 style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:14, letterSpacing:3, colorScheme:"dark" } })),
               (editingM && editingM.hasPin) ? h("button", { onClick: () => { setPinDraft(""); setClearPin(true); }, style:{ flexShrink:0, borderRadius:8, padding:"9px 12px", fontSize:12, background: clearPin ? "rgba(255,59,48,0.14)" : "none", border:"1px solid "+(clearPin ? C.red : C.border), color:C.red, cursor:"pointer" } }, clearPin ? "Will Clear" : "Clear PIN") : null),
             (pinDraft.trim() || clearPin) ? fcol("Authorize \u2014 Your PIN", h("input", { value:authDraft, onChange: e => setAuthDraft(e.target.value), type:"password", inputMode:"numeric", maxLength:12,
