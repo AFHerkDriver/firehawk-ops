@@ -1236,6 +1236,8 @@
     const [fFirst, setFFirst] = useState("");
     const [fRank, setFRank]   = useState("");
     const [fTitle, setFTitle] = useState("");
+    const [fInstr, setFInstr] = useState(false);      // instructor toggle draft
+    const [colorPop, setColorPop] = useState(false);   // color spectrum popover
     const [editId, setEditId] = useState(null);   // null = add mode; member id = edit mode
     const [certEdit, setCertEdit] = useState(null);   // pilot whose 107 is being edited
     const [certInput, setCertInput] = useState("");   // entered completion / issue date
@@ -1246,7 +1248,6 @@
     const [authDraft, setAuthDraft]   = useState("");   // owner confirms their own PIN to authorize a PIN change
     const [clearPin, setClearPin]     = useState(false);
     const [confirmDel, setConfirmDel] = useState(null);   // member id armed for permanent removal
-    const [sheetId, setSheetId] = useState(null);        // member whose action sheet is open
 
     const activeList   = crew.filter(c => !c.archived);
     const archivedList = crew.filter(c => c.archived);
@@ -1279,71 +1280,56 @@
     const editBtn = (c) => isOwner
       ? h("button", { onClick: () => openEdit(c), disabled:busy, style:{ fontSize:10, color:C.dim, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Edit")
       : null;
-    const resetForm = () => { setFName(""); setFInit(""); setFFirst(""); setFRank(""); setFTitle(""); setFRole("RPIC"); };
+    const resetForm = () => { setFName(""); setFInit(""); setFFirst(""); setFRank(""); setFTitle(""); setFRole("RPIC"); setFInstr(false); setCertInput(""); setCertNoInput(""); setPinDraft(""); setClearPin(false); setColorPop(false); };
     const closeAddForm = () => { setShowAdd(false); setEditId(null); resetForm(); };
-    const openEdit = (c) => { setEditId(c.id); setFName(c.name || ""); setFInit(c.initials || ""); setFFirst(c.first || ""); setFRank(c.rank || ""); setFTitle(c.title || ""); setFRole(c.role || "RPIC"); setFColor(c.color || PALETTE[0]); setFPhone(c.phone || ""); setShowAdd(true); };
+    const openEdit = (c) => { setEditId(c.id); setFName(c.name || ""); setFInit(c.initials || ""); setFFirst(c.first || ""); setFRank(c.rank || ""); setFTitle(c.title || ""); setFRole(c.role || "RPIC"); setFColor(c.color || ""); setFPhone(c.phone || ""); setFInstr(!!c.instructor); setCertInput(""); setCertNoInput(isOwner ? (c.cert107No || "") : ""); setTierDraft(c.tier || "staff"); setPinDraft(""); setClearPin(false); setAuthDraft(sessionPin || ""); setColorPop(false); setShowAdd(true); };
     const saveMember = async () => {
+      const editing = editId != null ? crew.find(x => x.id === editId) : null;
       const name = fName.trim();
-      if (!name) return;
-      const init = (fInit.trim() || name.slice(0, 2)).toUpperCase().slice(0, 3);
-      const ident = { name, first: fFirst.trim(), rank: fRank.trim(), title: fTitle.trim(), role: fRole, phone: fPhone.trim() || null, color: fColor, initials: init };
-      if (editId != null) {
-        const res = await doSave(crew.map(x => x.id === editId ? { ...x, ...ident } : x), name + " updated");
+      if (!name && (isOwner || editId == null)) return;
+      // Owner-authorized PIN operations run FIRST — any failure aborts the whole save (fail-loud, form stays open).
+      let tierPatch = {};
+      if (isOwner && editing) {
+        const selfLock = myId != null && editing.id === myId;
+        const newTier = selfLock ? editing.tier : tierDraft;
+        const np = pinDraft.trim(), ap = authDraft.trim();
+        let hp = !!editing.hasPin;
+        if ((np || (clearPin && editing.hasPin)) && !ap) { flash("Enter your own PIN to authorize"); return; }
+        if (np) {
+          try {
+            const r = await fetch(AUTH + "/set-pin", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ authPin: ap, id: editing.id, newPin: np, tier: newTier }) });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) { flash(r.status === 403 ? "Your PIN didn't authorize that" : (r.status === 409 || j.reason === "duplicate" || j.error === "duplicate") ? "That PIN is already in use \u2014 choose another" : "Could not save PIN"); return; }
+            hp = true;
+          } catch (e) { flash("Server unreachable \u2014 PIN not saved"); return; }
+        } else if (clearPin && editing.hasPin) {
+          try {
+            const r = await fetch(AUTH + "/remove-pin", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ authPin: ap, id: editing.id }) });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.ok) { flash(r.status === 403 ? "Your PIN didn't authorize that" : "Could not remove PIN"); return; }
+            hp = false;
+          } catch (e) { flash("Server unreachable \u2014 PIN not changed"); return; }
+        }
+        tierPatch = { tier: newTier, hasPin: hp };
+      }
+      const init = (fInit.trim() || (name || "XX").slice(0, 2)).toUpperCase().slice(0, 3);
+      const ident = isOwner
+        ? { name, first: fFirst.trim(), rank: fRank.trim(), title: fTitle.trim(), role: fRole, phone: fPhone.trim() || null, color: fColor || (editing && editing.color) || availColors[0] || PALETTE[0], initials: init, instructor: fInstr }
+        : { role: fRole };   // admin: role + 107 date only — same permissions as before
+      const certPatch = Object.assign({}, certInput ? { part107: addYears(certInput, 2) } : {}, isOwner ? { cert107No: (certNoInput.trim() || null) } : {});
+      if (editing) {
+        const res = await doSave(crew.map(x => x.id === editId ? { ...x, ...ident, ...certPatch, ...tierPatch } : x), (isOwner ? name : editing.name) + " updated");
         if (res && res.ok) closeAddForm();
       } else {
-        const member = { id: Date.now(), ...ident, tier: "staff", hasPin: false, part107: null, trainingStatus: "in_training", reserve: false, archived: false, availMonths: {} };
+        const member = Object.assign({ id: Date.now() }, ident, { tier: "staff", hasPin: false, part107: certInput ? addYears(certInput, 2) : null }, isOwner ? { cert107No: certNoInput.trim() || null } : {}, { trainingStatus: "in_training", reserve: false, archived: false, availMonths: {} });
         const res = await doSave([...crew, member], "Added " + name);
         if (res && res.ok) closeAddForm();
       }
     };
-    const openCert = (c) => { setCertInput(""); setCertNoInput(isOwner ? (c.cert107No || "") : ""); setCertEdit(c); };
-    const certDirty = () => !!certInput || (!!certEdit && isOwner && certNoInput.trim() !== (certEdit.cert107No || ""));
-    const saveCert = async () => {
-      if (!certEdit || !certDirty()) return;
-      // Owner-only spread: staff/admin saves can never write (or wipe) the cert number.
-      const res = await doSave(crew.map(x => x.id === certEdit.id ? { ...x,
-        part107: certInput ? addYears(certInput, 2) : x.part107,
-        ...(isOwner ? { cert107No: (certNoInput.trim() || null) } : {}) } : x), certEdit.name + " 107 updated");
-      if (res && res.ok) { setCertEdit(null); setCertInput(""); setCertNoInput(""); }
-    };
-    const clearCert = async () => {
-      if (!certEdit) return;
-      const res = await doSave(crew.map(x => x.id === certEdit.id ? { ...x, part107: null } : x), certEdit.name + " 107 cleared");
-      if (res && res.ok) { setCertEdit(null); setCertInput(""); }
-    };
     const tierLabel = (t) => t === "owner" ? "Owner" : t === "admin" ? "Admin" : "Staff";
     const tierHint  = (t) => t === "owner" ? "Full control, including access and PINs." : t === "admin" ? "Edits schedule and crew — no access or PIN control." : "Own availability only — no editing.";
-    const openAccess = (c) => { setTierDraft(c.tier || "staff"); setPinDraft(""); setClearPin(false); setAuthDraft(sessionPin || ""); setAccessEdit(c); };
-    const saveAccess = async () => {
-      if (!accessEdit) return;
-      const isSelf  = myId != null && accessEdit.id === myId;
-      const newTier = isSelf ? accessEdit.tier : tierDraft;   // own tier is locked to prevent self-lockout
-      const np = pinDraft.trim();
-      const ap = authDraft.trim();
-      const changingPin = !!np || (clearPin && accessEdit.hasPin);
-      if (changingPin && !ap) { flash("Enter your own PIN to authorize"); return; }
-      let hp = !!accessEdit.hasPin;
-      if (np) {
-        try {
-          const r = await fetch(AUTH + "/set-pin", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ authPin: ap, id: accessEdit.id, newPin: np, tier: newTier }) });
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok || !j.ok) { flash(r.status === 403 ? "Your PIN didn't authorize that" : (r.status === 409 || j.reason === "duplicate" || j.error === "duplicate") ? "That PIN is already in use \u2014 choose another" : "Could not save PIN"); return; }
-          hp = true;
-        } catch (e) { flash("Server unreachable \u2014 PIN not saved"); return; }
-      } else if (clearPin && accessEdit.hasPin) {
-        try {
-          const r = await fetch(AUTH + "/remove-pin", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ authPin: ap, id: accessEdit.id }) });
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok || !j.ok) { flash(r.status === 403 ? "Your PIN didn't authorize that" : "Could not remove PIN"); return; }
-          hp = false;
-        } catch (e) { flash("Server unreachable \u2014 PIN not changed"); return; }
-      }
-      const res = await doSave(crew.map(x => x.id === accessEdit.id ? { ...x, tier: newTier, hasPin: hp } : x), accessEdit.name + " access updated");
-      if (res && res.ok) { setAccessEdit(null); setPinDraft(""); setClearPin(false); setAuthDraft(""); }
-    };
-
     const pillBtn = (on, hue) => { const col = hue || C.blue; return { fontSize:11, letterSpacing:1, padding:"4px 10px", borderRadius:7, border:"1px solid "+(on?col:C.border), background: on?(col+"24"):C.panel2, color: on?col:C.dim, cursor:"pointer" }; };
-    const openAdd = () => { setEditId(null); resetForm(); setFPhone(""); setFColor(availColors[0] || PALETTE[0]); setShowAdd(true); };
+    const openAdd = () => { setEditId(null); resetForm(); setFPhone(""); setFColor(""); setTierDraft("staff"); setAuthDraft(sessionPin || ""); setShowAdd(true); };
 
     // Training status chip — read-only; state is written by training.html (SOP Appendix E record).
     // Only In Training renders: no chip = qualified or grandfathered (PM direction, keeps rows uncluttered).
@@ -1352,19 +1338,8 @@
       const col = "#d29922";
       return h("span", { style:{ fontSize:10, letterSpacing:1, padding:"4px 8px", borderRadius:7, border:"1px solid "+col, background:col+"20", color:col, whiteSpace:"nowrap" } }, "In Training");
     };
-    const sheetMember = sheetId != null ? (crew.find(x => x.id === sheetId) || null) : null;
-    const sheetRowBtn = (label, value, onTap, valColor, disabled, nav) => h("button", { onClick: onTap || undefined, disabled: disabled || busy,
-      style:{ display:"flex", alignItems:"center", width:"100%", textAlign:"left", background:C.panel2, border:"1px solid "+C.border, borderRadius:10, padding:"12px", marginBottom:8, cursor: onTap ? "pointer" : "default", fontFamily:"inherit" } },
-      h("span", { style:{ fontSize:12.5, color:C.text } }, label),
-      h("span", { style:{ marginLeft:"auto", fontSize:11, color: valColor || C.dim, textAlign:"right" } }, value || ""),
-      nav ? h("span", { style:{ fontSize:14, color:C.dim, marginLeft:8, lineHeight:1 } }, "\u203a") : null);
-    const sectionLabel = (t) => h("div", { style:{ fontSize:8.5, color:C.dim, letterSpacing:2, margin:"12px 2px 6px" } }, t);
-    const segBtn = (label, on, hue, onTap) => h("button", { onClick:onTap, disabled:busy, style: { ...pillBtn(on, hue), padding:"6px 14px" } }, label);
-    const ctlRow = (label, controls) => h("div", { style:{ display:"flex", alignItems:"center", background:C.panel2, border:"1px solid "+C.border, borderRadius:10, padding:"9px 12px", marginBottom:8 } },
-      h("span", { style:{ fontSize:12.5, color:C.text } }, label),
-      h("div", { style:{ marginLeft:"auto", display:"flex", gap:6 } }, controls));
     // Clean roster row — tap anywhere to open the member action sheet (all controls live there).
-    const memberRow = (c) => h("div", { key:c.id, onClick: () => { setConfirmDel(null); setSheetId(c.id); }, role:"button",
+    const memberRow = (c) => h("div", { key:c.id, onClick: () => { setConfirmDel(null); openEdit(c); }, role:"button",
       style:{ display:"flex", alignItems:"center", gap:10, background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"12px", marginBottom:8, opacity: c.archived ? 0.6 : 1, cursor:"pointer" } },
       h("span", { style:{ width:12, height:12, borderRadius:"50%", background:c.color, flexShrink:0 } }),
       h("div", { style:{ flex:1, minWidth:0 } },
@@ -1382,9 +1357,12 @@
       style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark" } });
     const hslToHex = (hh, ss, ll) => { ss/=100; ll/=100; const k = n => (n + hh/30) % 12; const a = ss * Math.min(ll, 1-ll); const f = n => ll - a * Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1))); const to = x => Math.round(255*x).toString(16).padStart(2,"0"); return "#" + to(f(0)) + to(f(8)) + to(f(4)); };
     const pickHue = (e) => { const r = e.currentTarget.getBoundingClientRect(); const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); setFColor(hslToHex(Math.round(x*360)%360, 72, 55)); };
+    const fcol = (lbl, el) => h("div", { style:{ flex:1, minWidth:0 } }, fieldLabel(lbl), el);
+    const secLbl = (t) => h("div", { style:{ fontSize:8.5, color:C.dim, letterSpacing:2, margin:"16px 0 2px" } }, t);
 
     const clash   = null;   // PIN collision can no longer be checked client-side
-    const accSelf = accessEdit && myId != null && accessEdit.id === myId;
+    const editingM = editId != null ? (crew.find(x => x.id === editId) || null) : null;
+    const accSelf = editingM && myId != null && editingM.id === myId;
     return h("div", null,
       h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 } },
         h("div", { style:{ fontSize:11, color:C.dim, letterSpacing:1 } }, "CREW ROSTER · " + activeList.length + (activeList.length === 1 ? " PILOT" : " PILOTS")),
@@ -1399,143 +1377,93 @@
             showArchived ? h("div", { style:{ marginTop:8 } }, archivedList.map(memberRow)) : null)
         : null,
 
-      sheetMember ? h("div", { onClick: () => setSheetId(null), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
-        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:340, background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)", maxHeight:"85vh", overflowY:"auto" } },
-          h("div", { style:{ display:"flex", alignItems:"center", gap:12 } },
-            h("div", { style:{ width:40, height:40, borderRadius:"50%", background:sheetMember.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, color:"#fff", fontWeight:700, flexShrink:0 } }, sheetMember.initials),
-            h("div", { style:{ flex:1, minWidth:0 } },
-              h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:21, letterSpacing:1, color:C.text, lineHeight:1.05 } }, (sheetMember.first ? sheetMember.first + " " : "") + sheetMember.name),
-              h("div", { style:{ fontSize:10, color:C.dim, marginTop:3, letterSpacing:0.5 } }, (sheetMember.rank ? sheetMember.rank + " \u00b7 " : "") + (sheetMember.title || sheetMember.role))),
-            h("span", { style:{ fontSize:9, letterSpacing:1, padding:"2px 7px", borderRadius:10, border:"1px solid "+C.border, color: sheetMember.tier === "staff" ? C.dim : C.accent } }, sheetMember.tier === "owner" ? "OWNER" : sheetMember.tier === "admin" ? "ADMIN" : "STAFF")),
-          isOwner ? h("div", { style:{ fontSize:9.5, color:C.dim, fontFamily:"monospace", letterSpacing:0.5, margin:"4px 0 0 52px" } }, "107 # " + (sheetMember.cert107No || "\u2014")) : null,
-          sheetMember.trainingStatus === "in_training" ? h("div", { style:{ margin:"8px 0 0 52px" } }, h("span", { style:{ fontSize:8, letterSpacing:1.5, padding:"3px 8px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.16)", color:"#d29922", fontWeight:700 } }, "IN TRAINING")) : null,
-          sheetMember.archived
-            ? h(React.Fragment, null,
-                sectionLabel("ROSTER"),
-                sheetRowBtn("Restore To Roster", "", () => unarchive(sheetMember), C.green),
-                (isOwner && sheetMember.id !== myId && sheetMember.tier !== "owner") ? (confirmDel === sheetMember.id
-                  ? h("div", { style:{ background:"rgba(255,59,48,0.08)", border:"1px solid "+C.red, borderRadius:10, padding:"12px", marginBottom:8 } },
-                      h("div", { style:{ fontSize:11.5, color:C.red, marginBottom:10, lineHeight:1.4 } }, "Permanently remove " + (sheetMember.first ? sheetMember.first + " " : "") + sheetMember.name + "? This cannot be undone."),
-                      h("div", { style:{ display:"flex", gap:8 } },
-                        h("button", { onClick: () => setConfirmDel(null), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer", fontFamily:"inherit" } }, "Cancel"),
-                        h("button", { onClick: () => removeMember(sheetMember), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:"rgba(255,59,48,0.18)", border:"1px solid "+C.red, color:C.red, fontWeight:700, cursor:"pointer", fontFamily:"inherit" } }, "Delete")))
-                  : h("button", { onClick: () => setConfirmDel(sheetMember.id), disabled:busy, style:{ display:"flex", alignItems:"center", width:"100%", textAlign:"left", background:"rgba(255,59,48,0.06)", border:"1px solid rgba(255,59,48,0.35)", borderRadius:10, padding:"12px", marginBottom:8, cursor:"pointer", fontFamily:"inherit" } },
-                      h("span", { style:{ fontSize:12.5, color:C.red } }, "Remove Permanently"))) : null)
-            : h(React.Fragment, null,
-                sectionLabel("QUALIFICATIONS"),
-                ctlRow("Role", [
-                  segBtn("RPIC", sheetMember.role === "RPIC", C.blue, () => { if (sheetMember.role !== "RPIC") setRole(sheetMember); }),
-                  segBtn("VO", sheetMember.role === "VO", C.green, () => { if (sheetMember.role !== "VO") setRole(sheetMember); })]),
-                sheetRowBtn("Part 107", sheetMember.part107 ? fmtCertShort(sheetMember.part107) : "Not On File", () => { setSheetId(null); openCert(sheetMember); }, sheetMember.part107 ? certColor(sheetMember.part107) : C.dim, false, true),
-                isOwner
-                  ? ctlRow("Instructor", [
-                      segBtn("Yes", !!sheetMember.instructor, C.accent, () => { if (!sheetMember.instructor) setInstructor(sheetMember); }),
-                      segBtn("No", !sheetMember.instructor, C.dim, () => { if (sheetMember.instructor) setInstructor(sheetMember); })])
-                  : (sheetMember.instructor ? ctlRow("Instructor", [h("span", { style: pillBtn(true, C.accent) }, "Yes")]) : null),
-                isOwner ? h(React.Fragment, null,
-                  sectionLabel("ACCOUNT"),
-                  sheetRowBtn("Access & PIN", "", () => { setSheetId(null); openAccess(sheetMember); }, null, false, true),
-                  sheetRowBtn("Edit Details", "", () => { setSheetId(null); openEdit(sheetMember); }, null, false, true)) : null,
-                sectionLabel("ROSTER"),
-                sheetRowBtn("Archive", "", () => archive(sheetMember), C.dim),
-                (isOwner && sheetMember.id !== myId && sheetMember.tier !== "owner") ? (confirmDel === sheetMember.id
-                  ? h("div", { style:{ background:"rgba(255,59,48,0.08)", border:"1px solid "+C.red, borderRadius:10, padding:"12px", marginBottom:8 } },
-                      h("div", { style:{ fontSize:11.5, color:C.red, marginBottom:10, lineHeight:1.4 } }, "Permanently remove " + (sheetMember.first ? sheetMember.first + " " : "") + sheetMember.name + "? This cannot be undone."),
-                      h("div", { style:{ display:"flex", gap:8 } },
-                        h("button", { onClick: () => setConfirmDel(null), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer", fontFamily:"inherit" } }, "Cancel"),
-                        h("button", { onClick: () => removeMember(sheetMember), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:"rgba(255,59,48,0.18)", border:"1px solid "+C.red, color:C.red, fontWeight:700, cursor:"pointer", fontFamily:"inherit" } }, "Delete")))
-                  : h("button", { onClick: () => setConfirmDel(sheetMember.id), disabled:busy, style:{ display:"flex", alignItems:"center", width:"100%", textAlign:"left", background:"rgba(255,59,48,0.06)", border:"1px solid rgba(255,59,48,0.35)", borderRadius:10, padding:"12px", marginBottom:8, cursor:"pointer", fontFamily:"inherit" } },
-                      h("span", { style:{ fontSize:12.5, color:C.red } }, "Remove Permanently"))) : null),
-          h("button", { onClick: () => setSheetId(null), style:{ width:"100%", borderRadius:8, padding:"10px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer", marginTop:6 } }, "Close"))) : null,
-
       showAdd ? h("div", { onClick: () => closeAddForm(), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
-        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:360, maxHeight:"88vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
-          h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, editId != null ? "EDIT · " + fName : "ADD PILOT"),
-          editId == null ? h("div", { style:{ fontSize:11, color:C.dim } }, "New pilots start as Staff with no PIN. The owner sets PIN and tier from the badge on each row.") : null,
-          fieldLabel("First Name"),
-          textInput(fFirst, setFFirst, "", 20),
-          fieldLabel("Last Name"),
-          textInput(fName, setFName, "", 24),
-          fieldLabel("Phone"),
-          textInput(fPhone, setFPhone, "", 18),
-          fieldLabel("Rank"),
-          (function(){
-            const RANKS = ["FF","Eng","Lt","Capt","BC","DC","AC","Chief"];
-            const opts = (fRank && RANKS.indexOf(fRank) === -1) ? [fRank].concat(RANKS) : RANKS;   // legacy free-text rank stays selectable
-            return h("select", { value:fRank, onChange: e => setFRank(e.target.value),
-              style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark" } },
-              h("option", { value:"" }, "\u2014 no rank \u2014"),
-              opts.map(r => h("option", { key:r, value:r }, r)));
-          })(),
-          fieldLabel("Title"),
-          textInput(fTitle, setFTitle, "", 28),
-          fieldLabel("Initials"),
-          textInput(fInit, setFInit, fName.trim() ? fName.trim().slice(0, 2).toUpperCase() : "e.g. JD", 3),
-          fieldLabel("Color"),
-          h("div", { style:{ display:"flex", alignItems:"center", gap:10 } },
-            h("span", { style:{ width:28, height:28, borderRadius:"50%", background:fColor, border:"2px solid "+C.border, flexShrink:0 } }),
-            h("div", { onPointerDown: e => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch(_){} pickHue(e); },
-              onPointerMove: e => { if (e.buttons) pickHue(e); },
-              style:{ flex:1, height:30, borderRadius:8, border:"1px solid "+C.border, cursor:"crosshair", touchAction:"none",
-                background:"linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)" } })),
-          fieldLabel("Role"),
-          h("div", { style:{ display:"flex", gap:8 } },
-            h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC") }, "RPIC"),
-            h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO") }, "VO")),
-          h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
-            h("button", { onClick: () => closeAddForm(), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
-            h("button", { onClick: saveMember, disabled: busy || !fName.trim(),
-              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: fName.trim() ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(fName.trim()?C.blue:C.border), color: fName.trim()?C.blue:C.dim, cursor: fName.trim()?"pointer":"default" } }, busy ? "…" : (editId != null ? "Save" : "Add Pilot"))))) : null,
-
-      certEdit ? h("div", { onClick: () => setCertEdit(null), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
-        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:340, background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
-          h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, "PART 107 · " + certEdit.name),
-          h("div", { style:{ fontSize:11, color: certEdit.part107 ? certColor(certEdit.part107) : C.dim } }, certEdit.part107 ? ((certDays(certEdit.part107) < 0 ? "Currently expired — was valid to " : "Current — valid to ") + fmtCert(certEdit.part107)) : "Not on file"),
-          fieldLabel("Completion / issue date"),
-          h("input", { type:"date", value:certInput, onChange: e => setCertInput(e.target.value),
-            style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark", textAlign:"left", WebkitAppearance:"none", appearance:"none" } }),
-          certInput ? h("div", { style:{ fontSize:12, color:C.green, marginTop:8 } }, "→ Expires " + fmtCert(addYears(certInput, 2)) + "  (24 months)") : null,
+        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:400, maxHeight:"90vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
+          h("div", { style:{ display:"flex", alignItems:"center", gap:10, marginBottom:4 } },
+            h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, flex:1, minWidth:0 } }, editId != null ? "EDIT \u2014 " + ((fFirst ? fFirst + " " : "") + fName) : "ADD PILOT"),
+            (editingM && editingM.trainingStatus === "in_training") ? h("span", { style:{ fontSize:8.5, letterSpacing:1, padding:"3px 8px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", fontWeight:800, flexShrink:0 } }, "IN TRAINING") : null),
           isOwner ? h(React.Fragment, null,
-            fieldLabel("FAA certificate no. \u2014 owner only"),
-            h("input", { type:"text", inputMode:"numeric", autoComplete:"off", value:certNoInput, placeholder:"e.g. 4123456",
-              onChange: ev => setCertNoInput(ev.target.value),
-              style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13 } }),
-            h("div", { style:{ fontSize:10, color:C.dim, marginTop:5 } }, "Program records only \u2014 never shown on schedules, rosters, or the chief board.")) : null,
-          h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
-            certEdit.part107 ? h("button", { onClick: clearCert, disabled:busy, style:{ borderRadius:8, padding:"9px 12px", fontSize:13, background:"none", border:"1px solid "+C.border, color:C.red, cursor:"pointer" } }, "Clear") : null,
-            h("button", { onClick: () => setCertEdit(null), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
-            h("button", { onClick: saveCert, disabled: busy || !certDirty(),
-              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: certDirty() ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+(certDirty()?C.blue:C.border), color: certDirty()?C.blue:C.dim, cursor: certDirty()?"pointer":"default" } }, busy ? "…" : "Save")))) : null,
-
-      accessEdit ? h("div", { onClick: () => setAccessEdit(null), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
-        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:340, background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding:18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
-          h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, marginBottom:2 } }, "ACCESS · " + accessEdit.name),
-          h("div", { style:{ fontSize:11, color:C.dim } }, tierLabel(accessEdit.tier) + (accessEdit.hasPin ? " · PIN on file" : " · no PIN")),
-          fieldLabel("Tier"),
-          accSelf
-            ? h("div", { style:{ fontSize:12, color:C.dim, padding:"4px 0" } }, "Owner (you) — your own tier can't be changed here.")
-            : h("div", null,
-                h("div", { style:{ display:"flex", gap:8 } },
+            h("div", { style:{ display:"flex", gap:10 } },
+              fcol("First", textInput(fFirst, setFFirst, "", 20)),
+              fcol("Last", textInput(fName, setFName, "", 24))),
+            h("div", { style:{ display:"flex", gap:10 } },
+              fcol("Rank", (function(){
+                const RANKS = ["FF","Eng","Lt","Capt","BC","DC","AC","Chief"];
+                const opts = (fRank && RANKS.indexOf(fRank) === -1) ? [fRank].concat(RANKS) : RANKS;
+                return h("select", { value:fRank, onChange: e => setFRank(e.target.value),
+                  style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark" } },
+                  h("option", { value:"" }, "\u2014"),
+                  opts.map(r => h("option", { key:r, value:r }, r)));
+              })()),
+              fcol("Role", h("div", { style:{ display:"flex", gap:6, paddingTop:4 } },
+                h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC") }, "RPIC"),
+                h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "VO")))),
+            h("div", { style:{ display:"flex", gap:10 } },
+              fcol("Title", textInput(fTitle, setFTitle, "", 28)),
+              fcol("Initials", textInput(fInit, setFInit, "", 3))),
+            h("div", { style:{ display:"flex", gap:10, alignItems:"flex-end" } },
+              fcol("Phone", textInput(fPhone, setFPhone, "", 18)),
+              h("div", { style:{ flexShrink:0 } },
+                fieldLabel("Color"),
+                h("button", { onClick: () => setColorPop(true), title:"Pick color",
+                  style:{ width:34, height:34, borderRadius:"50%", background: fColor || "#4B5563", border:"2px solid "+C.border, cursor:"pointer", padding:0, display:"block" } }))),
+            h("div", { style:{ marginTop:14 } },
+              h("button", { onClick: () => setFInstr(!fInstr), style: { ...pillBtn(fInstr, C.accent), padding:"7px 14px" } }, "INSTRUCTOR"))) : h(React.Fragment, null,
+            fcol("Role", h("div", { style:{ display:"flex", gap:6, paddingTop:4 } },
+              h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC") }, "RPIC"),
+              h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "VO")))),
+          secLbl("PART 107"),
+          h("div", { style:{ fontSize:11, color: (editingM && editingM.part107) ? certColor(editingM.part107) : C.dim, margin:"4px 0 0" } },
+            (editingM && editingM.part107) ? ((certDays(editingM.part107) < 0 ? "Expired \u2014 was valid to " : "Current \u2014 valid to ") + fmtCert(editingM.part107)) : "Not on file"),
+          h("div", { style:{ display:"flex", gap:10 } },
+            fcol("Completion Date", h("input", { type:"date", value:certInput, onChange: e => setCertInput(e.target.value),
+              style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13, colorScheme:"dark", WebkitAppearance:"none", appearance:"none" } })),
+            isOwner ? fcol("Cert #", h("input", { type:"text", inputMode:"numeric", autoComplete:"off", value:certNoInput, onChange: ev => setCertNoInput(ev.target.value),
+              style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13 } })) : null),
+          certInput ? h("div", { style:{ fontSize:11.5, color:C.green, marginTop:6 } }, "\u2192 Expires " + fmtCert(addYears(certInput, 2)) + "  (24 months)") : null,
+          (isOwner && editId != null) ? h(React.Fragment, null,
+            secLbl("ACCESS"),
+            accSelf
+              ? h("div", { style:{ fontSize:11.5, color:C.dim, marginTop:6 } }, "Owner (you) \u2014 your own tier can't be changed here.")
+              : h("div", { style:{ display:"flex", gap:6, marginTop:8 } },
                   h("button", { onClick: () => setTierDraft("owner"), style: pillBtn(tierDraft === "owner") }, "OWNER"),
                   h("button", { onClick: () => setTierDraft("admin"), style: pillBtn(tierDraft === "admin") }, "ADMIN"),
                   h("button", { onClick: () => setTierDraft("staff"), style: pillBtn(tierDraft === "staff") }, "STAFF")),
-                h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, tierHint(tierDraft))),
-          fieldLabel("Sign-in PIN"),
-          h("input", { value:pinDraft, onChange: e => { setPinDraft(e.target.value); if (e.target.value.trim()) setClearPin(false); }, type:"password", inputMode:"numeric", placeholder: accessEdit.hasPin ? "Leave blank to keep current" : "Blank = no sign-in", maxLength:12,
-            style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+(clash?C.red:C.border), borderRadius:8, padding:"9px 11px", fontSize:14, letterSpacing:3, colorScheme:"dark" } }),
-          clash
-            ? h("div", { style:{ fontSize:12, color:C.red, marginTop:6 } }, "PIN already used by " + clash.name)
-            : h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, "Type a new PIN to set or replace it. Use Clear to remove sign-in."),
-          (pinDraft.trim() || clearPin) ? h("div", null,
-            fieldLabel("Authorize — your PIN"),
-            h("input", { value:authDraft, onChange: e => setAuthDraft(e.target.value), type:"password", inputMode:"numeric", placeholder:"Your own PIN", maxLength:12,
-              style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:14, letterSpacing:3, colorScheme:"dark" } }),
-            h("div", { style:{ fontSize:11, color:C.dim, marginTop:6 } }, "Confirm your own PIN to authorize this change.")) : null,
-          h("div", { style:{ display:"flex", gap:8, marginTop:18 } },
-            (accessEdit.hasPin || pinDraft) ? h("button", { onClick: () => { setPinDraft(""); setClearPin(true); }, style:{ borderRadius:8, padding:"9px 12px", fontSize:13, background:"none", border:"1px solid "+C.border, color:C.red, cursor:"pointer" } }, "Clear") : null,
-            h("button", { onClick: () => setAccessEdit(null), style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
-            h("button", { onClick: saveAccess, disabled: busy || !!clash,
-              style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:13, background: clash ? C.panel2 : "rgba(59,130,246,0.16)", border:"1px solid "+(clash?C.border:C.blue), color: clash?C.dim:C.blue, cursor: clash?"default":"pointer" } }, busy ? "…" : "Save")))) : null
+            h("div", { style:{ display:"flex", gap:10, alignItems:"flex-end" } },
+              fcol("Sign-In PIN", h("input", { value:pinDraft, onChange: e => { setPinDraft(e.target.value); if (e.target.value.trim()) setClearPin(false); }, type:"password", inputMode:"numeric", placeholder: (editingM && editingM.hasPin) ? "Blank keeps current" : "Blank = no sign-in", maxLength:12,
+                style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:14, letterSpacing:3, colorScheme:"dark" } })),
+              (editingM && editingM.hasPin) ? h("button", { onClick: () => { setPinDraft(""); setClearPin(true); }, style:{ flexShrink:0, borderRadius:8, padding:"9px 12px", fontSize:12, background: clearPin ? "rgba(255,59,48,0.14)" : "none", border:"1px solid "+(clearPin ? C.red : C.border), color:C.red, cursor:"pointer" } }, clearPin ? "Will Clear" : "Clear PIN") : null),
+            (pinDraft.trim() || clearPin) ? fcol("Authorize \u2014 Your PIN", h("input", { value:authDraft, onChange: e => setAuthDraft(e.target.value), type:"password", inputMode:"numeric", maxLength:12,
+              style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:14, letterSpacing:3, colorScheme:"dark" } })) : null) : null,
+          (isOwner && editingM && editingM.archived && editingM.id !== myId && editingM.tier !== "owner")
+            ? (confirmDel === editingM.id
+              ? h("div", { style:{ background:"rgba(255,59,48,0.08)", border:"1px solid "+C.red, borderRadius:10, padding:"12px", marginTop:16 } },
+                  h("div", { style:{ fontSize:11.5, color:C.red, marginBottom:10, lineHeight:1.4 } }, "Permanently remove " + (editingM.first ? editingM.first + " " : "") + editingM.name + "? This cannot be undone."),
+                  h("div", { style:{ display:"flex", gap:8 } },
+                    h("button", { onClick: () => setConfirmDel(null), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer", fontFamily:"inherit" } }, "Cancel"),
+                    h("button", { onClick: async () => { await removeMember(editingM); closeAddForm(); }, disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:"rgba(255,59,48,0.18)", border:"1px solid "+C.red, color:C.red, fontWeight:700, cursor:"pointer", fontFamily:"inherit" } }, "Delete")))
+              : h("button", { onClick: () => setConfirmDel(editingM.id), disabled:busy, style:{ width:"100%", textAlign:"left", background:"rgba(255,59,48,0.06)", border:"1px solid rgba(255,59,48,0.35)", borderRadius:10, padding:"11px 12px", marginTop:16, cursor:"pointer", fontFamily:"inherit" } },
+                  h("span", { style:{ fontSize:12, color:C.red } }, "Remove Permanently"))) : null,
+          h("div", { style:{ display:"flex", gap:8, marginTop:18, alignItems:"center" } },
+            editingM ? h("button", { onClick: async () => { const r = editingM.archived ? await unarchive(editingM) : await archive(editingM); if (r && r.ok) closeAddForm(); }, disabled:busy,
+              style:{ borderRadius:8, padding:"9px 12px", fontSize:12.5, background:"none", border:"1px solid "+(editingM.archived ? C.green : "#d29922"), color: editingM.archived ? C.green : "#d29922", cursor:"pointer" } }, editingM.archived ? "Restore" : "Archive") : null,
+            h("div", { style:{ flex:1 } }),
+            h("button", { onClick: () => closeAddForm(), style:{ borderRadius:8, padding:"9px 16px", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer" } }, "Cancel"),
+            h("button", { onClick: saveMember, disabled: busy || (isOwner && !fName.trim()),
+              style:{ borderRadius:8, padding:"9px 20px", fontSize:13, background: (!isOwner || fName.trim()) ? "rgba(59,130,246,0.16)" : C.panel2, border:"1px solid "+((!isOwner || fName.trim())?C.blue:C.border), color: (!isOwner || fName.trim())?C.blue:C.dim, cursor:"pointer" } }, busy ? "\u2026" : (editId != null ? "Save" : "Add Pilot"))),
+          colorPop ? h("div", { onClick: () => setColorPop(false), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:80, padding:24 } },
+            h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:320, background:C.panel, border:"1px solid "+C.border, borderRadius:14, padding:16, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
+              h("div", { style:{ display:"flex", alignItems:"center", gap:12, marginBottom:12 } },
+                h("span", { style:{ width:34, height:34, borderRadius:"50%", background: fColor || "#4B5563", border:"2px solid "+C.border, flexShrink:0 } }),
+                h("div", { style:{ fontSize:11, color:C.dim } }, "Drag or tap the spectrum")),
+              h("div", { onPointerDown: e => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch(_){} pickHue(e); },
+                onPointerMove: e => { if (e.buttons) pickHue(e); },
+                style:{ width:"100%", height:34, borderRadius:8, border:"1px solid "+C.border, cursor:"crosshair", touchAction:"none",
+                  background:"linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)" } }),
+              h("button", { onClick: () => setColorPop(false), style:{ width:"100%", borderRadius:8, padding:"9px 0", fontSize:13, background:"rgba(59,130,246,0.16)", border:"1px solid "+C.blue, color:C.blue, cursor:"pointer", marginTop:12 } }, "Done"))) : null)) : null,
+
+
+null
     );
   }
 
