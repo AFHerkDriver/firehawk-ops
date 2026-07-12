@@ -1364,15 +1364,15 @@
       h("span", { style:{ fontSize:12.5, color:C.text } }, label),
       h("div", { style:{ marginLeft:"auto", display:"flex", gap:6 } }, controls));
     // Clean roster row — tap anywhere to open the member action sheet (all controls live there).
-    const memberRow = (c) => h("div", { key:c.id, onClick: () => setSheetId(c.id), role:"button",
-      style:{ display:"flex", alignItems:"center", gap:10, background:C.panel, border:"1px solid "+C.border, borderLeft: "3px solid " + (c.trainingStatus === "in_training" ? "#d29922" : (c.instructor ? C.accent : C.border)), borderRadius:10, padding:"12px", marginBottom:8, opacity: c.archived ? 0.6 : 1, cursor:"pointer" } },
+    const memberRow = (c) => h("div", { key:c.id, onClick: () => { setConfirmDel(null); setSheetId(c.id); }, role:"button",
+      style:{ display:"flex", alignItems:"center", gap:10, background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"12px", marginBottom:8, opacity: c.archived ? 0.6 : 1, cursor:"pointer" } },
       h("span", { style:{ width:12, height:12, borderRadius:"50%", background:c.color, flexShrink:0 } }),
       h("div", { style:{ flex:1, minWidth:0 } },
         h("div", { style:{ fontSize:14, color:C.text, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, (c.first ? c.first + " " : "") + c.name),
         h("div", { style:{ fontSize:9.5, color:C.dim, letterSpacing:0.5, marginTop:2 } },
           c.archived ? "ARCHIVED" : ((c.rank ? c.rank + " · " : "") + c.role))),
-      c.instructor ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800 } }, "INSTRUCTOR") : null,
-      c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800 } }, "IN TRAINING") : null,
+      c.instructor ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1, alignSelf:"center" } }, "INSTRUCTOR") : null,
+      c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:9, letterSpacing:1, padding:"4px 8px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1, alignSelf:"center" } }, "IN TRAINING") : null,
       h("span", { title:"Part 107 status", style:{ width:8, height:8, borderRadius:"50%", background: c.part107 ? certColor(c.part107) : C.dim, flexShrink:0 } }),
       h("span", { style:{ fontSize:16, color:C.dim, lineHeight:1 } }, "›"));
 
@@ -1411,9 +1411,15 @@
           sheetMember.archived
             ? h(React.Fragment, null,
                 sectionLabel("ROSTER"),
-                h("div", { style:{ fontSize:11, color:C.dim, margin:"0 0 10px" } }, "Archived \u00b7 history kept"),
                 sheetRowBtn("Restore To Roster", "", () => unarchive(sheetMember), C.green),
-                (isOwner && sheetMember.id !== myId && sheetMember.tier !== "owner") ? sheetRowBtn(confirmDel === sheetMember.id ? "Tap Again To Confirm" : "Remove Permanently", "", () => { if (confirmDel === sheetMember.id) removeMember(sheetMember); else { setConfirmDel(sheetMember.id); setTimeout(() => setConfirmDel(p => p === sheetMember.id ? null : p), 4000); } }, C.red) : null)
+                (isOwner && sheetMember.id !== myId && sheetMember.tier !== "owner") ? (confirmDel === sheetMember.id
+                  ? h("div", { style:{ background:"rgba(255,59,48,0.08)", border:"1px solid "+C.red, borderRadius:10, padding:"12px", marginBottom:8 } },
+                      h("div", { style:{ fontSize:11.5, color:C.red, marginBottom:10, lineHeight:1.4 } }, "Permanently remove " + (sheetMember.first ? sheetMember.first + " " : "") + sheetMember.name + "? This cannot be undone."),
+                      h("div", { style:{ display:"flex", gap:8 } },
+                        h("button", { onClick: () => setConfirmDel(null), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer", fontFamily:"inherit" } }, "Cancel"),
+                        h("button", { onClick: () => removeMember(sheetMember), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:"rgba(255,59,48,0.18)", border:"1px solid "+C.red, color:C.red, fontWeight:700, cursor:"pointer", fontFamily:"inherit" } }, "Delete")))
+                  : h("button", { onClick: () => setConfirmDel(sheetMember.id), disabled:busy, style:{ display:"flex", alignItems:"center", width:"100%", textAlign:"left", background:"rgba(255,59,48,0.06)", border:"1px solid rgba(255,59,48,0.35)", borderRadius:10, padding:"12px", marginBottom:8, cursor:"pointer", fontFamily:"inherit" } },
+                      h("span", { style:{ fontSize:12.5, color:C.red } }, "Remove Permanently"))) : null)
             : h(React.Fragment, null,
                 sectionLabel("QUALIFICATIONS"),
                 ctlRow("Role", [
@@ -1427,11 +1433,18 @@
                   : (sheetMember.instructor ? ctlRow("Instructor", [h("span", { style: pillBtn(true, C.accent) }, "Yes")]) : null),
                 isOwner ? h(React.Fragment, null,
                   sectionLabel("ACCOUNT"),
-                  sheetRowBtn("Access & PIN", (sheetMember.tier === "owner" ? "Owner" : sheetMember.tier === "admin" ? "Admin" : "Staff") + (sheetMember.hasPin ? " \u00b7 PIN set" : " \u00b7 no PIN"), () => { setSheetId(null); openAccess(sheetMember); }, sheetMember.tier === "staff" ? C.dim : C.accent, false, true),
-                  sheetRowBtn("Edit Details", "name \u00b7 rank \u00b7 color", () => { setSheetId(null); openEdit(sheetMember); }, null, false, true)) : null,
+                  sheetRowBtn("Access & PIN", "", () => { setSheetId(null); openAccess(sheetMember); }, null, false, true),
+                  sheetRowBtn("Edit Details", "", () => { setSheetId(null); openEdit(sheetMember); }, null, false, true)) : null,
                 sectionLabel("ROSTER"),
-                sheetRowBtn("Archive", "history kept", () => archive(sheetMember), C.dim),
-                (isOwner && sheetMember.id !== myId && sheetMember.tier !== "owner") ? sheetRowBtn(confirmDel === sheetMember.id ? "Tap Again To Confirm" : "Remove Permanently", "", () => { if (confirmDel === sheetMember.id) removeMember(sheetMember); else { setConfirmDel(sheetMember.id); setTimeout(() => setConfirmDel(p => p === sheetMember.id ? null : p), 4000); } }, C.red) : null),
+                sheetRowBtn("Archive", "", () => archive(sheetMember), C.dim),
+                (isOwner && sheetMember.id !== myId && sheetMember.tier !== "owner") ? (confirmDel === sheetMember.id
+                  ? h("div", { style:{ background:"rgba(255,59,48,0.08)", border:"1px solid "+C.red, borderRadius:10, padding:"12px", marginBottom:8 } },
+                      h("div", { style:{ fontSize:11.5, color:C.red, marginBottom:10, lineHeight:1.4 } }, "Permanently remove " + (sheetMember.first ? sheetMember.first + " " : "") + sheetMember.name + "? This cannot be undone."),
+                      h("div", { style:{ display:"flex", gap:8 } },
+                        h("button", { onClick: () => setConfirmDel(null), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer", fontFamily:"inherit" } }, "Cancel"),
+                        h("button", { onClick: () => removeMember(sheetMember), disabled:busy, style:{ flex:1, borderRadius:8, padding:"9px 0", fontSize:12.5, background:"rgba(255,59,48,0.18)", border:"1px solid "+C.red, color:C.red, fontWeight:700, cursor:"pointer", fontFamily:"inherit" } }, "Delete")))
+                  : h("button", { onClick: () => setConfirmDel(sheetMember.id), disabled:busy, style:{ display:"flex", alignItems:"center", width:"100%", textAlign:"left", background:"rgba(255,59,48,0.06)", border:"1px solid rgba(255,59,48,0.35)", borderRadius:10, padding:"12px", marginBottom:8, cursor:"pointer", fontFamily:"inherit" } },
+                      h("span", { style:{ fontSize:12.5, color:C.red } }, "Remove Permanently"))) : null),
           h("button", { onClick: () => setSheetId(null), style:{ width:"100%", borderRadius:8, padding:"10px 0", fontSize:13, background:C.panel2, border:"1px solid "+C.border, color:C.dim, cursor:"pointer", marginTop:6 } }, "Close"))) : null,
 
       showAdd ? h("div", { onClick: () => closeAddForm(), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
