@@ -6664,8 +6664,7 @@ function SARModal({
             h("div", { style:{ width:32, height:32, borderRadius:"50%", background:c.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#fff", fontWeight:700, flexShrink:0 } }, c.initials),
             h("div", { style:{ flex:1 } },
               h("div", { style:{ fontSize:13, color:C.text } }, c.name),
-              h("div", { style:{ fontSize:9, color: c.role === "RPIC" ? C.blue : C.green, letterSpacing:1 } }, c.role),
-              isOwner ? h("div", { style:{ fontSize:8.5, color:C.dim, fontFamily:"monospace", letterSpacing:0.5, marginTop:2 } }, "107 # " + (c.cert107No || "\u2014")) : null),
+              h("div", { style:{ fontSize:9, color: c.role === "RPIC" ? C.blue : C.green, letterSpacing:1 } }, c.role)),
             h("span", { style:{ fontSize:9, fontWeight:700, color:hue, background:hue+"1F", border:"1px solid "+hue+"55", borderRadius:5, padding:"2px 8px" } }, label));
         })),
 
