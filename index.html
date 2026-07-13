@@ -1247,6 +1247,16 @@
       "#5D4037","#8B4513"                                   // brown
     ];
     const [showAdd, setShowAdd]           = useState(false);
+    // Narrow screens (phones) abbreviate the first name so the last name always fits.
+    const [narrow, setNarrow] = useState(typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(max-width: 480px)").matches : false);
+    useEffect(() => {
+      if (typeof window === "undefined" || !window.matchMedia) return;
+      const mq = window.matchMedia("(max-width: 480px)");
+      const on = e => setNarrow(e.matches);
+      if (mq.addEventListener) mq.addEventListener("change", on); else if (mq.addListener) mq.addListener(on);
+      return () => { if (mq.removeEventListener) mq.removeEventListener("change", on); else if (mq.removeListener) mq.removeListener(on); };
+    }, []);
+    const displayName = (c) => narrow ? ((c.first ? c.first.trim().charAt(0) + ". " : "") + c.name) : ((c.first ? c.first + " " : "") + c.name);
     const [showArchived, setShowArchived] = useState(false);
     const [busy, setBusy]                 = useState(false);
     const [fName, setFName]   = useState("");
@@ -1367,17 +1377,17 @@
       h("span", { style:{ width:12, height:12, borderRadius:"50%", background:c.color, flexShrink:0 } }),
       h("div", { style:{ flex:1, minWidth:0 } },
         h("div", { style:{ display:"flex", alignItems:"center", gap:6, minWidth:0 } },
-          h("div", { style:{ fontSize:14, color:C.text, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, (c.first ? c.first + " " : "") + c.name),
+          h("div", { style:{ fontSize:14, color:C.text, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, displayName(c)),
           c.part107 ? h("span", { title:"Part 107 — " + fmtCert(c.part107), style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+certColor(c.part107), background:certColor(c.part107)+"2A", color:certColor(c.part107), flexShrink:0, fontWeight:800, lineHeight:1 } }, "107") : null),
         h("div", { style:{ fontSize:9.5, color:C.dim, letterSpacing:0.5, marginTop:2 } },
           c.archived ? "ARCHIVED" : ((c.rank ? c.rank + " · " : "") + posLabel(c.role)))),
       h("div", { style:{ maxWidth:186, display:"flex", flexWrap:"wrap", justifyContent:"center", alignItems:"center", gap:4, flexShrink:0 } },
-        c.instructor ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1 } }, "INSTRUCTOR") : null,
+        c.instructor ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1 } }, narrow ? "INS" : "INSTRUCTOR") : null,
         c.seniorPilot ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #40E0D0", background:"#40E0D02A", color:"#40E0D0", flexShrink:0, fontWeight:800, lineHeight:1 } }, "SENIOR PILOT") : null,
         c.rpicQualified ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.blue, background:C.blue+"2A", color:C.blue, flexShrink:0, fontWeight:800, lineHeight:1 } }, "RPIC") : null,
         c.voQualified ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.green, background:C.green+"2A", color:C.green, flexShrink:0, fontWeight:800, lineHeight:1 } }, "VO") : null,
-        c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1 } }, "IN TRAINING") : null,
-        c.trainingStatus === "in_upgrade" ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #a371f7", background:"#a371f72A", color:"#a371f7", flexShrink:0, fontWeight:800, lineHeight:1 } }, "IN UPGRADE") : null,
+        c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1 } }, narrow ? "IN TRNG" : "IN TRAINING") : null,
+        c.trainingStatus === "in_upgrade" ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #a371f7", background:"#a371f72A", color:"#a371f7", flexShrink:0, fontWeight:800, lineHeight:1 } }, narrow ? "IN UPG" : "IN UPGRADE") : null,
         (Array.isArray(c.nwcg) ? c.nwcg : []).map(function(q){ return h("span", { key:q, style:{ fontSize:7.5, letterSpacing:0.5, padding:"3px 6px", borderRadius:6, border:"1px solid #16A085", background:"rgba(22,160,133,0.22)", color:"#16A085", flexShrink:0, fontWeight:800, lineHeight:1 } }, q); })),
       h("span", { style:{ fontSize:16, color:C.dim, lineHeight:1 } }, "›"));
 
