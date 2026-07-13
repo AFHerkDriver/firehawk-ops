@@ -590,13 +590,14 @@
       const m = byId[k] || {};
       crewById[String(k)] = {
         id: m.id, name: m.name || ("Pilot " + k), first: m.first || "",
-        rank: m.rank || "", tier: m.tier || "staff", archived: !!m.archived,
+        rank: (RANK_LOCKS[String(k)] !== undefined ? RANK_LOCKS[String(k)] : (m.rank || "")), tier: m.tier || "staff", archived: !!m.archived,
         instructor: !!m.instructor,
         rpicQualified: !!m.rpicQualified, voQualified: !!m.voQualified,
         trainingStatus: (m.trainingStatus === undefined ? null : m.trainingStatus)
       };
     }
   }
+  const RANK_LOCKS = { "6": "Cmsr" };   // crew ids whose rank is fixed (unique rank) — mirror of index.html
   function crewLabel(m) {
     return ((m.rank ? m.rank + " " : "") + (m.first ? m.first + " " : "") + m.name).trim();
   }
@@ -1005,7 +1006,7 @@
     // Trainee select (instructors only)
     const sel = document.getElementById("traineeSel");
     sel.innerHTML = "";
-    const RANK_ORDER = { "commissioner":-1, "cmsr":-1, "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eng":5, "engineer":5, "driver":5, "ff":6, "firefighter":6 };
+    const RANK_ORDER = { "commissioner":-1, "cmsr":-1, "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eo":5, "eng":5, "engineer":5, "driver":5, "operator":5, "ff":6, "firefighter":6 };
     function rankRank(r) { const k = (r || "").toLowerCase().trim(); return RANK_ORDER[k] != null ? RANK_ORDER[k] : 90; }
     function traineeSortKey(tid) {
       const t = db.trainees[tid] || {};
@@ -1022,7 +1023,7 @@
     } else {
       ids.forEach(tid => {
         const o = document.createElement("option");
-        o.value = tid; o.textContent = db.trainees[tid].name || tid;
+        o.value = tid; const _m = (db.trainees[tid].crewId != null) ? crewById[String(db.trainees[tid].crewId)] : null; o.textContent = (_m ? crewLabel(_m) : (db.trainees[tid].name || tid));
         if (tid === selTid) o.selected = true;
         sel.appendChild(o);
       });

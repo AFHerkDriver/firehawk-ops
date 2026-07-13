@@ -288,11 +288,12 @@
   // people (or different fields on the same person) can never overwrite each other.
   // Position (assigned duty) display — independent of qualifications held.
   var POSITIONS = [["RPIC", "Remote Pilot"], ["VO", "Visual Observer"], ["", "No Position"]];
+  var RANK_LOCKS = { "6": "Cmsr" };   // crew ids whose rank is fixed and not user-editable (unique rank)
   function posLabel(role) { for (var i = 0; i < POSITIONS.length; i++) { if (POSITIONS[i][0] === (role || "")) return POSITIONS[i][1]; } return role || "No Position"; }
 
   function memberShape(c) {
     return {
-      id: c.id, name: c.name, first: c.first || "", rank: c.rank || "", title: c.title || "", role: (c.role == null ? "" : c.role), tier: c.tier || "staff",
+      id: c.id, name: c.name, first: c.first || "", rank: (RANK_LOCKS[String(c.id)] !== undefined ? RANK_LOCKS[String(c.id)] : (c.rank || "")), title: c.title || "", role: (c.role == null ? "" : c.role), tier: c.tier || "staff",
       hasPin: !!c.hasPin, color: c.color,
       initials: c.initials, part107: (c.part107 == null ? null : c.part107),
       cert107No: (c.cert107No == null ? null : c.cert107No),   // FAA cert number — owner-only display
@@ -341,7 +342,7 @@
       id: src.id,
       name: src.name || fb.name || ("Pilot " + src.id),
       first: (src.first !== undefined ? src.first : (fb.first || "")) || "",
-      rank: (src.rank !== undefined ? src.rank : (fb.rank || "")) || "",
+      rank: (RANK_LOCKS[String(src.id)] !== undefined ? RANK_LOCKS[String(src.id)] : ((src.rank !== undefined ? src.rank : (fb.rank || "")) || "")),
       title: (src.title !== undefined ? src.title : (fb.title || "")) || "",
       role: (src.role !== undefined ? src.role : (fb.role || "")),
       tier: src.tier || fb.tier || "staff",
@@ -1430,6 +1431,9 @@
               fcol("Last", textInput(fName, setFName, "", 24))),
             h("div", { style:{ display:"flex", gap:10 } },
               fcol("Rank", (function(){
+                if (RANK_LOCKS[String(editId)] !== undefined) {
+                  return h("div", { style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.dim, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13 } }, RANK_LOCKS[String(editId)] + "  (locked)");
+                }
                 const RANKS = ["FF","Eng","Lt","Capt","BC","DC","AC","Chief"];
                 const opts = (fRank && RANKS.indexOf(fRank) === -1) ? [fRank].concat(RANKS) : RANKS;
                 return h("select", { value:fRank, onChange: e => setFRank(e.target.value),
