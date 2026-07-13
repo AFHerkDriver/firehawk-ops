@@ -124,57 +124,17 @@
   .item.gate .item-label::after { content: 'PASS REQUIRED'; margin-left: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--nogo); vertical-align: 1px; }
   .item.pm .item-label::after { content: 'OWNER ONLY'; margin-left: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--warn); vertical-align: 1px; }
 
-  /* ---------- Workbook toggle ---------- */
+  /* ---------- Track toggle ---------- */
   .wb-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
-  .wb-tab { flex: 1; min-width: 72px; padding: 9px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-family: 'Barlow', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: .04em; cursor: pointer; text-align: center; }
+  .wb-tab { flex: 1; min-width: 80px; padding: 9px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-family: 'Barlow', sans-serif; font-size: 13.5px; font-weight: 600; letter-spacing: .04em; cursor: pointer; text-align: center; }
   .wb-tab.on { background: var(--fire); border-color: var(--fire); color: #0d1117; }
-  .wb-tab.nwcg.on { background: var(--go); border-color: var(--go); }
-  .nwcg-note { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; margin-bottom: 12px; line-height: 1.4; }
-  .nwcg-note strong { color: var(--text); }
-  /* Assignment column selector */
-  .asg-row { display: flex; gap: 6px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-  .asg-label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-right: 2px; }
-  .asg-col { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-weight: 700; font-size: 14px; cursor: pointer; }
-  .asg-col.on { background: var(--go); border-color: var(--go); color: #0d1117; }
-  .asg-col.filled { border-color: var(--go); color: var(--go); }
-  .asg-col.filled.on { color: #0d1117; }
-  .asg-meta { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; }
-  .asg-meta .fld { display: block; margin-bottom: 8px; }
-  .asg-meta .fld:last-child { margin-bottom: 0; }
-  .asg-meta label { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
-  .asg-meta input { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; color: var(--text); font-family: 'Barlow', sans-serif; font-size: 15px; padding: 9px 10px; colorScheme: dark; }
-  .asg-meta .two { display: flex; gap: 8px; }
-  .asg-meta .two .fld { flex: 1; }
-  .asg-locked { font-size: 12px; color: var(--muted); }
-  /* NWCG task rows */
-  .ntask { padding: 12px 14px; border-bottom: 1px solid var(--line); }
-  .ntask:last-child { border-bottom: none; }
-  .ntask-top { display: flex; gap: 10px; align-items: flex-start; }
-  .ntask-code { flex-shrink: 0; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; margin-top: 2px; min-width: 34px; text-align: center; }
-  .ntask-label { flex: 1; font-size: 14.5px; font-weight: 500; line-height: 1.4; }
-  .rate-row { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
-  .rate-btn { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-family: 'Barlow', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
-  .rate-btn.on.no { background: var(--muted); border-color: var(--muted); color: #0d1117; }
-  .rate-btn.on.d  { background: var(--nogo); border-color: var(--nogo); color: #0d1117; }
-  .rate-btn.on.m  { background: var(--go); border-color: var(--go); color: #0d1117; }
-  .rate-btn.on.e  { background: var(--go); border-color: var(--go); color: #0d1117; box-shadow: 0 0 0 1px var(--go) inset; }
-  .rate-stamp { font-size: 12px; color: var(--muted); margin-top: 6px; }
-  .rate-stamp.m { color: var(--go); }
-  .rate-note-in { width: 100%; margin-top: 8px; background: var(--bg); border: 1px solid var(--nogo); border-radius: 7px; color: var(--text); font-family: 'Barlow', sans-serif; font-size: 14px; padding: 8px 10px; }
-  .rate-note-txt { font-size: 12.5px; color: var(--text); margin-top: 6px; padding: 7px 9px; background: rgba(248,81,73,.08); border-left: 2px solid var(--nogo); border-radius: 4px; }
-  .met-badge { font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--go); border: 1px solid var(--go); border-radius: 999px; padding: 2px 8px; margin-left: 8px; vertical-align: 1px; }
-  /* Book assignment (owner) */
-  .book-assign { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; }
-  .book-assign .ba-title { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
-  .ba-chips { display: flex; gap: 8px; flex-wrap: wrap; }
-  .ba-chip { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
-  .ba-chip.on { background: rgba(63,185,80,.14); border-color: var(--go); color: var(--go); }
-  .ba-verify { margin-top: 10px; }
-  @media print {
-    .wb-tabs, .asg-row, .book-assign, .rate-btn:not(.on) { display: none !important; }
-    .ntask { break-inside: avoid; border-bottom: 1px solid #999; }
-    .ntask-label, .ntask-code, .rate-stamp, .rate-note-txt { color: #000 !important; }
-  }
+  .track-assign { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; }
+  .track-assign .ta-title { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+  .ta-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ta-chip { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .ta-chip.on { background: rgba(255,122,26,.14); border-color: var(--fire); color: var(--fire); }
+  .track-gate { font-size: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px; margin-bottom: 12px; line-height: 1.4; }
+  @media print { .wb-tabs, .track-assign { display: none !important; } }
   /* ---------- Actions ---------- */
   .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
   .btn { flex: 1; min-width: 130px; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-family: 'Barlow', sans-serif; font-size: 14.5px; font-weight: 600; cursor: pointer; }
@@ -240,8 +200,8 @@
 </div>
 <div class="sync" id="syncLine"></div>
 
-<div class="wb-tabs" id="wbTabs"></div>
-<div id="nwcgControls"></div>
+<div class="wb-tabs" id="trackTabs"></div>
+<div id="trackAssign"></div>
 
 <div class="readiness">
   <div class="readiness-top">
@@ -443,225 +403,115 @@
   const ALL_ITEMS = [];
   BLOCKS.forEach(b => b.items.forEach(it => ALL_ITEMS.push(it)));
   const totalItems = ALL_ITEMS.length;
-  // ── NWCG Position Task Books (PMS 311-79 / -127 / -128, June–July 2025) ─────
-  // Tracking aid only. The wet-ink paper PTB remains the system of record.
-  // Each task carries its NWCG assignment CODE (I/W/RX/R/S/O). Ratings per task
-  // are recorded across up to 4 assignment columns (N/O · D · M · E), matching
-  // the paper Position Evaluation Table. A "D" requires an evaluator note.
-  const NWCG_BOOKS = [
-    { id: "UASM", pms: "PMS 311-79", rev: "June 2025", title: "UAS Manager",
-      full: "Unmanned Aircraft Systems, Manager (UASM)", std: "PMS 350-79",
-      cats: [
-        { title: "Leadership Level 2 — New Leader (Convey Intent)", tasks: [
-          { id: "m1", code: "O", label: "Transition from follower to leader of small groups: team cohesion, responsibility for self and team, effective communications (see PMS 350-79)." }
-        ]},
-        { title: "Prepare and Mobilize", tasks: [
-          { id: "m2", code: "I", label: "Ensure individual readiness." },
-          { id: "m3", code: "W", label: "Gather critical information pertinent to the assignment." },
-          { id: "m4", code: "I", label: "Travel to and check in at the assignment." },
-          { id: "m5", code: "I", label: "Check in with the incident supervisor and/or dispatch when arriving at the incident." }
-        ]},
-        { title: "Build the Team", tasks: [
-          { id: "m6", code: "I", label: "Assemble and validate readiness of the crew, equipment, vehicles, and aircraft." },
-          { id: "m7", code: "I", label: "Establish a common operating picture." },
-          { id: "m8", code: "I", label: "Brief assigned personnel." }
-        ]},
-        { title: "Supervise and Direct Work Assignments", tasks: [
-          { id: "m9", code: "I", label: "Supervise and manage the UAS resources." },
-          { id: "m10", code: "O", label: "Model leadership values and principles." }
-        ]},
-        { title: "Perform UAS Manager-Specific Duties", tasks: [
-          { id: "m11", code: "I", label: "Develop and implement the mission based on operational and data objectives." },
-          { id: "m12", code: "W", label: "Ensure the appropriate airspace authorizations are in place." },
-          { id: "m13", code: "I", label: "Coordinate safe travel to and from the area of operations." },
-          { id: "m14", code: "I", label: "Perform a site survey and determine an appropriate Launch and Recovery Zone (LRZ)." },
-          { id: "m15", code: "I", label: "Organize the UAS resources for operational missions." },
-          { id: "m16", code: "W", label: "Provide module oversight." }
-        ]},
-        { title: "Communicate and Coordinate", tasks: [
-          { id: "m17", code: "W", label: "Establish communications and exchange necessary briefings/information." },
-          { id: "m18", code: "I", label: "Communicate using plain language and Incident Command System (ICS) terminology." },
-          { id: "m19", code: "I", label: "Ensure clear understanding of expectations and timely communication within the chain of command." }
-        ]},
-        { title: "Manage Risk", tasks: [
-          { id: "m20", code: "I", label: "Apply the Risk Management Process and Safety Management System (SMS)." },
-          { id: "m21", code: "W", label: "Ensure Lookouts, Communications, Escape Routes, and Safety Zones (LCES) are established and known to all personnel before they are needed." },
-          { id: "m22", code: "O", label: "Plan for and respond to medical emergencies." },
-          { id: "m23", code: "O", label: "Plan for and respond to aviation mishaps." }
-        ]},
-        { title: "Demobilize", tasks: [
-          { id: "m24", code: "W", label: "Prepare for and implement demobilization." }
-        ]}
-      ]},
-    { id: "UASD", pms: "PMS 311-127", rev: "July 2025", title: "UAS Data Specialist",
-      full: "Unmanned Aircraft Systems, Data Specialist (UASD)", std: "PMS 350-127",
-      cats: [
-        { title: "Leadership Level 1 — Follower (Provide Action)", tasks: [
-          { id: "d1", code: "O", label: "Follower responsibilities: become competent in basic job skills, take initiative, learn from others, ask questions, develop communications skills (see PMS 350-127)." }
-        ]},
-        { title: "Prepare and Mobilize", tasks: [
-          { id: "d2", code: "O", label: "Ensure individual readiness." },
-          { id: "d3", code: "I", label: "Gather critical information pertinent to the assignment." },
-          { id: "d4", code: "O", label: "Obtain and assemble incident materials needed for assignment." },
-          { id: "d5", code: "I", label: "Travel to and check in at the assignment." },
-          { id: "d6", code: "I", label: "Obtain briefing from incident supervisor." }
-        ]},
-        { title: "Build the Team", tasks: [
-          { id: "d7", code: "I", label: "Establish a common operating picture." }
-        ]},
-        { title: "Perform UAS Data Specialist-Specific Duties", tasks: [
-          { id: "d8", code: "I", label: "Determine final data product(s), delivery location, and delivery time/method." },
-          { id: "d9", code: "W/RX", label: "Coordinate travel to and from the fireline." },
-          { id: "d10", code: "I", label: "Locate the Launch and Recovery Zone (LRZ)." },
-          { id: "d11", code: "I", label: "Establish work area." },
-          { id: "d12", code: "W/RX", label: "Assist with UAS pre-mission-related activities." },
-          { id: "d13", code: "O", label: "Assist with UAS pre-flight preparation as needed." },
-          { id: "d14", code: "I", label: "Acquire, store, and manage data, and maintain metadata necessary to facilitate incident UAS operations." },
-          { id: "d15", code: "I", label: "Create intelligence deliverable(s)." },
-          { id: "d16", code: "I", label: "Disseminate intelligence products, data, and imagery to incident personnel per established protocols or as necessary for the situation." }
-        ]},
-        { title: "Communicate and Coordinate", tasks: [
-          { id: "d17", code: "I", label: "Communicate effectively using multichannel radios." },
-          { id: "d18", code: "I", label: "Participate in After Action Reviews (AARs)." },
-          { id: "d19", code: "I", label: "Establish communications and exchange necessary briefings/information with relevant team members." }
-        ]},
-        { title: "Manage Risk", tasks: [
-          { id: "d20", code: "I", label: "Apply the Risk Management Process (IRPG, PMS 461): identify hazards, assess hazards, develop controls and make risk decisions, implement controls, supervise and evaluate." },
-          { id: "d21", code: "W/RX", label: "Ensure Lookouts, Communications, Escape Routes, and Safety Zones (LCES) are in place." },
-          { id: "d22", code: "W/RX", label: "Use Look Up, Down, and Around (IRPG, PMS 461) to maintain situational awareness and adjust actions accordingly." },
-          { id: "d23", code: "I", label: "Plan for medical emergencies." },
-          { id: "d24", code: "I", label: "Identify and appropriately act on hazardous situations." },
-          { id: "d25", code: "O", label: "Participate in and respond to mishaps as directed." }
-        ]},
-        { title: "Document", tasks: [
-          { id: "d26", code: "I", label: "Manage and provide intelligence deliverables for incident documentation history." }
-        ]},
-        { title: "Demobilize", tasks: [
-          { id: "d27", code: "I", label: "During transfer of command, ensure continuity of operations, exchange critical safety information, and communicate transfer of authority through established chain of command." }
-        ]}
-      ]},
-    { id: "UASL", pms: "PMS 311-128", rev: "June 2025", title: "UAS Module Leader",
-      full: "Unmanned Aircraft Systems, Module Leader (UASL)", std: "PMS 350-128",
-      cats: [
-        { title: "Leadership Level 2 — New Leader (Convey Intent)", tasks: [
-          { id: "l1", code: "O", label: "Transition from follower to leader of small groups: team cohesion, responsibility for self and team, effective communications (see PMS 350-128)." }
-        ]},
-        { title: "Prepare and Mobilize", tasks: [
-          { id: "l2", code: "I", label: "Ensure individual readiness." },
-          { id: "l3", code: "W", label: "Gather critical information pertinent to the assignment." },
-          { id: "l4", code: "I", label: "Check in with incident supervisor and/or dispatch when arriving at the incident." }
-        ]},
-        { title: "Build the Team", tasks: [
-          { id: "l5", code: "I", label: "Identify UAS resources and modules assigned or unassigned and establish accountability." },
-          { id: "l6", code: "I", label: "Validate readiness of UAS modules and other assigned UAS resources." },
-          { id: "l7", code: "I", label: "Establish a common operating picture." },
-          { id: "l8", code: "I", label: "Brief all participating UAS resources." }
-        ]},
-        { title: "Supervise and Direct Work Assignments", tasks: [
-          { id: "l9", code: "I", label: "Supervise and manage assigned and unassigned UAS resources." }
-        ]},
-        { title: "Perform UAS Module Leader-Specific Duties", tasks: [
-          { id: "l10", code: "I", label: "Coordinate assigned UAS resources based on operational and data objectives." },
-          { id: "l11", code: "O", label: "Engage with unassigned UAS resources based on requested missions." },
-          { id: "l12", code: "W", label: "Ensure appropriate airspace authorizations are in place." },
-          { id: "l13", code: "I", label: "Provide oversight of assigned and unassigned UAS resources." },
-          { id: "l14", code: "W", label: "Engage with the Incident Management Team (IMT)." }
-        ]},
-        { title: "Communicate and Coordinate", tasks: [
-          { id: "l15", code: "I", label: "Communicate using plain language and Incident Command System (ICS) terminology." },
-          { id: "l16", code: "I", label: "Ensure clear understanding of expectations and timely communication within the chain of command." },
-          { id: "l17", code: "I", label: "Conduct and/or participate in After Action Reviews (AARs)." }
-        ]},
-        { title: "Manage Risk", tasks: [
-          { id: "l18", code: "I", label: "Apply the Risk Management Process and Safety Management System (SMS)." },
-          { id: "l19", code: "O", label: "Plan for and respond to aviation mishaps." }
-        ]},
-        { title: "Document", tasks: [
-          { id: "l20", code: "W", label: "Complete, authorize, ensure timeliness of, and route required forms and documents." }
-        ]},
-        { title: "Demobilize", tasks: [
-          { id: "l21", code: "O", label: "Assist in the development and implementation of the demobilization plan for assigned UAS resources." },
-          { id: "l22", code: "W", label: "Prepare for and implement demobilization." }
-        ]}
-      ]}
+
+  // ── Visual Observer onboarding (derived from RPIC; no flight, no Part 107) ──
+  const VO_BLOCKS = [
+    { id: 'vo_prereq', title: 'Prerequisites', items: [
+      { id: 'vp1', label: 'Firehawk Ops App Access Issued' },
+      { id: 'vp2', label: 'Added to UAV Active Alert Page Group (Active911)', note: 'Pages on UAS-eligible dispatches' },
+      { id: 'vp3', label: 'TAK Account Provisioned', note: 'If VO runs TAK in the field' }
+    ]},
+    { id: 'vo1', title: 'Block 1 — VO Role & Responsibilities', items: [
+      { id: 'vo1a', label: 'SOP: What a Visual Observer Is + Authority Limits' },
+      { id: 'vo1b', label: 'RPIC / VO Relationship + Chain of Communication' },
+      { id: 'vo1c', label: 'Knock-It-Off Authority — When and How to Call It', note: 'Any crew member can stop the operation' }
+    ]},
+    { id: 'vo2', title: 'Block 2 — Mission Types & Dispatch', items: [
+      { id: 'vo2a', label: 'Authorized Mission Types the VO Supports' },
+      { id: 'vo2b', label: 'Auto-Dispatch Criteria + What a UAS Response Looks Like' }
+    ]},
+    { id: 'vo3', title: 'Block 3 — Visual Line of Sight & See-and-Avoid', items: [
+      { id: 'vo3a', label: 'Maintaining Visual Line of Sight (VLOS) with the Aircraft' },
+      { id: 'vo3b', label: 'Sky-Scan Technique for Manned Traffic', note: 'Systematic scan, sectoring, avoiding fixation' },
+      { id: 'vo3c', label: 'Altitude & Distance Estimation of Traffic' },
+      { id: 'vo3d', label: 'Sun, Terrain, and Obstruction Awareness' }
+    ]},
+    { id: 'vo4', title: 'Block 4 — Hazard & Traffic Callouts', items: [
+      { id: 'vo4a', label: 'Standardized Callout Phrasing', note: 'Clock position, altitude, closure, threat level' },
+      { id: 'vo4b', label: 'What to Report and When — Urgency Levels' },
+      { id: 'vo4c', label: 'Manned Aircraft Encounter — Immediate Actions' }
+    ]},
+    { id: 'vo5', title: 'Block 5 — Tactical Radio & Air-to-Ground', items: [
+      { id: 'vo5a', label: 'Tactical Radio Procedures + Launch/Landing Notifications' },
+      { id: 'vo5b', label: 'Air-to-Ground Coordination + Airspace Advisories' }
+    ]},
+    { id: 'vo6', title: 'Block 6 — Airspace Awareness for VOs', items: [
+      { id: 'vo6a', label: 'Working-Level Airspace Classifications' },
+      { id: 'vo6b', label: 'TFR Awareness + Manned Deconfliction' },
+      { id: 'vo6c', label: 'Helispot / Helibase Coordination Basics' }
+    ]},
+    { id: 'vo7', title: 'Block 7 — Launch & Recovery Zone Support', items: [
+      { id: 'vo7a', label: 'Establishing & Securing the LRZ' },
+      { id: 'vo7b', label: 'Crowd, Traffic, and Hazard Control Around the LRZ' }
+    ]},
+    { id: 'vo8', title: 'Block 8 — Emergency & Lost-Link Support', items: [
+      { id: 'vo8a', label: 'VO Role During RTH, Lost-Link, and Flyaway' },
+      { id: 'vo8b', label: 'VO Role During an Aviation Mishap' }
+    ]},
+    { id: 'vo_eval', title: 'Field Evaluation', items: [
+      { id: 'voe1', label: 'Support an RPIC as VO — Live Mission (Observed)' },
+      { id: 'voe2', label: 'Second Live Mission as VO (Observed)' },
+      { id: 'voe3', label: 'VO Proficiency Evaluation', gate: true }
+    ]},
+    { id: 'vo_close', title: 'Closeout', items: [
+      { id: 'voc1', label: 'Course Debrief Completed' },
+      { id: 'voc2', label: 'Program Manager Approval — Qualified Visual Observer', pm: true, note: 'Marks the VO as operationally cleared' }
+    ]}
   ];
-  const NWCG_BY_ID = {};
-  NWCG_BOOKS.forEach(b => { b._tasks = []; b.cats.forEach(c => c.tasks.forEach(t => b._tasks.push(t))); NWCG_BY_ID[b.id] = b; });
 
-  // ── NWCG state / storage ───────────────────────────────────────────────────
-  // Data model (per trainee):
-  //   trainees.{tid}.nwcg.assigned            -> ['UASM',...]   (owner-set)
-  //   trainees.{tid}.nwcg.verified.{BOOK}     -> true           (owner verify -> roster qual)
-  //   trainees.{tid}.nwcg.books.{BOOK}.assignments.{col} -> {evalName,evalIqcs,incident,date,ts}
-  //   trainees.{tid}.nwcg.books.{BOOK}.tasks.{taskId}.r.{col}  -> {rating,note,by,byId,ts}
-  // Field-path-scoped writes throughout; onboarding items untouched.
-  let workbook = "onboarding";   // "onboarding" | "UASM" | "UASD" | "UASL"
-  let asgCol = "1";              // active assignment column 1-4 for NWCG
+  // ── Instructor onboarding (certifies sign-off authority, not more flight) ───
+  const INST_BLOCKS = [
+    { id: 'in_prereq', title: 'Prerequisites', items: [
+      { id: 'ip1', label: 'Qualified RPIC (Appendix E Complete)' },
+      { id: 'ip2', label: 'Current Part 107 Certificate' },
+      { id: 'ip3', label: 'Operational Depth — PM Judgment', note: 'PM decides readiness; no fixed mission count' }
+    ]},
+    { id: 'in1', title: 'Block 1 — Standards Mastery & Calibration', items: [
+      { id: 'in1a', label: 'Appendix E from the Evaluator Side — Every Task Standard' },
+      { id: 'in1b', label: 'Calibration: Pass / Marginal / Fail Worked Examples', note: 'Two instructors grade the same flight the same way' },
+      { id: 'in1c', label: 'Where the Line Is — What Constitutes a Failure' }
+    ]},
+    { id: 'in2', title: 'Block 2 — Instructional Method', items: [
+      { id: 'in2a', label: 'Adult-Learning Basics for Field Instruction' },
+      { id: 'in2b', label: 'Giving Correction That Lands — Debrief Technique' },
+      { id: 'in2c', label: 'Teach vs. Evaluate — Keeping the Roles Separate' }
+    ]},
+    { id: 'in3', title: 'Block 3 — Evaluation Tools & Doctrine', items: [
+      { id: 'in3a', label: 'Sign-Off Discipline in the Training Record' },
+      { id: 'in3b', label: 'What a Sign-Off Legally Means + Records Retention' },
+      { id: 'in3c', label: 'Fail-Loud Honesty Doctrine — When and How to Fail Someone', note: 'A courtesy sign-off is a false all-clear' }
+    ]},
+    { id: 'in4', title: 'Block 4 — Supervised Apprenticeship', items: [
+      { id: 'in4a', label: 'Co-Sign a Trainee Evaluation Alongside an Instructor (1)' },
+      { id: 'in4b', label: 'Co-Sign a Trainee Evaluation Alongside an Instructor (2)' },
+      { id: 'in4c', label: 'Co-Sign a Trainee Evaluation Alongside an Instructor (3)' }
+    ]},
+    { id: 'in_close', title: 'Instructor Certification', items: [
+      { id: 'inc1', label: 'Course Debrief Completed' },
+      { id: 'inc2', label: 'Program Manager Approval — Grants Instructor Authority', pm: true, note: 'Sets the instructor flag; unlocks sign-off authority' }
+    ]}
+  ];
 
-  function traineeNwcg(t) { return (t && t.nwcg) || {}; }
-  function assignedBooks(t) { const a = traineeNwcg(t).assigned; return Array.isArray(a) ? a : []; }
-  function bookData(t, bk) { const b = traineeNwcg(t).books; return (b && b[bk]) || {}; }
-  function taskRecords(t, bk, taskId) { const bd = bookData(t, bk); return (bd.tasks && bd.tasks[taskId] && bd.tasks[taskId].r) || {}; }
-  // A task is met when any column carries M or E (NWCG: M/E on each task, ≤4 assignments).
-  function taskMet(t, bk, taskId) { const r = taskRecords(t, bk, taskId); for (const c in r) { const v = r[c] && r[c].rating; if (v === "M" || v === "E") return true; } return false; }
-  function bookMetCount(t, bk) { const book = NWCG_BY_ID[bk]; if (!book) return 0; return book._tasks.filter(tk => taskMet(t, bk, tk.id)).length; }
-  function bookPct(t, bk) { const book = NWCG_BY_ID[bk]; if (!book || !book._tasks.length) return 0; return Math.round((bookMetCount(t, bk) / book._tasks.length) * 100); }
-  function bookVerified(t, bk) { const v = traineeNwcg(t).verified; return !!(v && v[bk]); }
+  // ── Track registry ──────────────────────────────────────────────────────────
+  // RPIC keeps the legacy `.items` key (shipped data). VO/INST get their own keys.
+  const TRACKS = [
+    { id: "RPIC", label: "RPIC",       key: "items", blocks: BLOCKS,      roster: "trainingStatus", certLabel: "Approved For Operational Status" },
+    { id: "VO",   label: "VO",         key: "vo",    blocks: VO_BLOCKS,   roster: null,             certLabel: "Qualified Visual Observer" },
+    { id: "INST", label: "Instructor", key: "inst",  blocks: INST_BLOCKS, roster: "instructor",     certLabel: "Instructor Authorized" }
+  ];
+  const TRACK_BY_ID = {}; TRACKS.forEach(tr => { tr.allItems = []; tr.blocks.forEach(b => b.items.forEach(it => tr.allItems.push(it))); TRACK_BY_ID[tr.id] = tr; });
+  let track = "RPIC";   // active track
 
-  function nwcgFp(tid, rest) { return "trainees." + tid + ".nwcg." + rest; }
+  function trackObj() { return TRACK_BY_ID[track] || TRACK_BY_ID.RPIC; }
+  function assignedTracks(t) { const a = t && t.tracks; if (Array.isArray(a)) return a; return ["RPIC"]; }   // default RPIC for legacy records
+  function trackChecks(t, trId) { const tr = TRACK_BY_ID[trId]; if (!t || !tr) return {}; return t[tr.key] || {}; }
 
-  async function saveAssigned(list) {
-    const t = db.trainees[selTid]; if (!t) return;
-    t.nwcg = t.nwcg || {}; const prev = t.nwcg.assigned;
-    t.nwcg.assigned = list; render();
-    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { nwcg: { assigned: list } } } }, [nwcgFp(selTid, "assigned")]);
-    if (!res.ok) { t.nwcg.assigned = prev; render(); toast("Save failed — check connection"); }
-  }
-  async function saveAsgMeta(bk, col, meta) {
-    const t = db.trainees[selTid]; if (!t) return;
-    t.nwcg = t.nwcg || {}; t.nwcg.books = t.nwcg.books || {};
-    t.nwcg.books[bk] = t.nwcg.books[bk] || {}; t.nwcg.books[bk].assignments = t.nwcg.books[bk].assignments || {};
-    const prev = t.nwcg.books[bk].assignments[col];
-    t.nwcg.books[bk].assignments[col] = meta;
-    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { nwcg: { books: { [bk]: { assignments: { [col]: meta } } } } } } }, [nwcgFp(selTid, "books." + bk + ".assignments." + col)]);
-    if (!res.ok) { t.nwcg.books[bk].assignments[col] = prev; toast("Save failed — check connection"); }
-  }
-  async function saveRating(bk, taskId, col, rec) {
-    const t = db.trainees[selTid]; if (!t) return;
-    t.nwcg = t.nwcg || {}; t.nwcg.books = t.nwcg.books || {}; t.nwcg.books[bk] = t.nwcg.books[bk] || {};
-    t.nwcg.books[bk].tasks = t.nwcg.books[bk].tasks || {}; t.nwcg.books[bk].tasks[taskId] = t.nwcg.books[bk].tasks[taskId] || {};
-    t.nwcg.books[bk].tasks[taskId].r = t.nwcg.books[bk].tasks[taskId].r || {};
-    const prev = t.nwcg.books[bk].tasks[taskId].r[col];
-    if (rec === null) delete t.nwcg.books[bk].tasks[taskId].r[col]; else t.nwcg.books[bk].tasks[taskId].r[col] = rec;
-    render();
-    const path = nwcgFp(selTid, "books." + bk + ".tasks." + taskId + ".r." + col);
-    const body = { trainees: { [selTid]: { nwcg: { books: { [bk]: { tasks: { [taskId]: { r: {} } } } } } } } };
-    if (rec !== null) body.trainees[selTid].nwcg.books[bk].tasks[taskId].r[col] = rec;
-    const res = await fsUpdate(COL, DOC, body, [path]);
-    if (!res.ok) { if (prev === undefined) delete t.nwcg.books[bk].tasks[taskId].r[col]; else t.nwcg.books[bk].tasks[taskId].r[col] = prev; render(); toast("Save failed — check connection"); }
-  }
-  // Owner verify -> writes/removes the qual tag on the crew roster nwcg array (index.html chips).
-  async function setBookVerified(bk, on) {
-    const t = db.trainees[selTid]; if (!t) return;
-    t.nwcg = t.nwcg || {}; t.nwcg.verified = t.nwcg.verified || {};
-    const prev = !!t.nwcg.verified[bk];
-    t.nwcg.verified[bk] = on; render();
-    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { nwcg: { verified: { [bk]: on } } } } }, [nwcgFp(selTid, "verified." + bk)]);
-    if (!res.ok) { t.nwcg.verified[bk] = prev; render(); toast("Save failed — check connection"); return; }
-    if (t.crewId != null) { await syncCrewNwcgQual(t.crewId, bk, on); await loadCrew(); }
-  }
-  // Merge/remove a NWCG qual code in the crew member's nwcg[] array (owner-only display in index.html).
-  async function syncCrewNwcgQual(crewId, bk, add) {
-    const m = crewById[String(crewId)]; if (!m) return;
-    const cur = Array.isArray(m.nwcg) ? m.nwcg.slice() : [];
-    const has = cur.indexOf(bk) >= 0;
-    let next;
-    if (add && !has) next = cur.concat([bk]);
-    else if (!add && has) next = cur.filter(x => x !== bk);
-    else return;
-    const path = "membersById." + fpSeg(String(crewId)) + ".nwcg";
-    await fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { nwcg: next } } }, [path]);
-  }
+  // Seed: full sign-offs for original pilots across their tracks (grandfathered-in).
+  const SEED_SIGNOFFS = [
+    { id: 1, name: "Sanchez",  tracks: ["RPIC", "VO", "INST"] },
+    { id: 3, name: "Bauchman", tracks: ["RPIC", "VO", "INST"] },
+    { id: 4, name: "Thomas",   tracks: ["RPIC", "VO"] }
+  ];
 
   // ── State ────────────────────────────────────────────────────────────────
   let db = null;                 // { trainees: { tid: {...} } }
@@ -757,6 +607,57 @@
     await loadCrew();
     const mine = crewById[String(me && me.id)];
     if (me && mine && mine.instructor) me.instructor = true;
+
+    // Grandfather-in the original pilots' track sign-offs (idempotent, never overwrites real edits).
+    // Only runs from a confirmed-good trainees read; only stamps a track that has zero sign-offs.
+    const fresh = await fsGet(COL, DOC);
+    if (fresh && typeof fresh === "object") {
+      const trainees = (fresh.trainees && typeof fresh.trainees === "object") ? fresh.trainees : {};
+      const SEED_DATE = "2025-01-01T00:00:00.000Z";
+      for (const seed of SEED_SIGNOFFS) {
+        const tid = "c" + seed.id;
+        const cm = crewById[String(seed.id)];
+        const existing = trainees[tid];
+        const body = {}; const masks = [];
+        if (!existing) {
+          body.name = cm ? crewLabel(cm) : seed.name;
+          body.crewId = seed.id; body.start = ""; body.created = SEED_DATE;
+          body.createdBy = "Grandfathered"; body.items = {}; body.tracks = seed.tracks.slice();
+          masks.push("trainees." + tid);
+        } else {
+          // Ensure tracks include the seed set (merge, don't drop manual additions).
+          const curTracks = Array.isArray(existing.tracks) ? existing.tracks : [];
+          const merged = curTracks.slice();
+          seed.tracks.forEach(x => { if (merged.indexOf(x) < 0) merged.push(x); });
+          if (merged.length !== curTracks.length) { body.tracks = merged; masks.push("trainees." + tid + ".tracks"); }
+        }
+        // For each seed track, stamp all items only if that track has no sign-offs yet.
+        seed.tracks.forEach(trId => {
+          const tr = TRACK_BY_ID[trId]; if (!tr) return;
+          const curItems = (existing && existing[tr.key] && typeof existing[tr.key] === "object") ? existing[tr.key] : (!existing ? {} : null);
+          const hasAny = curItems && Object.keys(curItems).length > 0;
+          if (hasAny) return;   // real data present — leave it
+          const stamped = {};
+          tr.allItems.forEach(it => { stamped[it.id] = { by: "Grandfathered", byId: 0, ts: SEED_DATE }; });
+          if (!existing) { body[tr.key] = stamped; }
+          else { body[tr.key] = stamped; masks.push("trainees." + tid + "." + tr.key); }
+        });
+        if (!existing && masks.length) {
+          const res = await fsUpdate(COL, DOC, { trainees: { [tid]: body } }, masks);
+          if (res.ok) { db.trainees = db.trainees || {}; db.trainees[tid] = body; }
+        } else if (masks.length) {
+          const patch = { trainees: { [tid]: {} } };
+          if (body.tracks) patch.trainees[tid].tracks = body.tracks;
+          seed.tracks.forEach(trId => { const tr = TRACK_BY_ID[trId]; if (tr && body[tr.key]) patch.trainees[tid][tr.key] = body[tr.key]; });
+          const res = await fsUpdate(COL, DOC, patch, masks);
+          if (res.ok && db.trainees && db.trainees[tid]) Object.assign(db.trainees[tid], body);
+        }
+        // Roster tie-ins for the seeded tracks.
+        if (seed.tracks.indexOf("RPIC") >= 0 && cm && cm.trainingStatus !== "qualified") await setCrewTrainingStatus(seed.id, "qualified");
+        if (seed.tracks.indexOf("INST") >= 0 && cm && !cm.instructor) await setCrewInstructor(seed.id, true);
+      }
+      await loadCrew();
+    }
     render();
   }
   // Wings reflect the trainee whose record is on screen (gold for officer ranks, silver otherwise).
@@ -787,25 +688,27 @@
     }
   }
 
-  // ── Sign-off writes ──────────────────────────────────────────────────────
-  function fp(tid, itemId) { return "trainees." + tid + ".items." + itemId; }
+  // ── Sign-off writes (track-aware) ─────────────────────────────────────────
+  function fp(tid, itemId) { return "trainees." + tid + "." + trackObj().key + "." + itemId; }
   async function signOff(item) {
     const t = db.trainees[selTid];
     if (!t) { toast("Select a trainee first"); return; }
+    const key = trackObj().key;
     const rec = { by: me.label, byId: me.id, ts: new Date().toISOString() };
-    t.items = t.items || {};
-    t.items[item.id] = rec; render();
-    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { items: { [item.id]: rec } } } }, [fp(selTid, item.id)]);
-    if (!res.ok) { delete t.items[item.id]; render(); toast("Save failed — check connection"); }
+    t[key] = t[key] || {};
+    t[key][item.id] = rec; render();
+    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { [key]: { [item.id]: rec } } } }, [fp(selTid, item.id)]);
+    if (!res.ok) { delete t[key][item.id]; render(); toast("Save failed — check connection"); }
   }
   async function removeSignOff(item) {
     const t = db.trainees[selTid];
-    if (!t || !t.items) return;
-    const prev = t.items[item.id];
-    delete t.items[item.id]; render();
+    const key = trackObj().key;
+    if (!t || !t[key]) return;
+    const prev = t[key][item.id];
+    delete t[key][item.id]; render();
     // Mask includes the path, body omits it → Firestore deletes the field.
-    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { items: {} } } }, [fp(selTid, item.id)]);
-    if (!res.ok) { t.items[item.id] = prev; render(); toast("Save failed — check connection"); }
+    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { [key]: {} } } }, [fp(selTid, item.id)]);
+    if (!res.ok) { t[key][item.id] = prev; render(); toast("Save failed — check connection"); }
   }
   function onItemTap(item) {
     if (!me) { pendingItem = item; showPin(); return; }
@@ -813,11 +716,16 @@
     if (!selTid) { toast("Add a trainee first"); return; }
     const t = db.trainees[selTid];
     if (!t) { toast("Select a trainee first"); return; }
-    const existing = t.items && t.items[item.id];
+    const tr = trackObj();
+    const existing = t[tr.key] && t[tr.key][item.id];
     if (item.pm) {
       if (me.tier !== "owner") { toast("PM approval requires owner access"); return; }
       const p = existing ? removeSignOff(item) : signOff(item);
-      if (t.crewId != null) Promise.resolve(p).then(() => setCrewTrainingStatus(t.crewId, existing ? "in_training" : "qualified")).then(() => loadCrew());
+      // Roster tie-in depends on track: RPIC → trainingStatus, INST → instructor flag, VO → none.
+      if (t.crewId != null) {
+        if (tr.roster === "trainingStatus") Promise.resolve(p).then(() => setCrewTrainingStatus(t.crewId, existing ? "in_training" : "qualified")).then(() => loadCrew());
+        else if (tr.roster === "instructor") Promise.resolve(p).then(() => setCrewInstructor(t.crewId, !existing)).then(() => loadCrew());
+      }
       return p;
     }
     if (existing) {
@@ -851,7 +759,7 @@
     if (!m) { toast("Crew member not found"); return false; }
     const tid = "c" + m.id;
     if (db.trainees[tid]) { toast(m.name + " already has a training record"); return false; }
-    const rec = { name: crewLabel(m), crewId: m.id, start: start || "", created: new Date().toISOString(), createdBy: me ? me.label : "", items: {} };
+    const rec = { name: crewLabel(m), crewId: m.id, start: start || "", created: new Date().toISOString(), createdBy: me ? me.label : "", items: {}, tracks: ["RPIC"] };
     db.trainees[tid] = rec; selTid = tid; render();
     const res = await fsUpdate(COL, DOC, { trainees: { [tid]: rec } }, ["trainees." + tid]);
     if (!res.ok) { delete db.trainees[tid]; selTid = null; render(); toast("Save failed — trainee not created"); return false; }
@@ -877,237 +785,60 @@
     return card;
   }
 
-  // ── NWCG render ─────────────────────────────────────────────────────────────
-  const RATINGS = [["N/O","no"],["D","d"],["M","m"],["E","e"]];
-  function renderWorkbookTabs(t) {
-    const wrap = document.getElementById("wbTabs");
+  // ── Track toggle + owner assignment ─────────────────────────────────────────
+  function renderTrackTabs(t) {
+    const wrap = document.getElementById("trackTabs");
     wrap.innerHTML = "";
     const isInstructor = !!(me && me.instructor);
-    const tabs = [["onboarding", "Onboarding"]];
-    // Onboarding always shown. NWCG books shown if assigned, or (instructor) always so owner can assign.
-    const assigned = assignedBooks(t);
-    NWCG_BOOKS.forEach(b => {
-      if (isInstructor || assigned.indexOf(b.id) >= 0) tabs.push([b.id, b.id]);
-    });
-    // If current workbook is no longer visible, fall back to onboarding.
-    if (!tabs.some(x => x[0] === workbook)) workbook = "onboarding";
-    tabs.forEach(([id, label]) => {
+    const isOwner = !!(me && me.tier === "owner");
+    const assigned = assignedTracks(t);
+    // Owner sees all tracks (to assign); others see only assigned tracks.
+    const visible = TRACKS.filter(tr => isOwner || assigned.indexOf(tr.id) >= 0);
+    if (!visible.some(tr => tr.id === track)) track = visible.length ? visible[0].id : "RPIC";
+    if (!visible.length) { wrap.style.display = "none"; return; }
+    wrap.style.display = "";
+    visible.forEach(tr => {
       const b = document.createElement("button");
-      b.className = "wb-tab" + (id !== "onboarding" ? " nwcg" : "") + (workbook === id ? " on" : "");
-      b.textContent = label;
-      b.addEventListener("click", () => { workbook = id; render(); });
+      b.className = "wb-tab" + (track === tr.id ? " on" : "");
+      b.textContent = tr.label;
+      b.addEventListener("click", () => { track = tr.id; render(); });
       wrap.appendChild(b);
     });
   }
 
-  function renderNwcgControls(t) {
-    const wrap = document.getElementById("nwcgControls");
+  function renderTrackAssign(t) {
+    const wrap = document.getElementById("trackAssign");
     wrap.innerHTML = "";
-    if (workbook === "onboarding") return;
-    const book = NWCG_BY_ID[workbook]; if (!book) return;
-    const isInstructor = !!(me && me.instructor);
+    if (!t) return;
     const isOwner = !!(me && me.tier === "owner");
-    const assigned = assignedBooks(t);
-    const isAssigned = assigned.indexOf(workbook) >= 0;
-
-    // Reference note
-    const note = document.createElement("div");
-    note.className = "nwcg-note";
-    note.innerHTML = "<strong>" + book.pms + " · " + book.full + "</strong> — tracking aid only. The wet-ink paper PTB (Incident Position Standards <strong>" + book.std + "</strong>) remains the system of record. Rate each task <strong>N/O · D · M · E</strong>; a <strong>D</strong> requires an evaluator note. A task is met once any assignment column reads M or E.";
-    wrap.appendChild(note);
-
-    // Owner: which books this trainee is working
+    const assigned = assignedTracks(t);
     if (isOwner) {
-      const ba = document.createElement("div");
-      ba.className = "book-assign";
-      const ttl = document.createElement("div"); ttl.className = "ba-title"; ttl.textContent = "Assigned Task Books (owner)";
-      ba.appendChild(ttl);
-      const chips = document.createElement("div"); chips.className = "ba-chips";
-      NWCG_BOOKS.forEach(b => {
-        const on = assigned.indexOf(b.id) >= 0;
+      const ta = document.createElement("div"); ta.className = "track-assign";
+      const ttl = document.createElement("div"); ttl.className = "ta-title"; ttl.textContent = "Assigned Tracks (owner)";
+      ta.appendChild(ttl);
+      const chips = document.createElement("div"); chips.className = "ta-chips";
+      TRACKS.forEach(tr => {
+        const on = assigned.indexOf(tr.id) >= 0;
         const c = document.createElement("button");
-        c.className = "ba-chip" + (on ? " on" : "");
-        c.textContent = (on ? "✓ " : "") + b.id;
-        c.title = b.full;
+        c.className = "ta-chip" + (on ? " on" : "");
+        c.textContent = (on ? "✓ " : "") + tr.label;
         c.addEventListener("click", () => {
-          const next = on ? assigned.filter(x => x !== b.id) : assigned.concat([b.id]);
-          saveAssigned(next);
+          const next = on ? assigned.filter(x => x !== tr.id) : assigned.concat([tr.id]);
+          saveTracks(next);
         });
         chips.appendChild(c);
       });
-      ba.appendChild(chips);
-      wrap.appendChild(ba);
-    }
-
-    if (!isAssigned) {
-      const g = document.createElement("div");
-      g.className = "nwcg-note";
-      g.innerHTML = isOwner
-        ? "This book is not assigned to " + (t ? t.name : "this trainee") + " yet. Tap <strong>" + workbook + "</strong> above to assign it."
-        : "This task book is not currently assigned. The Program Manager opens a book when the trainee begins working toward the qualification.";
-      wrap.appendChild(g);
-      return;
-    }
-
-    // Assignment column selector (1-4)
-    const arow = document.createElement("div"); arow.className = "asg-row";
-    const lab = document.createElement("span"); lab.className = "asg-label"; lab.textContent = "Assignment"; arow.appendChild(lab);
-    const bd = bookData(t, workbook);
-    const asgs = (bd.assignments) || {};
-    ["1","2","3","4"].forEach(col => {
-      const b = document.createElement("button");
-      const filled = !!asgs[col];
-      b.className = "asg-col" + (filled ? " filled" : "") + (asgCol === col ? " on" : "");
-      b.textContent = col;
-      b.addEventListener("click", () => { asgCol = col; render(); });
-      arow.appendChild(b);
-    });
-    wrap.appendChild(arow);
-
-    // Assignment header metadata (evaluator + incident + date) for the active column
-    const meta = asgs[asgCol] || {};
-    const mwrap = document.createElement("div"); mwrap.className = "asg-meta";
-    if (isInstructor) {
-      const mk = (labelTxt, key, ph, half) => {
-        const f = document.createElement("label"); f.className = "fld"; if (half) f.style.flex = "1";
-        const l = document.createElement("span"); l.textContent = labelTxt; f.appendChild(l);
-        const inp = document.createElement("input");
-        inp.type = key === "date" ? "date" : "text"; inp.placeholder = ph || ""; inp.value = meta[key] || "";
-        inp.addEventListener("change", () => {
-          const cur = Object.assign({}, asgs[asgCol] || {});
-          cur[key] = inp.value.trim(); cur.ts = new Date().toISOString(); cur.by = me.label;
-          saveAsgMeta(workbook, asgCol, cur);
-        });
-        f.appendChild(inp); return f;
-      };
-      mwrap.appendChild(mk("Evaluator name", "evalName", "defaults to you — edit for off-team evaluator"));
-      const two = document.createElement("div"); two.className = "two";
-      two.appendChild(mk("Evaluator IQCS/IQS #", "evalIqcs", "", true));
-      two.appendChild(mk("Assignment date", "date", "", true));
-      mwrap.appendChild(two);
-      mwrap.appendChild(mk("Incident / event", "incident", "name or reference (optional)"));
-      // Default evaluator name to signed-in instructor if empty
-      if (!meta.evalName) { const inp = mwrap.querySelector("input"); if (inp) inp.value = me.label; }
-    } else {
-      const info = document.createElement("div"); info.className = "asg-locked";
-      info.textContent = meta.evalName ? ("Evaluator: " + meta.evalName + (meta.incident ? " · " + meta.incident : "") + (meta.date ? " · " + meta.date : "")) : "Assignment " + asgCol + " — evaluator details set by instructor.";
-      mwrap.appendChild(info);
-    }
-    wrap.appendChild(mwrap);
-
-    // Owner verify -> roster qual
-    const pct = bookPct(t, workbook);
-    if (isOwner) {
-      const vwrap = document.createElement("div"); vwrap.className = "book-assign ba-verify";
-      const verified = bookVerified(t, workbook);
-      const complete = pct === 100;
-      const btn = document.createElement("button");
-      btn.className = "mini-btn" + (verified ? "" : " primary");
-      btn.textContent = verified ? "Qualified — Remove from Roster" : (complete ? "Verify Qualified → Add to Roster" : "Verify (needs 100%)");
-      btn.disabled = !complete && !verified;
-      if (!complete && !verified) btn.style.opacity = ".5";
-      btn.addEventListener("click", () => setBookVerified(workbook, !verified));
-      vwrap.innerHTML = "<div class='ba-title'>Qualification (owner)</div>";
-      vwrap.appendChild(btn);
-      const hint = document.createElement("div"); hint.style.cssText = "font-size:12px;color:var(--muted);margin-top:8px;";
-      hint.textContent = verified ? (workbook + " shows on the crew roster." ) : "Marks " + workbook + " on the crew roster once all tasks read M or E.";
-      vwrap.appendChild(hint);
-      wrap.appendChild(vwrap);
+      ta.appendChild(chips);
+      wrap.appendChild(ta);
     }
   }
 
-  function nwcgRatingTap(taskId, col, rating) {
-    if (!me) { showPin(); return; }
-    if (!me.instructor) { toast("Ratings are recorded by evaluators"); return; }
-    if (!selTid) { toast("Select a trainee first"); return; }
-    const t = db.trainees[selTid];
-    const existing = taskRecords(t, workbook, taskId)[col];
-    // Toggle off if same rating tapped again (only own/owner can clear)
-    if (existing && existing.rating === rating) {
-      if (parseInt(existing.byId) !== parseInt(me.id) && me.tier !== "owner") { toast("Rated by " + existing.by + " — only they or the owner can change it"); return; }
-      saveRating(workbook, taskId, col, null); return;
-    }
-    if (existing && parseInt(existing.byId) !== parseInt(me.id) && me.tier !== "owner") { toast("Rated by " + existing.by + " — only they or the owner can change it"); return; }
-    const rec = { rating: rating, by: me.label, byId: me.id, ts: new Date().toISOString(), note: (existing && existing.note) || "" };
-    // D requires a note — prompt inline via focus after render
-    saveRating(workbook, taskId, col, rec);
-    if (rating === "D") setTimeout(() => { const el = document.getElementById("note_" + taskId + "_" + col); if (el) el.focus(); }, 40);
-  }
-
-  function renderNwcgTasks(t) {
-    const root = document.getElementById("blocks");
-    root.innerHTML = "";
-    const book = NWCG_BY_ID[workbook]; if (!book) return;
-    const assigned = assignedBooks(t).indexOf(workbook) >= 0;
-    if (!assigned) return;
-    const canRate = !!(me && me.instructor);
-    book.cats.forEach(cat => {
-      const metInCat = cat.tasks.filter(tk => taskMet(t, workbook, tk.id)).length;
-      const el = document.createElement("div");
-      const openKey = "nwcg_" + workbook + "_" + cat.title;
-      el.className = "block" + (openBlocks[openKey] ? " open" : "");
-      const head = document.createElement("button");
-      head.className = "block-head";
-      head.setAttribute("aria-expanded", openBlocks[openKey] ? "true" : "false");
-      head.innerHTML =
-        '<span class="block-title"></span>' +
-        '<span class="block-count' + (metInCat === cat.tasks.length ? " done" : "") + '">' + metInCat + " / " + cat.tasks.length + "</span>" +
-        '<svg class="chev" width="14" height="14" viewBox="0 0 16 16"><path d="M5 3l6 5-6 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
-      head.querySelector(".block-title").textContent = cat.title;
-      head.addEventListener("click", () => { openBlocks[openKey] = !openBlocks[openKey]; render(); });
-      el.appendChild(head);
-      const body = document.createElement("div"); body.className = "block-body";
-      cat.tasks.forEach(tk => {
-        const recs = taskRecords(t, workbook, tk.id);
-        const rec = recs[asgCol];
-        const met = taskMet(t, workbook, tk.id);
-        const row = document.createElement("div"); row.className = "ntask";
-        const top = document.createElement("div"); top.className = "ntask-top";
-        const code = document.createElement("span"); code.className = "ntask-code"; code.textContent = tk.code; top.appendChild(code);
-        const lab = document.createElement("span"); lab.className = "ntask-label";
-        lab.textContent = tk.label;
-        if (met) { const mb = document.createElement("span"); mb.className = "met-badge"; mb.textContent = "MET"; lab.appendChild(mb); }
-        top.appendChild(lab);
-        row.appendChild(top);
-        // Rating buttons for the active assignment column
-        const rrow = document.createElement("div"); rrow.className = "rate-row";
-        RATINGS.forEach(([val, cls]) => {
-          const b = document.createElement("button");
-          const on = rec && rec.rating === val;
-          b.className = "rate-btn " + cls + (on ? " on" : "");
-          b.textContent = val;
-          b.addEventListener("click", () => nwcgRatingTap(tk.id, asgCol, val));
-          rrow.appendChild(b);
-        });
-        row.appendChild(rrow);
-        if (rec) {
-          const stamp = document.createElement("div");
-          stamp.className = "rate-stamp" + ((rec.rating === "M" || rec.rating === "E") ? " m" : "");
-          stamp.textContent = "Asg " + asgCol + " · " + rec.rating + " · " + rec.by + " · " + fmtDate(rec.ts);
-          row.appendChild(stamp);
-          // D note: editable inline for instructors, read-only text otherwise
-          if (rec.rating === "D") {
-            if (canRate) {
-              const ni = document.createElement("input");
-              ni.className = "rate-note-in"; ni.id = "note_" + tk.id + "_" + asgCol;
-              ni.placeholder = "Required: explanation + suggestions for improvement";
-              ni.value = rec.note || "";
-              ni.addEventListener("change", () => {
-                const cur = Object.assign({}, rec, { note: ni.value.trim() });
-                saveRating(workbook, tk.id, asgCol, cur);
-              });
-              row.appendChild(ni);
-            } else if (rec.note) {
-              const nt = document.createElement("div"); nt.className = "rate-note-txt"; nt.textContent = "Note: " + rec.note;
-              row.appendChild(nt);
-            }
-          }
-        }
-        body.appendChild(row);
-      });
-      el.appendChild(body);
-      root.appendChild(el);
-    });
+  async function saveTracks(list) {
+    const t = db.trainees[selTid]; if (!t) return;
+    const prev = t.tracks;
+    t.tracks = list; render();
+    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { tracks: list } } }, ["trainees." + selTid + ".tracks"]);
+    if (!res.ok) { t.tracks = prev; render(); toast("Save failed — check connection"); }
   }
 
   function render() {
@@ -1167,47 +898,45 @@
     const t = selTid ? db.trainees[selTid] : null;
     renderWings(t);
 
-    // Workbook toggle + NWCG controls
-    renderWorkbookTabs(t);
-    renderNwcgControls(t);
+    // Track toggle + owner assignment
+    renderTrackTabs(t);
+    renderTrackAssign(t);
 
-    // NWCG workbook active → render task-book view and return (onboarding untouched below).
-    if (workbook !== "onboarding") {
-      renderNwcgTasks(t);
-      const book = NWCG_BY_ID[workbook];
-      const assigned = t && assignedBooks(t).indexOf(workbook) >= 0;
-      const npct = (t && assigned) ? bookPct(t, workbook) : 0;
-      const nmet = (t && assigned) ? bookMetCount(t, workbook) : 0;
-      const ntot = book ? book._tasks.length : 0;
-      document.getElementById("pct").textContent = (t && assigned) ? npct + "%" : "—";
-      document.getElementById("barFill").style.width = ((t && assigned) ? npct : 0) + "%";
-      document.getElementById("statusLine").innerHTML = (t && assigned)
-        ? "<strong>" + nmet + "</strong> of <strong>" + ntot + "</strong> tasks met (M/E) · Assignment " + asgCol
-        : (t ? workbook + " not assigned to this trainee" : "Select or add a trainee to begin");
-      const nflag = document.getElementById("statusFlag");
-      if (!t || !assigned) { nflag.textContent = "Not Assigned"; nflag.className = "status-flag"; }
-      else if (bookVerified(t, workbook)) { nflag.textContent = "Qualified — " + workbook; nflag.className = "status-flag approved"; }
-      else if (npct === 100) { nflag.textContent = "Ready For Verification"; nflag.className = "status-flag ready"; }
-      else if (npct > 0) { nflag.textContent = workbook + " In Progress"; nflag.className = "status-flag progress"; }
-      else { nflag.textContent = "Not Started"; nflag.className = "status-flag"; }
+    const tr = trackObj();
+    const blocks = tr.blocks;
+    const allItems = tr.allItems;
+    const total = allItems.length;
+    const checks = trackChecks(t, track);
+    const assigned = assignedTracks(t).indexOf(track) >= 0;
+
+    // Gate: track not assigned to this trainee.
+    if (t && !assigned) {
+      const g = document.createElement("div"); g.className = "track-gate";
+      g.innerHTML = (me && me.tier === "owner")
+        ? "The <strong>" + tr.label + "</strong> track isn't assigned to " + t.name + " yet — tap it in Assigned Tracks above to open it."
+        : "The <strong>" + tr.label + "</strong> track isn't assigned to this trainee. The Program Manager opens a track when the trainee begins it.";
+      root.appendChild(g);
+      document.getElementById("pct").textContent = "—";
+      document.getElementById("barFill").style.width = "0%";
+      document.getElementById("statusLine").textContent = tr.label + " not assigned";
+      const f = document.getElementById("statusFlag"); f.textContent = "Not Assigned"; f.className = "status-flag";
       return;
     }
 
-    const checks = (t && t.items) || {};
-
-    BLOCKS.forEach(block => {
+    blocks.forEach(block => {
       const done = block.items.filter(it => checks[it.id]).length;
       const el = document.createElement("div");
-      el.className = "block" + (openBlocks[block.id] ? " open" : "");
+      const openKey = track + "_" + block.id;
+      el.className = "block" + (openBlocks[openKey] ? " open" : "");
       const head = document.createElement("button");
       head.className = "block-head";
-      head.setAttribute("aria-expanded", openBlocks[block.id] ? "true" : "false");
+      head.setAttribute("aria-expanded", openBlocks[openKey] ? "true" : "false");
       head.innerHTML =
         '<span class="block-title"></span>' +
         '<span class="block-count' + (done === block.items.length ? " done" : "") + '">' + done + " / " + block.items.length + "</span>" +
         '<svg class="chev" width="14" height="14" viewBox="0 0 16 16"><path d="M5 3l6 5-6 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
       head.querySelector(".block-title").textContent = block.title;
-      head.addEventListener("click", () => { openBlocks[block.id] = !openBlocks[block.id]; render(); });
+      head.addEventListener("click", () => { openBlocks[openKey] = !openBlocks[openKey]; render(); });
       el.appendChild(head);
 
       const body = document.createElement("div");
@@ -1236,20 +965,21 @@
       root.appendChild(el);
     });
 
-    // Readiness
-    const done = ALL_ITEMS.filter(it => checks[it.id]).length;
-    const pct = t ? Math.round((done / totalItems) * 100) : 0;
+    // Readiness (active track)
+    const done = allItems.filter(it => checks[it.id]).length;
+    const pct = t ? Math.round((done / total) * 100) : 0;
     document.getElementById("pct").textContent = t ? pct + "%" : "—";
     document.getElementById("barFill").style.width = (t ? pct : 0) + "%";
     document.getElementById("statusLine").innerHTML = t
-      ? "<strong>" + done + "</strong> of <strong>" + totalItems + "</strong> items signed off" + (t.start ? " · started " + t.start : "")
+      ? "<strong>" + done + "</strong> of <strong>" + total + "</strong> " + tr.label + " items signed off" + (t.start ? " · started " + t.start : "")
       : "Select or add a trainee to begin";
     const flag = document.getElementById("statusFlag");
-    const pmDone = !!checks["c3"];
+    const pmItem = allItems.find(it => it.pm);
+    const pmDone = !!(pmItem && checks[pmItem.id]);
     if (!t) { flag.textContent = "No Trainee"; flag.className = "status-flag"; }
-    else if (pmDone) { flag.textContent = "Approved For Operational Status"; flag.className = "status-flag approved"; }
+    else if (pmDone) { flag.textContent = tr.certLabel; flag.className = "status-flag approved"; }
     else if (pct === 100) { flag.textContent = "Ready For PM Approval"; flag.className = "status-flag ready"; }
-    else if (pct > 0) { flag.textContent = "Training In Progress"; flag.className = "status-flag progress"; }
+    else if (pct > 0) { flag.textContent = tr.label + " Training In Progress"; flag.className = "status-flag progress"; }
     else { flag.textContent = "Not Started"; flag.className = "status-flag"; }
   }
 
@@ -1286,7 +1016,7 @@
   });
   document.getElementById("pinInput").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("pinGo").click(); });
 
-  document.getElementById("traineeSel").addEventListener("change", function () { selTid = this.value || null; confirmDel = false; asgCol = "1"; render(); });
+  document.getElementById("traineeSel").addEventListener("change", function () { selTid = this.value || null; confirmDel = false; track = "RPIC"; render(); });
   document.getElementById("btnDelTrainee").addEventListener("click", () => {
     if (!confirmDel) {
       confirmDel = true; render();
@@ -1322,42 +1052,13 @@
   document.getElementById("btnCopy").addEventListener("click", function () {
     const t = selTid ? db.trainees[selTid] : null;
     if (!t) { toast("No trainee selected"); return; }
+    const tr = trackObj();
+    const checks = trackChecks(t, track);
     const lines = [];
-    // NWCG workbook active → export the task-book table instead of onboarding.
-    if (workbook !== "onboarding") {
-      const book = NWCG_BY_ID[workbook];
-      const assigned = assignedBooks(t).indexOf(workbook) >= 0;
-      if (!book || !assigned) { toast(workbook + " not assigned to this trainee"); return; }
-      lines.push("NWCG POSITION TASK BOOK — TRACKING RECORD (NOT THE OFFICIAL PTB)");
-      lines.push(book.pms + " · " + book.full);
-      lines.push("Trainee: " + t.name);
-      const asgs = bookData(t, workbook).assignments || {};
-      ["1","2","3","4"].forEach(c => { if (asgs[c] && (asgs[c].evalName || asgs[c].incident || asgs[c].date)) lines.push("Assignment " + c + ": " + [asgs[c].evalName, asgs[c].incident, asgs[c].date].filter(Boolean).join(" · ")); });
-      lines.push("");
-      book.cats.forEach(cat => {
-        lines.push(cat.title.toUpperCase());
-        cat.tasks.forEach(tk => {
-          const recs = taskRecords(t, workbook, tk.id);
-          const cells = ["1","2","3","4"].map(c => recs[c] ? recs[c].rating : "·").join(" ");
-          lines.push("  [" + tk.code + "] " + tk.label);
-          lines.push("      Asg 1-4: " + cells + (taskMet(t, workbook, tk.id) ? "   (MET)" : ""));
-          ["1","2","3","4"].forEach(c => { if (recs[c] && recs[c].rating === "D" && recs[c].note) lines.push("      Asg " + c + " note: " + recs[c].note); });
-        });
-        lines.push("");
-      });
-      lines.push("Tasks met (M/E): " + bookMetCount(t, workbook) + "/" + book._tasks.length + " (" + bookPct(t, workbook) + "%)");
-      lines.push(bookVerified(t, workbook) ? "Status: VERIFIED QUALIFIED (roster)" : "Status: in progress");
-      const text = lines.join("\n");
-      const btn = this;
-      const ok = () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = "Copy Summary"; }, 1500); };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, ok); else ok();
-      return;
-    }
-    const checks = t.items || {};
-    lines.push("FIREHAWK UAS PILOT TRAINING — ONBOARDING RECORD");
+    lines.push("FIREHAWK UAS TRAINING — " + tr.label.toUpperCase() + " RECORD");
     lines.push("Trainee: " + t.name + (t.start ? "  |  Start: " + t.start : ""));
     lines.push("");
-    BLOCKS.forEach(block => {
+    tr.blocks.forEach(block => {
       lines.push(block.title.toUpperCase());
       block.items.forEach(it => {
         const r = checks[it.id];
@@ -1365,8 +1066,8 @@
       });
       lines.push("");
     });
-    const done = ALL_ITEMS.filter(it => checks[it.id]).length;
-    lines.push("Completion: " + done + "/" + totalItems + " (" + Math.round((done / totalItems) * 100) + "%)");
+    const done = tr.allItems.filter(it => checks[it.id]).length;
+    lines.push("Completion: " + done + "/" + tr.allItems.length + " (" + Math.round((done / tr.allItems.length) * 100) + "%)");
     const text = lines.join("\n");
     const btn = this;
     const ok = () => { btn.textContent = "Copied"; setTimeout(() => { btn.textContent = "Copy Summary"; }, 1500); };
