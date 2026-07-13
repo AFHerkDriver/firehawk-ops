@@ -543,7 +543,9 @@
   const SEED_SIGNOFFS = [
     { id: 1, name: "Sanchez",  tracks: ["RPIC", "VO", "INST"] },
     { id: 3, name: "Bauchman", tracks: ["RPIC", "VO", "INST"] },
-    { id: 4, name: "Thomas",   tracks: ["RPIC", "VO"] }
+    { id: 4, name: "Thomas",   tracks: ["RPIC", "VO"] },
+    { id: 5, name: "Rodriguez", tracks: ["VO"], date: "2026-07-01T00:00:00.000Z" },
+    { id: 2, name: "Goddu",     tracks: ["VO"], date: "2026-07-01T00:00:00.000Z" }
   ];
 
   // ── State ────────────────────────────────────────────────────────────────
@@ -648,6 +650,7 @@
     if (fresh && typeof fresh === "object") {
       const trainees = (fresh.trainees && typeof fresh.trainees === "object") ? fresh.trainees : {};
       const SEED_DATE = "2025-01-01T00:00:00.000Z";
+      for (const seed of SEED_SIGNOFFS) seed._date = seed.date || SEED_DATE;
       for (const seed of SEED_SIGNOFFS) {
         const tid = "c" + seed.id;
         const cm = crewById[String(seed.id)];
@@ -655,7 +658,7 @@
         const body = {}; const masks = [];
         if (!existing) {
           body.name = cm ? crewLabel(cm) : seed.name;
-          body.crewId = seed.id; body.start = ""; body.created = SEED_DATE;
+          body.crewId = seed.id; body.start = ""; body.created = seed._date;
           body.createdBy = "Grandfathered"; body.items = {}; body.tracks = seed.tracks.slice();
           masks.push("trainees." + tid);
         } else {
@@ -672,7 +675,7 @@
           const hasAny = curItems && Object.keys(curItems).length > 0;
           if (hasAny) return;   // real data present — leave it
           const stamped = {};
-          tr.allItems.forEach(it => { stamped[it.id] = { by: "Grandfathered", byId: 0, ts: SEED_DATE }; });
+          tr.allItems.forEach(it => { stamped[it.id] = { by: "Grandfathered", byId: 0, ts: seed._date }; });
           if (!existing) { body[tr.key] = stamped; }
           else { body[tr.key] = stamped; masks.push("trainees." + tid + "." + tr.key); }
         });
