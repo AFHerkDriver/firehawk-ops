@@ -344,6 +344,7 @@
       initials: src.initials || fb.initials || "",
       part107: (src.part107 !== undefined ? src.part107 : (fb.part107 !== undefined ? fb.part107 : null)),
       cert107No: (src.cert107No !== undefined ? src.cert107No : null),
+      phone: (src.phone !== undefined ? src.phone : null),   // on-duty RPIC contact — survive read-back into crew state
       trainingStatus: (src.trainingStatus !== undefined ? src.trainingStatus : null),
       instructor: !!src.instructor,
       seniorPilot: !!src.seniorPilot,
