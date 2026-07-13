@@ -241,7 +241,7 @@
     <h2>New Trainee</h2>
     <p>Pick a crew member. Creates a shared training record and marks them In Training on the roster.</p>
     <select id="ntCrew" class="name" style="width:100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-family: 'Barlow', sans-serif; font-size: 16px; padding: 12px; margin-bottom: 10px;" aria-label="Crew member"></select>
-    <input id="ntStart" class="name" type="date" aria-label="Start date">
+    <input id="ntStart" class="name" type="date" aria-label="Start date" style="color-scheme: dark;">
     <div class="err" id="ntErr"></div>
     <div class="modal-row">
       <button class="btn" id="ntCancel">Cancel</button>
@@ -362,6 +362,9 @@
     for (const trId of assigned) { if (trId === "INST") continue; const tr = TRACK_BY_ID[trId]; if (tr && !trackComplete(t, tr)) return "in_training"; }
     return "qualified";
   }
+  // A trainee's "folder" is open while any assigned track still has incomplete items;
+  // once every assigned track is 100% signed off, the folder is closed (computeStatus === "qualified").
+  function folderOpen(t) { return computeStatus(t) !== "qualified"; }
   // Recompute + persist trainingStatus for a trainee's crew member (write only on change).
   async function syncStatus(t) {
     if (!t || t.crewId == null) return;
@@ -870,7 +873,7 @@
     if (!m) { toast("Crew member not found"); return false; }
     const tid = "c" + m.id;
     if (db.trainees[tid]) { toast(m.name + " already has a training record"); return false; }
-    const rec = { name: crewLabel(m), crewId: m.id, start: start || "", created: new Date().toISOString(), createdBy: me ? me.label : "", items: {}, tracks: ["RPIC"] };
+    const rec = { name: crewLabel(m), crewId: m.id, start: start || "", created: new Date().toISOString(), createdBy: me ? me.label : "", items: {}, tracks: ["VO"] };
     db.trainees[tid] = rec; selTid = tid; render();
     const res = await fsUpdate(COL, DOC, { trainees: { [tid]: rec } }, ["trainees." + tid]);
     if (!res.ok) { delete db.trainees[tid]; selTid = null; render(); toast("Save failed — trainee not created"); return false; }
@@ -1017,10 +1020,12 @@
       const m = (t.crewId != null) ? crewById[String(t.crewId)] : null;
       return { rp: rankRank(m && m.rank), last: ((m && m.name) || t.name || tid).toLowerCase(), first: ((m && m.first) || "").toLowerCase() };
     }
-    const ids = Object.keys(db && db.trainees || {}).sort((a, b) => {
-      const ka = traineeSortKey(a), kb = traineeSortKey(b);
-      return ka.rp - kb.rp || ka.last.localeCompare(kb.last) || ka.first.localeCompare(kb.first);
-    });
+    const ids = Object.keys(db && db.trainees || {})
+      .filter(tid => folderOpen(db.trainees[tid]) || tid === selTid)
+      .sort((a, b) => {
+        const ka = traineeSortKey(a), kb = traineeSortKey(b);
+        return ka.rp - kb.rp || ka.last.localeCompare(kb.last) || ka.first.localeCompare(kb.first);
+      });
     if (isInstructor && selTid && ids.indexOf(selTid) < 0) selTid = ids.length ? ids[ids.length - 1] : null;
     if (!ids.length) {
       const o = document.createElement("option"); o.textContent = "No Trainees Yet"; o.value = ""; sel.appendChild(o);
