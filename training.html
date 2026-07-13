@@ -590,7 +590,7 @@
       const m = byId[k] || {};
       crewById[String(k)] = {
         id: m.id, name: m.name || ("Pilot " + k), first: m.first || "",
-        rank: (RANK_LOCKS[String(k)] !== undefined ? RANK_LOCKS[String(k)] : (m.rank || "")), tier: m.tier || "staff", archived: !!m.archived,
+        rank: (RANK_LOCKS[String(k)] !== undefined ? RANK_LOCKS[String(k)] : normalizeRank(m.rank || "")), tier: m.tier || "staff", archived: !!m.archived,
         instructor: !!m.instructor,
         rpicQualified: !!m.rpicQualified, voQualified: !!m.voQualified,
         trainingStatus: (m.trainingStatus === undefined ? null : m.trainingStatus)
@@ -598,6 +598,7 @@
     }
   }
   const RANK_LOCKS = { "6": "Cmsr" };   // crew ids whose rank is fixed (unique rank) — mirror of index.html
+  function normalizeRank(r) { return (r && String(r).toUpperCase() === "EO") ? "Eng" : (r || ""); }   // EO retired → Eng
   function crewLabel(m) {
     return ((m.rank ? m.rank + " " : "") + (m.first ? m.first + " " : "") + m.name).trim();
   }
@@ -655,6 +656,7 @@
   async function seedDefaults() {
     const data = await fsGet(COL, "crew");
     const byId = (data && data.membersById) || {};
+    for (const id in byId) { if (byId[id] && byId[id].rank === "EO") await setCrewRank(id, "Eng"); }   // retire EO → Eng
     for (const id of GRANDFATHERED_IDS) {
       const m = byId[String(id)];
       if (m && (m.trainingStatus === undefined || m.trainingStatus === null)) await setCrewTrainingStatus(id, "grandfathered");
@@ -1006,7 +1008,7 @@
     // Trainee select (instructors only)
     const sel = document.getElementById("traineeSel");
     sel.innerHTML = "";
-    const RANK_ORDER = { "commissioner":-1, "cmsr":-1, "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eo":5, "eng":5, "engineer":5, "driver":5, "operator":5, "ff":6, "firefighter":6 };
+    const RANK_ORDER = { "commissioner":-1, "cmsr":-1, "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eng":5, "engineer":5, "driver":5, "ff":6, "firefighter":6 };
     function rankRank(r) { const k = (r || "").toLowerCase().trim(); return RANK_ORDER[k] != null ? RANK_ORDER[k] : 90; }
     function traineeSortKey(tid) {
       const t = db.trainees[tid] || {};
