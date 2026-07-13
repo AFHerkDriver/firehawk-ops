@@ -1359,7 +1359,9 @@
       style:{ display:"flex", alignItems:"center", gap:10, background:C.panel, border:"1px solid "+C.border, borderRadius:10, padding:"12px", marginBottom:8, opacity: c.archived ? 0.6 : 1, cursor:"pointer" } },
       h("span", { style:{ width:12, height:12, borderRadius:"50%", background:c.color, flexShrink:0 } }),
       h("div", { style:{ flex:1, minWidth:0 } },
-        h("div", { style:{ fontSize:14, color:C.text, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, (c.first ? c.first + " " : "") + c.name),
+        h("div", { style:{ display:"flex", alignItems:"center", gap:6, minWidth:0 } },
+          h("div", { style:{ fontSize:14, color:C.text, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, (c.first ? c.first + " " : "") + c.name),
+          c.part107 ? h("span", { title:"Part 107 — " + fmtCert(c.part107), style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+certColor(c.part107), background:certColor(c.part107)+"2A", color:certColor(c.part107), flexShrink:0, fontWeight:800, lineHeight:1 } }, "107") : null),
         h("div", { style:{ fontSize:9.5, color:C.dim, letterSpacing:0.5, marginTop:2 } },
           c.archived ? "ARCHIVED" : ((c.rank ? c.rank + " · " : "") + posLabel(c.role)))),
       h("div", { style:{ maxWidth:186, display:"flex", flexWrap:"wrap", justifyContent:"center", alignItems:"center", gap:4, flexShrink:0 } },
@@ -1369,7 +1371,6 @@
         c.voQualified ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.green, background:C.green+"2A", color:C.green, flexShrink:0, fontWeight:800, lineHeight:1 } }, "VO") : null,
         c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1 } }, "IN TRAINING") : null,
         (Array.isArray(c.nwcg) ? c.nwcg : []).map(function(q){ return h("span", { key:q, style:{ fontSize:7.5, letterSpacing:0.5, padding:"3px 6px", borderRadius:6, border:"1px solid #16A085", background:"rgba(22,160,133,0.22)", color:"#16A085", flexShrink:0, fontWeight:800, lineHeight:1 } }, q); })),
-      c.part107 ? h("span", { title:"Part 107 — " + fmtCert(c.part107), style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+certColor(c.part107), background:certColor(c.part107)+"2A", color:certColor(c.part107), flexShrink:0, fontWeight:800, lineHeight:1 } }, "107") : null,
       h("span", { style:{ fontSize:16, color:C.dim, lineHeight:1 } }, "›"));
 
     const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom:5, marginTop:10 } }, t);
