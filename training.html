@@ -342,6 +342,10 @@
     const path = "membersById." + fpSeg(String(crewId)) + "." + field;
     return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { [field]: !!on } } }, [path]);
   }
+  function setCrewRank(crewId, rank) {
+    const path = "membersById." + fpSeg(String(crewId)) + ".rank";
+    return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { rank: rank } } }, [path]);
+  }
   // Apply a track's qualification and keep trainingStatus (the IN TRAINING pill) in agreement:
   // any qualification held → "qualified"; none held → "in_training".
   // Completion of a track = every item in it signed off.
@@ -565,7 +569,8 @@
     { id: 3, name: "Bauchman", tracks: ["RPIC", "VO", "INST"] },
     { id: 4, name: "Thomas",   tracks: ["RPIC", "VO"] },
     { id: 5, name: "Rodriguez", tracks: ["VO"], date: "2026-07-01T00:00:00.000Z" },
-    { id: 2, name: "Goddu",     tracks: ["VO"], date: "2026-07-01T00:00:00.000Z" }
+    { id: 2, name: "Goddu",     tracks: ["VO"], date: "2026-07-01T00:00:00.000Z" },
+    { id: 6, name: "Rait",      tracks: ["VO", "RPIC", "INST"], date: "2023-09-01T00:00:00.000Z", rank: "Cmsr" }
   ];
 
   // ── State ────────────────────────────────────────────────────────────────
@@ -712,6 +717,7 @@
         // Roster tie-ins for the seeded tracks.
         // Roster qual flags for the seeded tracks. Training status is derived below (reconcile pass).
         for (const trId of seed.tracks) { const str = TRACK_BY_ID[trId]; if (str && cm && !cm[str.qualField]) await setCrewQual(seed.id, str.qualField, true); }
+        if (seed.rank && cm && cm.rank !== seed.rank) { const rr = await setCrewRank(seed.id, seed.rank); if (rr.ok) cm.rank = seed.rank; }
       }
       await loadCrew();
 
@@ -999,7 +1005,7 @@
     // Trainee select (instructors only)
     const sel = document.getElementById("traineeSel");
     sel.innerHTML = "";
-    const RANK_ORDER = { "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eng":5, "engineer":5, "driver":5, "ff":6, "firefighter":6 };
+    const RANK_ORDER = { "commissioner":-1, "cmsr":-1, "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eng":5, "engineer":5, "driver":5, "ff":6, "firefighter":6 };
     function rankRank(r) { const k = (r || "").toLowerCase().trim(); return RANK_ORDER[k] != null ? RANK_ORDER[k] : 90; }
     function traineeSortKey(tid) {
       const t = db.trainees[tid] || {};
