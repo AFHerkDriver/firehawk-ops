@@ -337,9 +337,22 @@
     const path = "membersById." + fpSeg(String(crewId)) + ".instructor";
     return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { instructor: !!on } } }, [path]);
   }
-  function setCrewVoQualified(crewId, on) {
-    const path = "membersById." + fpSeg(String(crewId)) + ".voQualified";
-    return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { voQualified: !!on } } }, [path]);
+  // Generic qualification-flag writer (rpicQualified / voQualified / instructor).
+  function setCrewQual(crewId, field, on) {
+    const path = "membersById." + fpSeg(String(crewId)) + "." + field;
+    return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { [field]: !!on } } }, [path]);
+  }
+  // Apply a track's qualification and keep trainingStatus (the IN TRAINING pill) in agreement:
+  // any qualification held → "qualified"; none held → "in_training".
+  async function applyQual(crewId, qualField, on) {
+    const q = await setCrewQual(crewId, qualField, on);
+    if (!q.ok) { toast("Roster qual didn't update"); return; }
+    const m = crewById[String(crewId)] || {};
+    const quals = { rpicQualified: !!m.rpicQualified, voQualified: !!m.voQualified, instructor: !!m.instructor };
+    quals[qualField] = on;
+    const anyQual = quals.rpicQualified || quals.voQualified || quals.instructor;
+    await setCrewTrainingStatus(crewId, anyQual ? "qualified" : "in_training");
+    await loadCrew();
   }
 
   // ── Curriculum ───────────────────────────────────────────────────────────
@@ -499,9 +512,9 @@
   // ── Track registry ──────────────────────────────────────────────────────────
   // RPIC keeps the legacy `.items` key (shipped data). VO/INST get their own keys.
   const TRACKS = [
-    { id: "RPIC", label: "RPIC",       key: "items", blocks: BLOCKS,      roster: "trainingStatus", certLabel: "Approved For Operational Status" },
-    { id: "VO",   label: "VO",         key: "vo",    blocks: VO_BLOCKS,   roster: "voQualified",    certLabel: "Qualified Visual Observer" },
-    { id: "INST", label: "Instructor", key: "inst",  blocks: INST_BLOCKS, roster: "instructor",     certLabel: "Instructor Authorized" }
+    { id: "RPIC", label: "RPIC",       key: "items", blocks: BLOCKS,      qualField: "rpicQualified", certLabel: "Approved For Operational Status" },
+    { id: "VO",   label: "VO",         key: "vo",    blocks: VO_BLOCKS,   qualField: "voQualified",   certLabel: "Qualified Visual Observer" },
+    { id: "INST", label: "Instructor", key: "inst",  blocks: INST_BLOCKS, qualField: "instructor",    certLabel: "Instructor Authorized" }
   ];
   const TRACK_BY_ID = {}; TRACKS.forEach(tr => { tr.allItems = []; tr.blocks.forEach(b => b.items.forEach(it => tr.allItems.push(it))); TRACK_BY_ID[tr.id] = tr; });
   let track = "RPIC";   // active track
@@ -552,6 +565,7 @@
         id: m.id, name: m.name || ("Pilot " + k), first: m.first || "",
         rank: m.rank || "", tier: m.tier || "staff", archived: !!m.archived,
         instructor: !!m.instructor,
+        rpicQualified: !!m.rpicQualified, voQualified: !!m.voQualified,
         trainingStatus: (m.trainingStatus === undefined ? null : m.trainingStatus)
       };
     }
@@ -673,9 +687,9 @@
           if (res.ok && db.trainees && db.trainees[tid]) Object.assign(db.trainees[tid], body);
         }
         // Roster tie-ins for the seeded tracks.
-        if (seed.tracks.indexOf("RPIC") >= 0 && cm && cm.trainingStatus !== "qualified") await setCrewTrainingStatus(seed.id, "qualified");
-        if (seed.tracks.indexOf("INST") >= 0 && cm && !cm.instructor) await setCrewInstructor(seed.id, true);
-        if (seed.tracks.indexOf("VO") >= 0 && cm && !cm.voQualified) await setCrewVoQualified(seed.id, true);
+        // Roster qual flags for the seeded tracks, then mark qualified.
+        for (const trId of seed.tracks) { const str = TRACK_BY_ID[trId]; if (str && cm && !cm[str.qualField]) await setCrewQual(seed.id, str.qualField, true); }
+        if (cm && cm.trainingStatus !== "qualified") await setCrewTrainingStatus(seed.id, "qualified");
       }
       await loadCrew();
     }
@@ -764,12 +778,8 @@
     if (item.pm) {
       if (me.tier !== "owner") { toast("PM approval requires owner access"); return; }
       const p = existing ? removeSignOff(item) : signOff(item);
-      // Roster tie-in depends on track: RPIC → trainingStatus, INST → instructor flag, VO → none.
-      if (t.crewId != null) {
-        if (tr.roster === "trainingStatus") Promise.resolve(p).then(() => setCrewTrainingStatus(t.crewId, existing ? "in_training" : "qualified")).then(() => loadCrew());
-        else if (tr.roster === "instructor") Promise.resolve(p).then(() => setCrewInstructor(t.crewId, !existing)).then(() => loadCrew());
-        else if (tr.roster === "voQualified") Promise.resolve(p).then(() => setCrewVoQualified(t.crewId, !existing)).then(() => loadCrew());
-      }
+      // Track completion sets its own qualification flag; trainingStatus follows.
+      if (t.crewId != null) Promise.resolve(p).then(() => applyQual(t.crewId, tr.qualField, !existing));
       return p;
     }
     if (existing) {
@@ -897,11 +907,7 @@
       delete t[tr.key][pmItem.id];
       await fsUpdate(COL, DOC, { trainees: { [selTid]: { [tr.key]: {} } } }, ["trainees." + selTid + "." + tr.key + "." + pmItem.id]);
     }
-    if (t.crewId != null) {
-      if (tr.roster === "trainingStatus") { await setCrewTrainingStatus(t.crewId, "in_training"); await loadCrew(); }
-      else if (tr.roster === "instructor") { await setCrewInstructor(t.crewId, false); await loadCrew(); }
-      else if (tr.roster === "voQualified") { await setCrewVoQualified(t.crewId, false); await loadCrew(); }
-    }
+    if (t.crewId != null) { await applyQual(t.crewId, tr.qualField, false); }
     if (wasApproved) toast(tr.label + " qualification revoked");
     render();
   }
@@ -945,7 +951,17 @@
     // Trainee select (instructors only)
     const sel = document.getElementById("traineeSel");
     sel.innerHTML = "";
-    const ids = Object.keys(db && db.trainees || {}).sort();
+    const RANK_ORDER = { "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eng":5, "engineer":5, "driver":5, "ff":6, "firefighter":6 };
+    function rankRank(r) { const k = (r || "").toLowerCase().trim(); return RANK_ORDER[k] != null ? RANK_ORDER[k] : 90; }
+    function traineeSortKey(tid) {
+      const t = db.trainees[tid] || {};
+      const m = (t.crewId != null) ? crewById[String(t.crewId)] : null;
+      return { rp: rankRank(m && m.rank), last: ((m && m.name) || t.name || tid).toLowerCase(), first: ((m && m.first) || "").toLowerCase() };
+    }
+    const ids = Object.keys(db && db.trainees || {}).sort((a, b) => {
+      const ka = traineeSortKey(a), kb = traineeSortKey(b);
+      return ka.rp - kb.rp || ka.last.localeCompare(kb.last) || ka.first.localeCompare(kb.first);
+    });
     if (isInstructor && selTid && ids.indexOf(selTid) < 0) selTid = ids.length ? ids[ids.length - 1] : null;
     if (!ids.length) {
       const o = document.createElement("option"); o.textContent = "No Trainees Yet"; o.value = ""; sel.appendChild(o);

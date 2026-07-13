@@ -286,9 +286,13 @@
   // Members live in a keyed map (membersById) with an explicit memberOrder list.
   // Per-member edits patch only that member's slot, so two admins editing different
   // people (or different fields on the same person) can never overwrite each other.
+  // Position (assigned duty) display — independent of qualifications held.
+  var POSITIONS = [["RPIC", "Remote Pilot"], ["VO", "Visual Observer"], ["INST", "Instructor"], ["", "No Position"]];
+  function posLabel(role) { for (var i = 0; i < POSITIONS.length; i++) { if (POSITIONS[i][0] === (role || "")) return POSITIONS[i][1]; } return role || "No Position"; }
+
   function memberShape(c) {
     return {
-      id: c.id, name: c.name, first: c.first || "", rank: c.rank || "", title: c.title || "", role: c.role, tier: c.tier || "staff",
+      id: c.id, name: c.name, first: c.first || "", rank: c.rank || "", title: c.title || "", role: (c.role == null ? "" : c.role), tier: c.tier || "staff",
       hasPin: !!c.hasPin, color: c.color,
       initials: c.initials, part107: (c.part107 == null ? null : c.part107),
       cert107No: (c.cert107No == null ? null : c.cert107No),   // FAA cert number — owner-only display
@@ -296,6 +300,7 @@
       trainingStatus: (c.trainingStatus == null ? null : c.trainingStatus),
       instructor: !!c.instructor,
       seniorPilot: !!c.seniorPilot,
+      rpicQualified: !!c.rpicQualified,
       voQualified: !!c.voQualified,
       nwcg: Array.isArray(c.nwcg) ? c.nwcg : [],
       reserve: !!c.reserve, archived: !!c.archived
@@ -338,7 +343,7 @@
       first: (src.first !== undefined ? src.first : (fb.first || "")) || "",
       rank: (src.rank !== undefined ? src.rank : (fb.rank || "")) || "",
       title: (src.title !== undefined ? src.title : (fb.title || "")) || "",
-      role: src.role || fb.role || "VO",
+      role: (src.role !== undefined ? src.role : (fb.role || "")),
       tier: src.tier || fb.tier || "staff",
       hasPin: (src.hasPin !== undefined ? !!src.hasPin : (src.pin != null ? true : (fb.hasPin !== undefined ? !!fb.hasPin : !!(fb.pin != null)))),
       color: src.color || fb.color || "#888",
@@ -349,6 +354,7 @@
       trainingStatus: (src.trainingStatus !== undefined ? src.trainingStatus : null),
       instructor: !!src.instructor,
       seniorPilot: !!src.seniorPilot,
+      rpicQualified: (src.rpicQualified !== undefined ? !!src.rpicQualified : !!(fb.rpicQualified)),
       voQualified: (src.voQualified !== undefined ? !!src.voQualified : !!(fb.voQualified)),
       nwcg: (Array.isArray(src.nwcg) ? src.nwcg : (Array.isArray(fb.nwcg) ? fb.nwcg : [])),
       reserve: !!src.reserve,
@@ -453,10 +459,10 @@
         ? h("select", {
             value: selId == null ? "" : selId, onChange: e => setSelId(parseInt(e.target.value)),
             style: { width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, marginBottom:12 }
-          }, crew.filter(isActive).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + c.role)))
+          }, crew.filter(isActive).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + posLabel(c.role))))
         : isStaff
           ? h("div", { style:{ width:"100%", boxSizing:"border-box", background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, color:C.text, marginBottom:12 } },
-              "Your availability · ", h("b", null, me.name), h("span", { style:{ color:C.dim, fontWeight:400 } }, " · " + me.role))
+              "Your availability · ", h("b", null, me.name), h("span", { style:{ color:C.dim, fontWeight:400 } }, " · " + posLabel(me.role)))
           : h("div", { style:{ width:"100%", boxSizing:"border-box", background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, color:C.dim, marginBottom:12, textAlign:"center" } },
               "Sign in to set your availability"),
 
@@ -1240,7 +1246,7 @@
     const [fPhone, setFPhone] = useState("");
     const [fInit, setFInit]   = useState("");
     const [fColor, setFColor] = useState(PALETTE[0]);
-    const [fRole, setFRole]   = useState("RPIC");
+    const [fRole, setFRole]   = useState("");
     const [fFirst, setFFirst] = useState("");
     const [fRank, setFRank]   = useState("");
     const [fTitle, setFTitle] = useState("");
@@ -1290,9 +1296,9 @@
     const editBtn = (c) => isOwner
       ? h("button", { onClick: () => openEdit(c), disabled:busy, style:{ fontSize:10, color:C.dim, background:"none", border:"1px solid "+C.border, borderRadius:7, padding:"4px 8px", cursor:"pointer" } }, "Edit")
       : null;
-    const resetForm = () => { setFName(""); setFInit(""); setFFirst(""); setFRank(""); setFTitle(""); setFRole("RPIC"); setFInstr(false); setFSenior(false); setFNwcg([]); setCertInput(""); setCertNoInput(""); setPinDraft(""); setClearPin(false); setColorPop(false); };
+    const resetForm = () => { setFName(""); setFInit(""); setFFirst(""); setFRank(""); setFTitle(""); setFRole(""); setFInstr(false); setFSenior(false); setFNwcg([]); setCertInput(""); setCertNoInput(""); setPinDraft(""); setClearPin(false); setColorPop(false); };
     const closeAddForm = () => { setShowAdd(false); setEditId(null); resetForm(); };
-    const openEdit = (c) => { setEditId(c.id); setFName(c.name || ""); setFInit(c.initials || ""); setFFirst(c.first || ""); setFRank(c.rank || ""); setFTitle(c.title || ""); setFRole(c.role || "RPIC"); setFColor(c.color || ""); setFPhone(c.phone || ""); setFInstr(!!c.instructor); setFSenior(!!c.seniorPilot); setFNwcg(Array.isArray(c.nwcg) ? c.nwcg.slice() : []); setCertInput(""); setCertNoInput(isOwner ? (c.cert107No || "") : ""); setTierDraft(c.tier || "staff"); setPinDraft(""); setClearPin(false); setAuthDraft(sessionPin || ""); setColorPop(false); setShowAdd(true); };
+    const openEdit = (c) => { setEditId(c.id); setFName(c.name || ""); setFInit(c.initials || ""); setFFirst(c.first || ""); setFRank(c.rank || ""); setFTitle(c.title || ""); setFRole(c.role || ""); setFColor(c.color || ""); setFPhone(c.phone || ""); setFInstr(!!c.instructor); setFSenior(!!c.seniorPilot); setFNwcg(Array.isArray(c.nwcg) ? c.nwcg.slice() : []); setCertInput(""); setCertNoInput(isOwner ? (c.cert107No || "") : ""); setTierDraft(c.tier || "staff"); setPinDraft(""); setClearPin(false); setAuthDraft(sessionPin || ""); setColorPop(false); setShowAdd(true); };
     const saveMember = async () => {
       const editing = editId != null ? crew.find(x => x.id === editId) : null;
       const name = fName.trim();
@@ -1355,11 +1361,12 @@
       h("div", { style:{ flex:1, minWidth:0 } },
         h("div", { style:{ fontSize:14, color:C.text, fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, (c.first ? c.first + " " : "") + c.name),
         h("div", { style:{ fontSize:9.5, color:C.dim, letterSpacing:0.5, marginTop:2 } },
-          c.archived ? "ARCHIVED" : ((c.rank ? c.rank + " · " : "") + c.role))),
+          c.archived ? "ARCHIVED" : ((c.rank ? c.rank + " · " : "") + posLabel(c.role)))),
       h("div", { style:{ maxWidth:186, display:"flex", flexWrap:"wrap", justifyContent:"center", alignItems:"center", gap:4, flexShrink:0 } },
         c.instructor ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1 } }, "INSTRUCTOR") : null,
         c.seniorPilot ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.blue, background:C.blue+"2A", color:C.blue, flexShrink:0, fontWeight:800, lineHeight:1 } }, "SENIOR PILOT") : null,
-        c.voQualified ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.green, background:C.green+"2A", color:C.green, flexShrink:0, fontWeight:800, lineHeight:1 } }, "VO QUAL") : null,
+        c.rpicQualified ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.blue, background:C.blue+"2A", color:C.blue, flexShrink:0, fontWeight:800, lineHeight:1 } }, "RPIC") : null,
+        c.voQualified ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.green, background:C.green+"2A", color:C.green, flexShrink:0, fontWeight:800, lineHeight:1 } }, "VO") : null,
         c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1 } }, "IN TRAINING") : null,
         (Array.isArray(c.nwcg) ? c.nwcg : []).map(function(q){ return h("span", { key:q, style:{ fontSize:7.5, letterSpacing:0.5, padding:"3px 6px", borderRadius:6, border:"1px solid #16A085", background:"rgba(22,160,133,0.22)", color:"#16A085", flexShrink:0, fontWeight:800, lineHeight:1 } }, q); })),
       h("span", { title:"Part 107 status", style:{ width:8, height:8, borderRadius:"50%", background: c.part107 ? certColor(c.part107) : C.dim, flexShrink:0 } }),
@@ -1410,9 +1417,11 @@
                   h("option", { value:"" }, "\u2014"),
                   opts.map(r => h("option", { key:r, value:r }, r)));
               })()),
-              fcol("Role", h("div", { style:{ display:"flex", gap:6, paddingTop:4 } },
-                h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC") }, "RPIC"),
-                h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "VO")))),
+              fcol("Position", h("div", { style:{ display:"flex", gap:6, paddingTop:4, flexWrap:"wrap" } },
+                h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC", C.blue) }, "Remote Pilot"),
+                h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "Visual Observer"),
+                h("button", { onClick: () => setFRole("INST"), style: pillBtn(fRole === "INST", C.accent) }, "Instructor"),
+                h("button", { onClick: () => setFRole(""), style: pillBtn(!fRole, C.dim) }, "No Position")))),
             h("div", { style:{ display:"flex", gap:10 } },
               fcol("Title", textInput(fTitle, setFTitle, "", 28)),
               fcol("Initials", textInput(fInit, setFInit, "", 3))),
@@ -1428,9 +1437,11 @@
             secLbl("NWCG QUALS"),
             h("div", { style:{ display:"flex", gap:8, flexWrap:"wrap", marginTop:6 } },
               NWCG.map(function(q){ return h("button", { key:q[0], title:q[1], onClick: () => toggleNwcg(q[0]), style: { ...pillBtn(fNwcg.indexOf(q[0]) !== -1, "#16A085"), padding:"7px 14px" } }, q[0]); }))) : h(React.Fragment, null,
-            fcol("Role", h("div", { style:{ display:"flex", gap:6, paddingTop:4 } },
-              h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC") }, "RPIC"),
-              h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "VO")))),
+            fcol("Position", h("div", { style:{ display:"flex", gap:6, paddingTop:4, flexWrap:"wrap" } },
+              h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC", C.blue) }, "Remote Pilot"),
+              h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "Visual Observer"),
+              h("button", { onClick: () => setFRole("INST"), style: pillBtn(fRole === "INST", C.accent) }, "Instructor"),
+              h("button", { onClick: () => setFRole(""), style: pillBtn(!fRole, C.dim) }, "No Position")))),
           secLbl("PART 107"),
           h("div", { style:{ fontSize:11, color: (editingM && editingM.part107) ? certColor(editingM.part107) : C.dim, margin:"4px 0 0" } },
             (editingM && editingM.part107) ? ((certDays(editingM.part107) < 0 ? "Expired \u2014 was valid to " : "Current \u2014 valid to ") + fmtCert(editingM.part107)) : "Not on file"),
@@ -6667,7 +6678,7 @@ function SARModal({
             h("div", { style:{ width:32, height:32, borderRadius:"50%", background:c.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#fff", fontWeight:700, flexShrink:0 } }, c.initials),
             h("div", { style:{ flex:1 } },
               h("div", { style:{ fontSize:13, color:C.text } }, c.name),
-              h("div", { style:{ fontSize:9, color: c.role === "RPIC" ? C.blue : C.green, letterSpacing:1 } }, c.role)),
+              h("div", { style:{ fontSize:9, color: c.role === "RPIC" ? C.blue : c.role === "VO" ? C.green : C.dim, letterSpacing:1 } }, posLabel(c.role))),
             h("span", { style:{ fontSize:9, fontWeight:700, color:hue, background:hue+"1F", border:"1px solid "+hue+"55", borderRadius:5, padding:"2px 8px" } }, label));
         })),
 
@@ -7069,7 +7080,7 @@ function SARModal({
           h("div", { style:{ width:32, height:32, borderRadius:"50%", background:col, border:"2px solid rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, color:"#fff", fontWeight:700, flexShrink:0 } }, c.initials || "—"),
           h("div", { style:{ flex:1, minWidth:0 } },
             h("div", { style:{ fontSize:13, color:C.text, fontWeight:600 } }, c.name),
-            h("div", { style:{ fontSize:9, color: muted ? C.dim : (c.role === "RPIC" ? C.blue : C.green), letterSpacing:1 } }, muted ? "ARCHIVED" : c.role)),
+            h("div", { style:{ fontSize:9, color: muted ? C.dim : (c.role === "RPIC" ? C.blue : c.role === "VO" ? C.green : C.dim), letterSpacing:1 } }, muted ? "ARCHIVED" : posLabel(c.role))),
           h("div", { style:{ textAlign:"right" } },
             h("div", { style:{ fontSize:22, fontFamily:"'Bebas Neue', sans-serif", color:col, lineHeight:1 } }, st.total),
             h("div", { style:{ fontSize:7, color:C.dim, letterSpacing:1 } }, "DAYS WORKED"))),
