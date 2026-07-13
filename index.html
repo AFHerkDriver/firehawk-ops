@@ -1393,7 +1393,7 @@
         (Array.isArray(c.nwcg) ? c.nwcg : []).map(function(q){ return h("span", { key:q, style:{ fontSize:7.5, letterSpacing:0.5, padding:"3px 6px", borderRadius:6, border:"1px solid #16A085", background:"rgba(22,160,133,0.22)", color:"#16A085", flexShrink:0, fontWeight:800, lineHeight:1 } }, q); })),
       h("span", { style:{ fontSize:16, color:C.dim, lineHeight:1 } }, "›"));
 
-    const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom: narrow ? 3 : 5, marginTop: narrow ? 6 : 10 } }, t);
+    const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom: narrow ? 2 : 5, marginTop: narrow ? 4 : 10 } }, t);
     const textInput = (val, set, ph, max) => h("input", { value:val, onChange: e => set(e.target.value), placeholder:ph, maxLength: max || null,
       style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding: narrow ? "7px 10px" : "9px 11px", fontSize:13, colorScheme:"dark" } });
     const hslToHex = (hh, ss, ll) => { ss/=100; ll/=100; const k = n => (n + hh/30) % 12; const a = ss * Math.min(ll, 1-ll); const f = n => ll - a * Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1))); const to = x => Math.round(255*x).toString(16).padStart(2,"0"); return "#" + to(f(0)) + to(f(8)) + to(f(4)); };
@@ -1421,7 +1421,7 @@
         : null,
 
       showAdd ? h("div", { onClick: () => closeAddForm(), style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:70, padding:16 } },
-        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:400, maxHeight:"90vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding: narrow ? 12 : 18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
+        h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:400, maxHeight:"90vh", overflowY:"auto", background:C.panel, border:"1px solid "+C.border, borderRadius:16, padding: narrow ? 10 : 18, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
           h("div", { style:{ display:"flex", alignItems:"center", gap:10, marginBottom:4 } },
             h("div", { style:{ fontFamily:"'Bebas Neue', sans-serif", fontSize:22, letterSpacing:1, color:C.text, flex:1, minWidth:0 } }, editId != null ? "EDIT \u2014 " + ((fFirst ? fFirst + " " : "") + fName) : "ADD PILOT"),
             (editingM && editingM.trainingStatus === "in_training") ? h("span", { style:{ fontSize:8.5, letterSpacing:1, padding:"3px 8px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", fontWeight:800, flexShrink:0 } }, "IN TRAINING") : null,
