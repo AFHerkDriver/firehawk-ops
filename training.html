@@ -337,6 +337,10 @@
     const path = "membersById." + fpSeg(String(crewId)) + ".instructor";
     return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { instructor: !!on } } }, [path]);
   }
+  function setCrewVoQualified(crewId, on) {
+    const path = "membersById." + fpSeg(String(crewId)) + ".voQualified";
+    return fsUpdate(COL, "crew", { membersById: { [String(crewId)]: { voQualified: !!on } } }, [path]);
+  }
 
   // ── Curriculum ───────────────────────────────────────────────────────────
   const BLOCKS = [
@@ -496,11 +500,27 @@
   // RPIC keeps the legacy `.items` key (shipped data). VO/INST get their own keys.
   const TRACKS = [
     { id: "RPIC", label: "RPIC",       key: "items", blocks: BLOCKS,      roster: "trainingStatus", certLabel: "Approved For Operational Status" },
-    { id: "VO",   label: "VO",         key: "vo",    blocks: VO_BLOCKS,   roster: null,             certLabel: "Qualified Visual Observer" },
+    { id: "VO",   label: "VO",         key: "vo",    blocks: VO_BLOCKS,   roster: "voQualified",    certLabel: "Qualified Visual Observer" },
     { id: "INST", label: "Instructor", key: "inst",  blocks: INST_BLOCKS, roster: "instructor",     certLabel: "Instructor Authorized" }
   ];
   const TRACK_BY_ID = {}; TRACKS.forEach(tr => { tr.allItems = []; tr.blocks.forEach(b => b.items.forEach(it => tr.allItems.push(it))); TRACK_BY_ID[tr.id] = tr; });
   let track = "RPIC";   // active track
+
+  // Cross-track equivalences: word-for-word identical tasks shared between VO and RPIC.
+  // Signing one stamps the other with the SAME date/signer; un-signing clears both.
+  // Only exact matches are linked — partial-overlap airspace/mission tasks are NOT tied,
+  // because the RPIC version is broader and completing the VO one doesn't satisfy it.
+  const ITEM_KEY = {};                       // itemId -> storage key of its track
+  TRACKS.forEach(tr => tr.allItems.forEach(it => { ITEM_KEY[it.id] = tr.key; }));
+  const LINK_PAIRS = [
+    ["vp1", "p4"],   // Firehawk Ops App Access Issued
+    ["vp2", "p5"],   // Added to UAV Active Alert Page Group (Active911)
+    ["vp3", "p3"],   // TAK Account Provisioned
+    ["vo5a", "b4a"], // Tactical Radio Procedures + Launch/Landing Notifications
+    ["vo5b", "b4b"]  // Air-to-Ground Coordination + Airspace Advisories
+  ];
+  const LINKED = {};                         // itemId -> equivalent itemId in the other track
+  LINK_PAIRS.forEach(([a, b]) => { LINKED[a] = b; LINKED[b] = a; });
 
   function trackObj() { return TRACK_BY_ID[track] || TRACK_BY_ID.RPIC; }
   function assignedTracks(t) { const a = t && t.tracks; if (Array.isArray(a)) return a; return ["RPIC"]; }   // default RPIC for legacy records
@@ -655,6 +675,7 @@
         // Roster tie-ins for the seeded tracks.
         if (seed.tracks.indexOf("RPIC") >= 0 && cm && cm.trainingStatus !== "qualified") await setCrewTrainingStatus(seed.id, "qualified");
         if (seed.tracks.indexOf("INST") >= 0 && cm && !cm.instructor) await setCrewInstructor(seed.id, true);
+        if (seed.tracks.indexOf("VO") >= 0 && cm && !cm.voQualified) await setCrewVoQualified(seed.id, true);
       }
       await loadCrew();
     }
@@ -696,19 +717,41 @@
     const key = trackObj().key;
     const rec = { by: me.label, byId: me.id, ts: new Date().toISOString() };
     t[key] = t[key] || {};
-    t[key][item.id] = rec; render();
-    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { [key]: { [item.id]: rec } } } }, [fp(selTid, item.id)]);
-    if (!res.ok) { delete t[key][item.id]; render(); toast("Save failed — check connection"); }
+    t[key][item.id] = rec;
+    const body = { trainees: { [selTid]: { [key]: { [item.id]: rec } } } };
+    const masks = [fp(selTid, item.id)];
+    // Mirror to the equivalent task in the other track — same stamp, tied date.
+    const linkId = LINKED[item.id]; let linkKey = null;
+    if (linkId) {
+      linkKey = ITEM_KEY[linkId];
+      t[linkKey] = t[linkKey] || {}; t[linkKey][linkId] = rec;
+      body.trainees[selTid][linkKey] = Object.assign(body.trainees[selTid][linkKey] || {}, { [linkId]: rec });
+      masks.push("trainees." + selTid + "." + linkKey + "." + linkId);
+    }
+    render();
+    const res = await fsUpdate(COL, DOC, body, masks);
+    if (!res.ok) { delete t[key][item.id]; if (linkId && t[linkKey]) delete t[linkKey][linkId]; render(); toast("Save failed — check connection"); }
   }
   async function removeSignOff(item) {
     const t = db.trainees[selTid];
     const key = trackObj().key;
     if (!t || !t[key]) return;
     const prev = t[key][item.id];
-    delete t[key][item.id]; render();
-    // Mask includes the path, body omits it → Firestore deletes the field.
-    const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { [key]: {} } } }, [fp(selTid, item.id)]);
-    if (!res.ok) { t[key][item.id] = prev; render(); toast("Save failed — check connection"); }
+    delete t[key][item.id];
+    // Mask includes each path, body omits it → Firestore deletes the field(s).
+    const body = { trainees: { [selTid]: { [key]: {} } } };
+    const masks = [fp(selTid, item.id)];
+    const linkId = LINKED[item.id]; let linkKey = null, prevLink;
+    if (linkId) {
+      linkKey = ITEM_KEY[linkId];
+      prevLink = t[linkKey] && t[linkKey][linkId];
+      if (t[linkKey]) delete t[linkKey][linkId];
+      if (!body.trainees[selTid][linkKey]) body.trainees[selTid][linkKey] = {};
+      masks.push("trainees." + selTid + "." + linkKey + "." + linkId);
+    }
+    render();
+    const res = await fsUpdate(COL, DOC, body, masks);
+    if (!res.ok) { t[key][item.id] = prev; if (linkId) { t[linkKey] = t[linkKey] || {}; if (prevLink) t[linkKey][linkId] = prevLink; } render(); toast("Save failed — check connection"); }
   }
   function onItemTap(item) {
     if (!me) { pendingItem = item; showPin(); return; }
@@ -725,6 +768,7 @@
       if (t.crewId != null) {
         if (tr.roster === "trainingStatus") Promise.resolve(p).then(() => setCrewTrainingStatus(t.crewId, existing ? "in_training" : "qualified")).then(() => loadCrew());
         else if (tr.roster === "instructor") Promise.resolve(p).then(() => setCrewInstructor(t.crewId, !existing)).then(() => loadCrew());
+        else if (tr.roster === "voQualified") Promise.resolve(p).then(() => setCrewVoQualified(t.crewId, !existing)).then(() => loadCrew());
       }
       return p;
     }
@@ -835,10 +879,31 @@
 
   async function saveTracks(list) {
     const t = db.trainees[selTid]; if (!t) return;
-    const prev = t.tracks;
+    const prev = assignedTracks(t);
     t.tracks = list; render();
     const res = await fsUpdate(COL, DOC, { trainees: { [selTid]: { tracks: list } } }, ["trainees." + selTid + ".tracks"]);
-    if (!res.ok) { t.tracks = prev; render(); toast("Save failed — check connection"); }
+    if (!res.ok) { t.tracks = prev; render(); toast("Save failed — check connection"); return; }
+    // Removed track → one-tap downgrade: un-sign that track's PM approval and revoke its roster tie-in.
+    const removed = prev.filter(x => list.indexOf(x) < 0);
+    for (const trId of removed) await downgradeTrack(t, trId);
+  }
+  // Revoke a track's qualification: drop the PM-approval sign-off and clear the roster tie-in.
+  // Sign-off progress for the rest of the track is preserved, so re-adding only needs re-approval.
+  async function downgradeTrack(t, trId) {
+    const tr = TRACK_BY_ID[trId]; if (!tr) return;
+    const pmItem = tr.allItems.find(it => it.pm);
+    const wasApproved = !!(pmItem && t[tr.key] && t[tr.key][pmItem.id]);
+    if (wasApproved) {
+      delete t[tr.key][pmItem.id];
+      await fsUpdate(COL, DOC, { trainees: { [selTid]: { [tr.key]: {} } } }, ["trainees." + selTid + "." + tr.key + "." + pmItem.id]);
+    }
+    if (t.crewId != null) {
+      if (tr.roster === "trainingStatus") { await setCrewTrainingStatus(t.crewId, "in_training"); await loadCrew(); }
+      else if (tr.roster === "instructor") { await setCrewInstructor(t.crewId, false); await loadCrew(); }
+      else if (tr.roster === "voQualified") { await setCrewVoQualified(t.crewId, false); await loadCrew(); }
+    }
+    if (wasApproved) toast(tr.label + " qualification revoked");
+    render();
   }
 
   function render() {
@@ -955,7 +1020,12 @@
           '<span class="signoff"></span></span>';
         row.querySelector(".item-label").textContent = it.label;
         if (it.note) row.querySelector(".item-note").textContent = it.note;
-        if (rec) row.querySelector(".signoff").textContent = "Signed off · " + rec.by + " · " + fmtDate(rec.ts);
+        if (rec) {
+          let so = "Signed off · " + rec.by + " · " + fmtDate(rec.ts);
+          const lk = LINKED[it.id];
+          if (lk) { const otr = TRACKS.find(x => x.key === ITEM_KEY[lk]); if (otr) so += " · shared with " + otr.label; }
+          row.querySelector(".signoff").textContent = so;
+        }
         const tap = () => onItemTap(it);
         row.addEventListener("click", tap);
         row.addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); tap(); } });

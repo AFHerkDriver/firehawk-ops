@@ -296,6 +296,7 @@
       trainingStatus: (c.trainingStatus == null ? null : c.trainingStatus),
       instructor: !!c.instructor,
       seniorPilot: !!c.seniorPilot,
+      voQualified: !!c.voQualified,
       nwcg: Array.isArray(c.nwcg) ? c.nwcg : [],
       reserve: !!c.reserve, archived: !!c.archived
     };
@@ -348,6 +349,7 @@
       trainingStatus: (src.trainingStatus !== undefined ? src.trainingStatus : null),
       instructor: !!src.instructor,
       seniorPilot: !!src.seniorPilot,
+      voQualified: (src.voQualified !== undefined ? !!src.voQualified : !!(fb.voQualified)),
       nwcg: (Array.isArray(src.nwcg) ? src.nwcg : (Array.isArray(fb.nwcg) ? fb.nwcg : [])),
       reserve: !!src.reserve,
       archived: !!src.archived,
@@ -1357,6 +1359,7 @@
       h("div", { style:{ maxWidth:186, display:"flex", flexWrap:"wrap", justifyContent:"center", alignItems:"center", gap:4, flexShrink:0 } },
         c.instructor ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.accent, background:C.accent+"33", color:C.accent, flexShrink:0, fontWeight:800, lineHeight:1 } }, "INSTRUCTOR") : null,
         c.seniorPilot ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.blue, background:C.blue+"2A", color:C.blue, flexShrink:0, fontWeight:800, lineHeight:1 } }, "SENIOR PILOT") : null,
+        c.voQualified ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid "+C.green, background:C.green+"2A", color:C.green, flexShrink:0, fontWeight:800, lineHeight:1 } }, "VO QUAL") : null,
         c.trainingStatus === "in_training" ? h("span", { style:{ fontSize:8, letterSpacing:0.8, padding:"3px 7px", borderRadius:6, border:"1px solid #d29922", background:"rgba(210,153,34,0.28)", color:"#d29922", flexShrink:0, fontWeight:800, lineHeight:1 } }, "IN TRAINING") : null,
         (Array.isArray(c.nwcg) ? c.nwcg : []).map(function(q){ return h("span", { key:q, style:{ fontSize:7.5, letterSpacing:0.5, padding:"3px 6px", borderRadius:6, border:"1px solid #16A085", background:"rgba(22,160,133,0.22)", color:"#16A085", flexShrink:0, fontWeight:800, lineHeight:1 } }, q); })),
       h("span", { title:"Part 107 status", style:{ width:8, height:8, borderRadius:"50%", background: c.part107 ? certColor(c.part107) : C.dim, flexShrink:0 } }),
