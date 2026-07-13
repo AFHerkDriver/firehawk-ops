@@ -344,15 +344,35 @@
   }
   // Apply a track's qualification and keep trainingStatus (the IN TRAINING pill) in agreement:
   // any qualification held → "qualified"; none held → "in_training".
-  async function applyQual(crewId, qualField, on) {
-    const q = await setCrewQual(crewId, qualField, on);
+  // Completion of a track = every item in it signed off.
+  function trackComplete(t, tr) { const checks = (t && t[tr.key]) || {}; return tr.allItems.every(it => checks[it.id]); }
+  // Derived training status from OPEN assigned tracks (not from quals held):
+  //   Instructor track assigned & not 100% → "in_upgrade"
+  //   any VO/RPIC track assigned & not 100% → "in_training"
+  //   otherwise → "qualified"
+  function computeStatus(t) {
+    const assigned = assignedTracks(t);
+    if (assigned.indexOf("INST") >= 0) { const itr = TRACK_BY_ID.INST; if (itr && !trackComplete(t, itr)) return "in_upgrade"; }
+    for (const trId of assigned) { if (trId === "INST") continue; const tr = TRACK_BY_ID[trId]; if (tr && !trackComplete(t, tr)) return "in_training"; }
+    return "qualified";
+  }
+  // Recompute + persist trainingStatus for a trainee's crew member (write only on change).
+  async function syncStatus(t) {
+    if (!t || t.crewId == null) return;
+    const ns = computeStatus(t);
+    const cm = crewById[String(t.crewId)];
+    if (cm && cm.trainingStatus === ns) { render(); return; }
+    const r = await setCrewTrainingStatus(t.crewId, ns);
+    if (r.ok) { if (cm) cm.trainingStatus = ns; await loadCrew(); }
+    render();
+  }
+  // Set a track's qualification flag, then recompute the (open-track-derived) status.
+  async function applyQual(t, qualField, on) {
+    if (!t || t.crewId == null) return;
+    const q = await setCrewQual(t.crewId, qualField, on);
     if (!q.ok) { toast("Roster qual didn't update"); return; }
-    const m = crewById[String(crewId)] || {};
-    const quals = { rpicQualified: !!m.rpicQualified, voQualified: !!m.voQualified, instructor: !!m.instructor };
-    quals[qualField] = on;
-    const anyQual = quals.rpicQualified || quals.voQualified || quals.instructor;
-    await setCrewTrainingStatus(crewId, anyQual ? "qualified" : "in_training");
-    await loadCrew();
+    const cm = crewById[String(t.crewId)]; if (cm) cm[qualField] = on;
+    await syncStatus(t);
   }
 
   // ── Curriculum ───────────────────────────────────────────────────────────
@@ -690,9 +710,8 @@
           if (res.ok && db.trainees && db.trainees[tid]) Object.assign(db.trainees[tid], body);
         }
         // Roster tie-ins for the seeded tracks.
-        // Roster qual flags for the seeded tracks, then mark qualified.
+        // Roster qual flags for the seeded tracks. Training status is derived below (reconcile pass).
         for (const trId of seed.tracks) { const str = TRACK_BY_ID[trId]; if (str && cm && !cm[str.qualField]) await setCrewQual(seed.id, str.qualField, true); }
-        if (cm && cm.trainingStatus !== "qualified") await setCrewTrainingStatus(seed.id, "qualified");
       }
       await loadCrew();
 
@@ -711,10 +730,12 @@
           const signed = !!(pmItem && t[tr.key] && t[tr.key][pmItem.id]);
           if (signed && !cmx[tr.qualField]) {
             const r = await setCrewQual(t.crewId, tr.qualField, true);
-            if (r.ok) { cmx[tr.qualField] = true; reconChanged = true;
-              if (cmx.trainingStatus !== "qualified") { await setCrewTrainingStatus(t.crewId, "qualified"); cmx.trainingStatus = "qualified"; } }
+            if (r.ok) { cmx[tr.qualField] = true; reconChanged = true; }
           }
         }
+        // Derive training status from OPEN assigned tracks (in_training / in_upgrade / qualified).
+        const ns = computeStatus(t);
+        if (cmx.trainingStatus !== ns) { const r = await setCrewTrainingStatus(t.crewId, ns); if (r.ok) { cmx.trainingStatus = ns; reconChanged = true; } }
       }
       if (reconChanged) await loadCrew();
     }
@@ -804,7 +825,7 @@
       if (me.tier !== "owner") { toast("PM approval requires owner access"); return; }
       const p = existing ? removeSignOff(item) : signOff(item);
       // Track completion sets its own qualification flag; trainingStatus follows.
-      if (t.crewId != null) Promise.resolve(p).then(() => applyQual(t.crewId, tr.qualField, !existing));
+      if (t.crewId != null) Promise.resolve(p).then(() => applyQual(t, tr.qualField, !existing));
       return p;
     }
     if (existing) {
@@ -921,6 +942,8 @@
     // Removed track → one-tap downgrade: un-sign that track's PM approval and revoke its roster tie-in.
     const removed = prev.filter(x => list.indexOf(x) < 0);
     for (const trId of removed) await downgradeTrack(t, trId);
+    // Assigning/removing a track changes the open-track set → recompute training status.
+    await syncStatus(t);
   }
   // Revoke a track's qualification: drop the PM-approval sign-off and clear the roster tie-in.
   // Sign-off progress for the rest of the track is preserved, so re-adding only needs re-approval.
@@ -932,7 +955,7 @@
       delete t[tr.key][pmItem.id];
       await fsUpdate(COL, DOC, { trainees: { [selTid]: { [tr.key]: {} } } }, ["trainees." + selTid + "." + tr.key + "." + pmItem.id]);
     }
-    if (t.crewId != null) { await applyQual(t.crewId, tr.qualField, false); }
+    if (t.crewId != null) { await applyQual(t, tr.qualField, false); }
     if (wasApproved) toast(tr.label + " qualification revoked");
     render();
   }
