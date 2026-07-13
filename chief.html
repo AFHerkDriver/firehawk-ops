@@ -288,7 +288,7 @@ function getAssignment(days,day,year,month) {
 // Sanchez (id 1) flies UAV121 (lead). decodeDay mirrors index.html exactly so the Status
 // page interprets every stored day identically to the scheduler (two-unit model).
 const LEAD_PILOT_ID = 1;
-function crewPhones(cc){const out={};try{const m=cc.fields.membersById.mapValue.fields;for(const k in m){const f=m[k].mapValue.fields;if(f&&f.phone&&f.phone.stringValue)out[parseInt(k)]=f.phone.stringValue;}}catch(e){}return out;}
+function crewPhones(cc){const out={};try{const m=(cc&&cc.membersById&&typeof cc.membersById==="object")?cc.membersById:{};for(const k in m){const ph=m[k]&&m[k].phone;if(ph)out[parseInt(k)]=ph;}}catch(e){}return out;}
 function rpicContactBtn(u124,u121on,phones,label){
   try{
     if(!/^today/i.test(String(label)))return '';
