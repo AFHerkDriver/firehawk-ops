@@ -512,8 +512,8 @@
   // ── Track registry ──────────────────────────────────────────────────────────
   // RPIC keeps the legacy `.items` key (shipped data). VO/INST get their own keys.
   const TRACKS = [
-    { id: "RPIC", label: "RPIC",       key: "items", blocks: BLOCKS,      qualField: "rpicQualified", certLabel: "Approved For Operational Status" },
     { id: "VO",   label: "VO",         key: "vo",    blocks: VO_BLOCKS,   qualField: "voQualified",   certLabel: "Qualified Visual Observer" },
+    { id: "RPIC", label: "RPIC",       key: "items", blocks: BLOCKS,      qualField: "rpicQualified", certLabel: "Approved For Operational Status" },
     { id: "INST", label: "Instructor", key: "inst",  blocks: INST_BLOCKS, qualField: "instructor",    certLabel: "Instructor Authorized" }
   ];
   const TRACK_BY_ID = {}; TRACKS.forEach(tr => { tr.allItems = []; tr.blocks.forEach(b => b.items.forEach(it => tr.allItems.push(it))); TRACK_BY_ID[tr.id] = tr; });
