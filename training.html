@@ -196,6 +196,7 @@
 <div class="trainee-row">
   <select id="traineeSel" aria-label="Trainee"></select>
   <button class="mini-btn" id="btnNewTrainee">+ Trainee</button>
+  <button class="mini-btn" id="btnRecall">Recall</button>
   <button class="mini-btn" id="btnDelTrainee" style="display:none; color: var(--nogo);">Delete</button>
 </div>
 <div class="sync" id="syncLine"></div>
@@ -246,6 +247,20 @@
     <div class="modal-row">
       <button class="btn" id="ntCancel">Cancel</button>
       <button class="btn primary" id="ntGo">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Recall modal — reopen a closed (fully-qualified) folder that's hidden from the main picker -->
+<div class="overlay" id="rcOverlay">
+  <div class="modal">
+    <h2>Recall Trainee</h2>
+    <p>Closed folders (every assigned track 100% complete) are hidden from the main list day-to-day. Pick one here to bring it back up.</p>
+    <select id="rcSel" class="name" style="width:100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-family: 'Barlow', sans-serif; font-size: 16px; padding: 12px; margin-bottom: 10px;" aria-label="Closed trainee"></select>
+    <div class="err" id="rcErr"></div>
+    <div class="modal-row">
+      <button class="btn" id="rcCancel">Cancel</button>
+      <button class="btn primary" id="rcGo">Open</button>
     </div>
   </div>
 </div>
@@ -365,6 +380,15 @@
   // A trainee's "folder" is open while any assigned track still has incomplete items;
   // once every assigned track is 100% signed off, the folder is closed (computeStatus === "qualified").
   function folderOpen(t) { return computeStatus(t) !== "qualified"; }
+  // Rank-based sort order for the trainee picker (and Recall picker) — hoisted to module scope
+  // so both render() and the Recall modal handler can share the same ordering logic.
+  const RANK_ORDER = { "commissioner":-1, "cmsr":-1, "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eng":5, "engineer":5, "driver":5, "ff":6, "firefighter":6 };
+  function rankRank(r) { const k = (r || "").toLowerCase().trim(); return RANK_ORDER[k] != null ? RANK_ORDER[k] : 90; }
+  function traineeSortKey(tid) {
+    const t = db.trainees[tid] || {};
+    const m = (t.crewId != null) ? crewById[String(t.crewId)] : null;
+    return { rp: rankRank(m && m.rank), last: ((m && m.name) || t.name || tid).toLowerCase(), first: ((m && m.first) || "").toLowerCase() };
+  }
   // Recompute + persist trainingStatus for a trainee's crew member (write only on change).
   async function syncStatus(t) {
     if (!t || t.crewId == null) return;
@@ -1021,13 +1045,6 @@
     // Trainee select (instructors only)
     const sel = document.getElementById("traineeSel");
     sel.innerHTML = "";
-    const RANK_ORDER = { "commissioner":-1, "cmsr":-1, "chief":0, "deputy chief":1, "asst chief":1, "battalion chief":2, "bc":2, "capt":3, "captain":3, "lt":4, "lieutenant":4, "eng":5, "engineer":5, "driver":5, "ff":6, "firefighter":6 };
-    function rankRank(r) { const k = (r || "").toLowerCase().trim(); return RANK_ORDER[k] != null ? RANK_ORDER[k] : 90; }
-    function traineeSortKey(tid) {
-      const t = db.trainees[tid] || {};
-      const m = (t.crewId != null) ? crewById[String(t.crewId)] : null;
-      return { rp: rankRank(m && m.rank), last: ((m && m.name) || t.name || tid).toLowerCase(), first: ((m && m.first) || "").toLowerCase() };
-    }
     const ids = Object.keys(db && db.trainees || {})
       .filter(tid => folderOpen(db.trainees[tid]) || tid === selTid)
       .sort((a, b) => {
@@ -1205,6 +1222,36 @@
     const ok = await createTrainee(crewId, document.getElementById("ntStart").value);
     document.getElementById("ntGo").disabled = false;
     if (ok) document.getElementById("ntOverlay").classList.remove("show");
+  });
+
+  document.getElementById("btnRecall").addEventListener("click", async () => {
+    if (!me) { toast("Sign in to recall a folder"); showPin(); return; }
+    await loadCrew();
+    const sel = document.getElementById("rcSel");
+    sel.innerHTML = "";
+    const closed = Object.keys(db && db.trainees || {})
+      .filter(tid => !folderOpen(db.trainees[tid]))
+      .sort((a, b) => {
+        const ka = traineeSortKey(a), kb = traineeSortKey(b);
+        return ka.rp - kb.rp || ka.last.localeCompare(kb.last) || ka.first.localeCompare(kb.first);
+      });
+    if (!closed.length) { toast("No closed folders \u2014 everyone with a record still has an open track"); return; }
+    closed.forEach(tid => {
+      const o = document.createElement("option");
+      const m = (db.trainees[tid].crewId != null) ? crewById[String(db.trainees[tid].crewId)] : null;
+      o.value = tid; o.textContent = (m ? crewLabel(m) : (db.trainees[tid].name || tid));
+      sel.appendChild(o);
+    });
+    document.getElementById("rcErr").textContent = "";
+    document.getElementById("rcOverlay").classList.add("show");
+  });
+  document.getElementById("rcCancel").addEventListener("click", () => document.getElementById("rcOverlay").classList.remove("show"));
+  document.getElementById("rcGo").addEventListener("click", () => {
+    const tid = document.getElementById("rcSel").value;
+    if (!tid) { document.getElementById("rcErr").textContent = "Pick a trainee"; return; }
+    selTid = tid;
+    document.getElementById("rcOverlay").classList.remove("show");
+    render();
   });
 
   document.getElementById("btnCopy").addEventListener("click", function () {
