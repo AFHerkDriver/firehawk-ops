@@ -692,6 +692,28 @@
         if (cm && cm.trainingStatus !== "qualified") await setCrewTrainingStatus(seed.id, "qualified");
       }
       await loadCrew();
+
+      // Self-heal qual flags from actual training records. Covers pilots qualified
+      // before the per-track flags existed (they had trainingStatus "qualified" but no
+      // rpicQualified/voQualified/instructor). Truthful: only sets a flag when that
+      // track's PM-approval is genuinely signed. Never removes — downgrade handles that.
+      const recon = await fsGet(COL, DOC);
+      const rtr = (recon && recon.trainees && typeof recon.trainees === "object") ? recon.trainees : {};
+      let reconChanged = false;
+      for (const tid in rtr) {
+        const t = rtr[tid]; if (!t || t.crewId == null) continue;
+        const cmx = crewById[String(t.crewId)]; if (!cmx) continue;
+        for (const tr of TRACKS) {
+          const pmItem = tr.allItems.find(it => it.pm);
+          const signed = !!(pmItem && t[tr.key] && t[tr.key][pmItem.id]);
+          if (signed && !cmx[tr.qualField]) {
+            const r = await setCrewQual(t.crewId, tr.qualField, true);
+            if (r.ok) { cmx[tr.qualField] = true; reconChanged = true;
+              if (cmx.trainingStatus !== "qualified") { await setCrewTrainingStatus(t.crewId, "qualified"); cmx.trainingStatus = "qualified"; } }
+          }
+        }
+      }
+      if (reconChanged) await loadCrew();
     }
     render();
   }

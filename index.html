@@ -287,7 +287,7 @@
   // Per-member edits patch only that member's slot, so two admins editing different
   // people (or different fields on the same person) can never overwrite each other.
   // Position (assigned duty) display — independent of qualifications held.
-  var POSITIONS = [["RPIC", "Remote Pilot"], ["VO", "Visual Observer"], ["INST", "Instructor"], ["", "No Position"]];
+  var POSITIONS = [["RPIC", "Remote Pilot"], ["VO", "Visual Observer"], ["", "No Position"]];
   function posLabel(role) { for (var i = 0; i < POSITIONS.length; i++) { if (POSITIONS[i][0] === (role || "")) return POSITIONS[i][1]; } return role || "No Position"; }
 
   function memberShape(c) {
@@ -1420,7 +1420,6 @@
               fcol("Position", h("div", { style:{ display:"flex", gap:6, paddingTop:4, flexWrap:"wrap" } },
                 h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC", C.blue) }, "Remote Pilot"),
                 h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "Visual Observer"),
-                h("button", { onClick: () => setFRole("INST"), style: pillBtn(fRole === "INST", C.accent) }, "Instructor"),
                 h("button", { onClick: () => setFRole(""), style: pillBtn(!fRole, C.dim) }, "No Position")))),
             h("div", { style:{ display:"flex", gap:10 } },
               fcol("Title", textInput(fTitle, setFTitle, "", 28)),
@@ -1440,7 +1439,6 @@
             fcol("Position", h("div", { style:{ display:"flex", gap:6, paddingTop:4, flexWrap:"wrap" } },
               h("button", { onClick: () => setFRole("RPIC"), style: pillBtn(fRole === "RPIC", C.blue) }, "Remote Pilot"),
               h("button", { onClick: () => setFRole("VO"), style: pillBtn(fRole === "VO", C.green) }, "Visual Observer"),
-              h("button", { onClick: () => setFRole("INST"), style: pillBtn(fRole === "INST", C.accent) }, "Instructor"),
               h("button", { onClick: () => setFRole(""), style: pillBtn(!fRole, C.dim) }, "No Position")))),
           secLbl("PART 107"),
           h("div", { style:{ fontSize:11, color: (editingM && editingM.part107) ? certColor(editingM.part107) : C.dim, margin:"4px 0 0" } },
