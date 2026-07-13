@@ -6676,7 +6676,7 @@ function SARModal({
             h("div", { style:{ width:32, height:32, borderRadius:"50%", background:c.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#fff", fontWeight:700, flexShrink:0 } }, c.initials),
             h("div", { style:{ flex:1 } },
               h("div", { style:{ fontSize:13, color:C.text } }, c.name),
-              h("div", { style:{ fontSize:9, color: c.role === "RPIC" ? C.blue : c.role === "VO" ? C.green : C.dim, letterSpacing:1 } }, posLabel(c.role))),
+              c.role ? h("div", { style:{ fontSize:9, color: c.role === "RPIC" ? C.blue : c.role === "VO" ? C.green : C.dim, letterSpacing:1 } }, posLabel(c.role)) : null),
             h("span", { style:{ fontSize:9, fontWeight:700, color:hue, background:hue+"1F", border:"1px solid "+hue+"55", borderRadius:5, padding:"2px 8px" } }, label));
         })),
 
