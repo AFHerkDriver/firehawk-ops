@@ -521,7 +521,7 @@ function render(weekDays,schedCache,crewData) {
       ${renderUnit('UPSTAFF', upstaffList)}
       <a href="tel:+12108616643" class="contact-btn" style="background:rgba(74,144,217,0.07);border:1px solid rgba(74,144,217,0.18);color:#4A90D9">
         📞 Contact UAS Program Manager
-      </a>${rpicContactBtn(uav124, !!uav121, PHONES, crewDayLabel)}</div>`;
+      </a>${rpicContactBtn(du.u124, du.u121.active, PHONES, crewDayLabel)}</div>`;
   } else {
     html+=`<div class="oos">
       <div class="oos-title">NO UAS COVERAGE</div>
