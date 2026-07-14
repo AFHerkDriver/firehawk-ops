@@ -6777,6 +6777,7 @@ function SARModal({
     const [redFlag, setRedFlag]           = useState(null);
     const [floodWarning, setFloodWarning] = useState(null);
     const [rainAccum, setRainAccum]       = useState(null);   // observed 6-hr rain total, fetched only while a flood alert is active
+    const [riverGauge, setRiverGauge]     = useState(null);   // NWPS river stage + flood category, fetched only while a flood alert is active
     const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
 
     // ── 4.1 access control: PIN → role detection (remember-login via localStorage) ──
@@ -6819,8 +6820,15 @@ function SARModal({
       f(); const t = setInterval(f, 1800000); return () => clearInterval(t);
     }, []);
 
-    const STATION_REF = { lat: 29.4547, lon: -98.7553 };   // BC2FD Central Station, 2096 Talley Rd
-    useEffect(() => {   // observed past-6hr + forecast next-6hr rain — only fetched while a flood alert is active
+    const RAIN_STATIONS = [   // District 2 coverage — BC2FD stations
+      { id: "121", label: "Station 121 · Central (Talley)", lat: 29.4547, lon: -98.7553 },
+      { id: "122", label: "Station 122 · Old Talley",  lat: 29.5052, lon: -98.7823 },
+      { id: "123", label: "Station 123 · Marbach",     lat: 29.4049, lon: -98.7026 },
+      { id: "124", label: "Station 124 · Omicron",     lat: 29.4134, lon: -98.7859 },
+      { id: "125", label: "Station 125 · Roft",        lat: 29.4958, lon: -98.7446 },
+      { id: "120", label: "Station 120 · Spurs Ranch", lat: 29.3921, lon: -98.7099 }
+    ];
+    useEffect(() => {   // observed past-6hr + forecast next-6hr rain, per station — only fetched while a flood alert is active
       if (!(floodWarning && floodWarning.active)) { setRainAccum(null); return; }
       let cancelled = false;
       // precipitation unit codes look like "wmoUnit:m" / "wmoUnit:mm" — match the suffix exactly
@@ -6840,8 +6848,8 @@ function SARModal({
         if (!m || (!m[1] && !m[2])) return null;
         return (m[1] ? parseInt(m[1], 10) : 0) * 24 + (m[2] ? parseInt(m[2], 10) : 0);
       };
-      const f = async () => {
-        const pt = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.weather.gov/points/" + STATION_REF.lat + "," + STATION_REF.lon))).json().catch(() => null);
+      const fetchStation = async (st) => {
+        const pt = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.weather.gov/points/" + st.lat + "," + st.lon))).json().catch(() => null);
         const stationsUrl = pt && pt.properties && pt.properties.observationStations;
         const gridDataUrl = pt && pt.properties && pt.properties.forecastGridData;
 
@@ -6901,7 +6909,74 @@ function SARModal({
           next = { inches: factor != null ? Math.round(total * 100) / 100 : null, partial: coveragePct < 70, coveragePct, unitIssue: factor == null, error: false };
         } catch (eNext) { next = { inches: null, error: true }; }
 
-        if (!cancelled) setRainAccum({ past, next, updated: new Date().toISOString() });
+        return { id: st.id, label: st.label, past, next };
+      };
+      const f = async () => {
+        const results = await Promise.all(RAIN_STATIONS.map(fetchStation));
+        // "Worst across the district" = the station currently reading highest, so a heavy cell
+        // sitting over one station isn't averaged away by four dry ones.
+        const validPast = results.filter(r => !r.past.error);
+        const validNext = results.filter(r => !r.next.error);
+        const worstPast = validPast.length ? validPast.reduce((a, b) => (b.past.inches > a.past.inches ? b : a)) : null;
+        const worstNext = validNext.length ? validNext.reduce((a, b) => (b.next.inches > a.next.inches ? b : a)) : null;
+        if (!cancelled) setRainAccum({ stations: results, worstPast, worstNext, updated: new Date().toISOString() });
+      };
+      f(); const t = setInterval(f, 1800000);
+      return () => { cancelled = true; clearInterval(t); };
+    }, [floodWarning && floodWarning.active]);
+
+    // River stage gauges (NOAA National Water Prediction Service) — actual observed river
+    // stage against official NWS flood-category thresholds (action/minor/moderate/major),
+    // not a rainfall estimate. All confirmed real LIDs (supplied directly). Medina River chain
+    // ordered upstream-to-downstream: Medina Lake -> La Coste -> Macdona. Macdona is District 5
+    // (mutual aid area, not primary BC2FD district) — kept in the same panel since it's
+    // immediately downstream and worth knowing about regardless.
+    const RIVER_GAUGES = [
+      { lid: "gcct2", label: "Culebra Creek near Helotes" },
+      { lid: "LECT2", label: "Leon Creek at Loop 410 near Leon Valley" },
+      { lid: "MDLT2", label: "Medina River near Medina Lake" },
+      { lid: "LACT2", label: "Medina River near La Coste" },
+      { lid: "MMDT2", label: "Medina River near Macdona (District 5 \u2014 mutual aid)" }
+    ];
+    useEffect(() => {
+      if (!(floodWarning && floodWarning.active)) { setRiverGauge(null); return; }
+      let cancelled = false;
+      // NWPS uses -9999 as a sentinel for "threshold not defined for this gauge" — must be
+      // treated as absent, not as a real negative-9999-foot flood stage.
+      const categorize = (stage, cats) => {
+        const valid = (v) => v != null && v > -9000;
+        if (stage == null) return null;
+        if (valid(cats.major) && stage >= cats.major) return "major";
+        if (valid(cats.moderate) && stage >= cats.moderate) return "moderate";
+        if (valid(cats.minor) && stage >= cats.minor) return "minor";
+        if (valid(cats.action) && stage >= cats.action) return "action";
+        return "normal";
+      };
+      const fetchGauge = async (g) => {
+        try {
+          const meta = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid))).json();
+          const cats = {
+            action: meta && meta.flood && meta.flood.categories && meta.flood.categories.action ? meta.flood.categories.action.stage : null,
+            minor: meta && meta.flood && meta.flood.categories && meta.flood.categories.minor ? meta.flood.categories.minor.stage : null,
+            moderate: meta && meta.flood && meta.flood.categories && meta.flood.categories.moderate ? meta.flood.categories.moderate.stage : null,
+            major: meta && meta.flood && meta.flood.categories && meta.flood.categories.major ? meta.flood.categories.major.stage : null
+          };
+          const obs = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid + "/stageflow/observed"))).json();
+          const readings = (obs && obs.data) || [];
+          // Readings are chronological; take the most recent VALID one (NWPS uses <= -990 for missing).
+          let latest = null;
+          for (let i = readings.length - 1; i >= 0; i--) {
+            if (readings[i] && readings[i].primary != null && readings[i].primary > -990) { latest = readings[i]; break; }
+          }
+          const stage = latest ? latest.primary : null;
+          return { lid: g.lid, label: g.label, stage, category: categorize(stage, cats), validTime: latest ? latest.validTime : null, error: false };
+        } catch (e) {
+          return { lid: g.lid, label: g.label, stage: null, category: null, error: true };
+        }
+      };
+      const f = async () => {
+        const results = await Promise.all(RIVER_GAUGES.map(fetchGauge));
+        if (!cancelled) setRiverGauge({ gauges: results, updated: new Date().toISOString() });
       };
       f(); const t = setInterval(f, 1800000);
       return () => { cancelled = true; clearInterval(t); };
@@ -7088,28 +7163,59 @@ function SARModal({
         (floodWarning && floodWarning.active) ? h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:"rgba(74,144,217,0.08)", border:"1px solid rgba(74,144,217,0.3)", fontSize:11, color:"#9FC5E8", display:"flex", flexDirection:"column", gap:4 } },
           h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
             h("span", null,
-              "\uD83D\uDCA7 Past 6h: ",
+              "\uD83D\uDCA7 Past 6h (worst): ",
               !rainAccum
                 ? h("span", { style:{ color:C.dim } }, "loading\u2026")
-                : (rainAccum.past && rainAccum.past.error)
+                : !rainAccum.worstPast
                   ? h("span", { style:{ color:C.dim } }, "data unavailable")
                   : h(React.Fragment, null,
-                      h("b", null, rainAccum.past.inches.toFixed(2) + " in"),
-                      rainAccum.past.partial ? h("span", { style:{ color:C.dim } }, " (partial \u2014 " + rainAccum.past.hits + "/6 reports)") : null,
-                      rainAccum.past.unitIssue ? h("span", { style:{ color:C.dim }, title:"Some readings were in an unrecognized unit and skipped" }, " \u26A0") : null)),
-            (rainAccum && rainAccum.past && rainAccum.past.stationId) ? h("span", { style:{ color:C.dim, fontSize:9 } }, rainAccum.past.stationId) : null),
+                      h("b", null, rainAccum.worstPast.past.inches.toFixed(2) + " in"),
+                      " \u00B7 " + rainAccum.worstPast.label,
+                      rainAccum.worstPast.past.partial ? h("span", { style:{ color:C.dim } }, " (partial)") : null,
+                      rainAccum.worstPast.past.unitIssue ? h("span", { style:{ color:C.dim }, title:"Some readings were in an unrecognized unit and skipped" }, " \u26A0") : null)),
+            null),
           h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
             h("span", null,
-              "\uD83C\uDF27\uFE0F Next 6h (forecast): ",
+              "\uD83C\uDF27\uFE0F Next 6h (forecast, worst): ",
               !rainAccum
                 ? h("span", { style:{ color:C.dim } }, "loading\u2026")
-                : (rainAccum.next && rainAccum.next.error)
+                : !rainAccum.worstNext
                   ? h("span", { style:{ color:C.dim } }, "data unavailable")
                   : h(React.Fragment, null,
-                      h("b", null, rainAccum.next.inches.toFixed(2) + " in"),
-                      rainAccum.next.partial ? h("span", { style:{ color:C.dim } }, " (partial \u2014 " + rainAccum.next.coveragePct + "% of window)") : null,
-                      rainAccum.next.unitIssue ? h("span", { style:{ color:C.dim }, title:"Forecast precipitation unit was unrecognized" }, " \u26A0") : null)),
-            (rainAccum && rainAccum.updated && fmtWxTime(rainAccum.updated)) ? h("span", { style:{ color:C.dim, fontSize:9 } }, fmtWxTime(rainAccum.updated)) : null)) : null,
+                      h("b", null, rainAccum.worstNext.next.inches.toFixed(2) + " in"),
+                      " \u00B7 " + rainAccum.worstNext.label,
+                      rainAccum.worstNext.next.partial ? h("span", { style:{ color:C.dim } }, " (partial \u2014 " + rainAccum.worstNext.next.coveragePct + "% of window)") : null,
+                      rainAccum.worstNext.next.unitIssue ? h("span", { style:{ color:C.dim }, title:"Forecast precipitation unit was unrecognized" }, " \u26A0") : null)),
+            (rainAccum && rainAccum.updated && fmtWxTime(rainAccum.updated)) ? h("span", { style:{ color:C.dim, fontSize:9 } }, fmtWxTime(rainAccum.updated)) : null),
+          (rainAccum && rainAccum.stations) ? h("details", { style:{ marginTop:2 } },
+            h("summary", { style:{ cursor:"pointer", color:C.dim, fontSize:10, listStyle:"none" } }, "Per-station breakdown \u2014 6 stations"),
+            h("div", { style:{ marginTop:4, display:"flex", flexDirection:"column", gap:3 } },
+              rainAccum.stations.map(st => h("div", { key:st.id, style:{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#9FC5E8" } },
+                h("span", null, st.label),
+                h("span", null,
+                  (st.past.error ? "past: n/a" : "past: " + st.past.inches.toFixed(2) + "in") + "  \u00B7  " +
+                  (st.next.error ? "next: n/a" : "next: " + st.next.inches.toFixed(2) + "in")
+                )
+              ))
+            )
+          ) : null) : null,
+        (floodWarning && floodWarning.active) ? h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:"rgba(74,144,217,0.08)", border:"1px solid rgba(74,144,217,0.3)", fontSize:11, color:"#9FC5E8" } },
+          !riverGauge
+            ? h("div", null, "\uD83C\uDF0A River Stage: ", h("span", { style:{ color:C.dim } }, "loading\u2026"))
+            : riverGauge.gauges.map(g => {
+                const catColor = { normal:"#4ADE80", action:"#FBBF24", minor:"#FB923C", moderate:"#F87171", major:"#DC2626" }[g.category] || C.dim;
+                const catLabel = { normal:"Normal", action:"Action Stage", minor:"Minor Flood", moderate:"Moderate Flood", major:"Major Flood" }[g.category] || "Unavailable";
+                return h("div", { key:g.lid, style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
+                  h("span", null,
+                    "\uD83C\uDF0A River Stage \u2014 " + g.label + ": ",
+                    g.error || g.stage == null
+                      ? h("span", { style:{ color:C.dim } }, "data unavailable")
+                      : h(React.Fragment, null,
+                          h("b", null, g.stage.toFixed(2) + " ft"),
+                          " \u00B7 ",
+                          h("span", { style:{ color:catColor, fontWeight:700 } }, catLabel))),
+                  (riverGauge.updated && fmtWxTime(riverGauge.updated)) ? h("span", { style:{ color:C.dim, fontSize:9 } }, fmtWxTime(riverGauge.updated)) : null);
+              })) : null,
 
         // Top nav (Increment 6 shell)
         h("div", { style:{ display:"flex", gap:8, marginBottom:14 } },
