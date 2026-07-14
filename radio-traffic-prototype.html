@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Radio Traffic — BC2FD Fire Hawk (prototype)</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { background: #0D1117; color: #E6EDF3; font-family: 'DM Mono', monospace; min-height: 100%; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,107,53,0.3); border-radius: 2px; }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 14px 12px 40px; }
+
+  header.top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  header.top h1 { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 1px; color: #FF6B35; }
+  header.top .sub { font-size: 11px; color: #8B949E; }
+
+  .banner {
+    display: flex; align-items: center; gap: 8px;
+    background: #161B22; border: 1px solid #30363D; border-radius: 8px;
+    padding: 8px 10px; font-size: 11.5px; color: #8B949E; margin: 10px 0 16px;
+  }
+  .banner b { color: #FFC107; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.ok   { background: #34C759; box-shadow: 0 0 6px rgba(52,199,89,0.6); }
+  .dot.warn { background: #FFC107; }
+  .dot.bad  { background: #FF3B30; }
+  .dot.wait { background: #8B949E; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:.35;} 50%{opacity:1;} }
+
+  .lane {
+    background: #161B22; border: 1px solid #30363D; border-radius: 12px;
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .lane-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-bottom: 1px solid #30363D; background: #1C2230;
+  }
+  .lane-head .name { font-size: 13px; font-weight: 500; letter-spacing: .3px; }
+  .lane-head .status { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #8B949E; text-transform: uppercase; letter-spacing: .5px; }
+
+  .lane-body { padding: 6px 8px; }
+  .lane-empty { padding: 14px 6px; font-size: 11.5px; color: #8B949E; text-align: center; }
+  .lane-error { padding: 12px 6px; font-size: 11.5px; color: #FF3B30; text-align: center; }
+
+  .call-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 6px; border-radius: 8px; font-size: 12px;
+  }
+  .call-row:active { background: rgba(255,107,53,0.12); }
+  .call-row + .call-row { border-top: 1px solid #21262D; }
+
+  .play-btn {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid #30363D; background: #0D1117; color: #FF6B35;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; cursor: pointer;
+  }
+  .play-btn.playing { background: #FF6B35; color: #0D1117; border-color: #FF6B35; }
+
+  .call-meta { flex: 1; min-width: 0; }
+  .call-time { color: #E6EDF3; }
+  .call-dur { color: #8B949E; margin-left: 6px; }
+
+  footer.legend { margin-top: 18px; font-size: 10.5px; color: #8B949E; line-height: 1.6; }
+  footer.legend b { color: #E6EDF3; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>RADIO TRAFFIC</h1>
+    <div class="sub">Bexar County Fire Alarm · West</div>
+  </header>
+
+  <div class="banner" id="globalStatus">
+    <div class="dot wait" id="globalDot"></div>
+    <span id="globalMsg">Resolving channels against OpenMHz…</span>
+  </div>
+
+  <div id="lanes"></div>
+
+  <footer class="legend">
+    <b>Prototype notes —</b> data pulled live in this browser from api.openmhz.com/bexar (community-run feed,
+    not a BC2FD system — treat as supplementary, never authoritative). Green dot = channel resolved and polling.
+    Amber = resolved, feed quiet. Red = channel name not found or feed unreachable — this is intentional
+    fail-loud behavior, not a bug: a red lane must never be mistaken for a quiet one.
+  </footer>
+
+</div>
+
+<audio id="player" preload="none"></audio>
+
+<script>
+(function(){
+  "use strict";
+
+  var API = "https://api.openmhz.com/bexar";
+  var POLL_MS = 15000;
+  var MAX_ROWS = 12;
+
+  // Channel definitions — label shown in UI + regex used to match against
+  // the live OpenMHz talkgroup "alpha"/"description" fields. Adjust the
+  // regexes here if a channel comes back unresolved once tested live.
+  var CHANNELS = [
+    { key: "dispatch",  label: "BCFA Dispatch",         re: /bcfa.*dispatch|dispatch.*bcfa|^dispatch$/i },
+    { key: "ops_west",  label: "Operations West",       re: /oper(ation)?s?.*west/i },
+    { key: "access_west", label: "Access West",         re: /access.*west/i },
+    { key: "fg6",  label: "Fireground 6 West",  re: /fire\s*-?ground\s*6.*west|fg\s*-?6.*west/i },
+    { key: "fg7",  label: "Fireground 7 West",  re: /fire\s*-?ground\s*7.*west|fg\s*-?7.*west/i },
+    { key: "fg8",  label: "Fireground 8 West",  re: /fire\s*-?ground\s*8.*west|fg\s*-?8.*west/i },
+    { key: "fg9",  label: "Fireground 9 West",  re: /fire\s*-?ground\s*9.*west|fg\s*-?9.*west/i },
+    { key: "fg10", label: "Fireground 10 West", re: /fire\s*-?ground\s*10.*west|fg\s*-?10.*west/i }
+  ];
+
+  var lanesEl = document.getElementById("lanes");
+  var globalDot = document.getElementById("globalDot");
+  var globalMsg = document.getElementById("globalMsg");
+  var player = document.getElementById("player");
+  var playingBtn = null;
+
+  var state = {}; // key -> { num, calls: [], newestTime: null, status: 'resolving'|'ok'|'quiet'|'unresolved'|'error' }
+
+  CHANNELS.forEach(function(c){
+    state[c.key] = { num: null, calls: [], newestTime: null, status: "resolving" };
+  });
+
+  function fmtTime(iso){
+    try {
+      var d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } catch(e){ return iso || "—"; }
+  }
+
+  function fmtDur(sec){
+    if (sec == null || isNaN(sec)) return "";
+    sec = Math.round(sec);
+    var m = Math.floor(sec/60), s = sec % 60;
+    return m > 0 ? (m + "m " + s + "s") : (s + "s");
+  }
+
+  function callAudioUrl(call){
+    // OpenMHz's exact field name for the audio CDN URL has not been
+    // confirmed live yet — this checks the known candidates defensively
+    // rather than assuming one, so it fails loud instead of silently
+    // pointing at "undefined".
+    return call.url || call.filePath || call.file || call.audioUrl || null;
+  }
+
+  function render(){
+    lanesEl.innerHTML = "";
+    CHANNELS.forEach(function(c){
+      var s = state[c.key];
+      var lane = document.createElement("div");
+      lane.className = "lane";
+
+      var head = document.createElement("div");
+      head.className = "lane-head";
+
+      var dotClass = "wait";
+      var statusText = "Resolving…";
+      if (s.status === "ok")         { dotClass = "ok";   statusText = "Live"; }
+      else if (s.status === "quiet") { dotClass = "warn";  statusText = "Quiet"; }
+      else if (s.status === "unresolved") { dotClass = "bad"; statusText = "Not found"; }
+      else if (s.status === "error") { dotClass = "bad"; statusText = "Unreachable"; }
+
+      head.innerHTML =
+        '<div class="name">' + c.label + '</div>' +
+        '<div class="status"><span class="dot ' + dotClass + '"></span>' + statusText + '</div>';
+      lane.appendChild(head);
+
+      var body = document.createElement("div");
+      body.className = "lane-body";
+
+      if (s.status === "unresolved") {
+        body.innerHTML = '<div class="lane-error">Channel name not found in OpenMHz talkgroup list — needs a label fix, not silently hidden.</div>';
+      } else if (s.status === "error") {
+        body.innerHTML = '<div class="lane-error">Feed unreachable — treat as unknown, not quiet.</div>';
+      } else if (!s.calls.length) {
+        body.innerHTML = '<div class="lane-empty">' + (s.status === "resolving" ? "Resolving…" : "No recent traffic") + '</div>';
+      } else {
+        s.calls.slice(0, MAX_ROWS).forEach(function(call){
+          var row = document.createElement("div");
+          row.className = "call-row";
+
+          var btn = document.createElement("button");
+          btn.className = "play-btn";
+          btn.textContent = "▶";
+          btn.setAttribute("aria-label", "Play call");
+          btn.addEventListener("click", function(){ playCall(call, btn); });
+
+          var meta = document.createElement("div");
+          meta.className = "call-meta";
+          meta.innerHTML =
+            '<span class="call-time">' + fmtTime(call.time) + '</span>' +
+            '<span class="call-dur">' + fmtDur(call.len) + '</span>';
+
+          row.appendChild(btn);
+          row.appendChild(meta);
+          body.appendChild(row);
+        });
+      }
+
+      lane.appendChild(body);
+      lanesEl.appendChild(lane);
+    });
+  }
+
+  function playCall(call, btn){
+    var url = callAudioUrl(call);
+    if (!url) {
+      btn.textContent = "!";
+      setTimeout(function(){ btn.textContent = "▶"; }, 1200);
+      return;
+    }
+    if (playingBtn && playingBtn !== btn) {
+      playingBtn.textContent = "▶";
+      playingBtn.classList.remove("playing");
+    }
+    if (playingBtn === btn && !player.paused) {
+      player.pause();
+      btn.textContent = "▶";
+      btn.classList.remove("playing");
+      playingBtn = null;
+      return;
+    }
+    player.src = url;
+    player.play().catch(function(){});
+    btn.textContent = "❚❚";
+    btn.classList.add("playing");
+    playingBtn = btn;
+    player.onended = function(){
+      btn.textContent = "▶";
+      btn.classList.remove("playing");
+      playingBtn = null;
+    };
+  }
+
+  function setGlobal(dotClass, msg){
+    globalDot.className = "dot " + dotClass;
+    globalMsg.textContent = msg;
+  }
+
+  function resolveTalkgroups(){
+    return fetch(API + "/talkgroups")
+      .then(function(r){
+        if (!r.ok) throw new Error("talkgroups HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        var list = [];
+        if (data && data.talkgroups) {
+          Object.keys(data.talkgroups).forEach(function(k){
+            list.push(data.talkgroups[k]);
+          });
+        } else if (Array.isArray(data)) {
+          list = data;
+        }
+        CHANNELS.forEach(function(c){
+          var match = list.find(function(tg){
+            var label = (tg.alpha || tg.description || tg.name || "");
+            return c.re.test(label);
+          });
+          if (match) {
+            state[c.key].num = match.num != null ? match.num : match.id;
+          } else {
+            state[c.key].status = "unresolved";
+          }
+        });
+        var resolvedCount = CHANNELS.filter(function(c){ return state[c.key].num != null; }).length;
+        if (resolvedCount === 0) {
+          setGlobal("bad", "No channels resolved — check channel name patterns against OpenMHz's talkgroup list.");
+        } else if (resolvedCount < CHANNELS.length) {
+          setGlobal("warn", resolvedCount + " of " + CHANNELS.length + " channels resolved — see red lanes below.");
+        } else {
+          setGlobal("ok", "All " + CHANNELS.length + " channels resolved. Polling every " + (POLL_MS/1000) + "s.");
+        }
+        render();
+        return resolvedCount > 0;
+      })
+      .catch(function(err){
+        setGlobal("bad", "Could not reach OpenMHz talkgroup list: " + err.message);
+        CHANNELS.forEach(function(c){ state[c.key].status = "error"; });
+        render();
+        return false;
+      });
+  }
+
+  function poll(){
+    var nums = CHANNELS
+      .map(function(c){ return state[c.key].num; })
+      .filter(function(n){ return n != null; });
+    if (!nums.length) return;
+
+    fetch(API + "/calls?filter-type=talkgroup&filter-code=" + nums.join(","))
+      .then(function(r){
+        if (!r.ok) throw new Error("calls HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        var calls = (data && data.calls) || [];
+        CHANNELS.forEach(function(c){
+          var s = state[c.key];
+          if (s.num == null) return;
+          var mine = calls.filter(function(call){ return call.talkgroupNum === s.num; });
+          if (mine.length) {
+            mine.sort(function(a,b){ return new Date(b.time) - new Date(a.time); });
+            s.calls = mine;
+            s.status = "ok";
+          } else if (s.status !== "unresolved") {
+            s.status = "quiet";
+          }
+        });
+        render();
+      })
+      .catch(function(err){
+        CHANNELS.forEach(function(c){
+          if (state[c.key].status !== "unresolved") state[c.key].status = "error";
+        });
+        setGlobal("bad", "Feed unreachable: " + err.message);
+        render();
+      });
+  }
+
+  render();
+  resolveTalkgroups().then(function(ok){
+    if (ok) {
+      poll();
+      setInterval(poll, POLL_MS);
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
