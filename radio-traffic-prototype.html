@@ -107,7 +107,7 @@
   "use strict";
 
   var API = "https://api.openmhz.com/bexar";
-  var POLL_MS = 15000;
+  var POLL_MS = 10000;
   var MAX_ROWS = 12;
 
   // Channel definitions — label shown in UI + regex used to match against
@@ -192,14 +192,13 @@
       else if (s.status === "unresolved") { dotClass = "bad"; statusText = "Not found"; }
       else if (s.status === "error") { dotClass = "bad"; statusText = "Unreachable"; }
 
-      var idNote = s.num != null ? (' <span style="color:#8B949E;font-weight:400;">#' + s.num + '</span>') : '';
       var isPlayingLane = playState.key === c.key;
       var nowPlayingNote = isPlayingLane
         ? '<span class="now-playing">▶ ' + (playState.idx + 1) + '/' + playState.queue.length + '</span>'
         : '';
 
       head.innerHTML =
-        '<div class="name"><span class="chev' + (isOpen ? ' open' : '') + '">▸</span>' + c.label + idNote + '</div>' +
+        '<div class="name"><span class="chev' + (isOpen ? ' open' : '') + '">▸</span>' + c.label + '</div>' +
         '<div class="status">' + nowPlayingNote + '<span class="dot ' + dotClass + '"></span>' + statusText + '</div>';
       lane.appendChild(head);
 

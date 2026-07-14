@@ -639,7 +639,12 @@
     db = data || { trainees: {} };
     if (!db.trainees || typeof db.trainees !== "object") db.trainees = {};
     const ids = Object.keys(db.trainees);
-    if (!selTid || !db.trainees[selTid]) selTid = ids.length ? ids.sort()[ids.length - 1] : null;
+    if (!selTid || !db.trainees[selTid]) {
+      // Only default into an OPEN, non-archived folder — never silently land on an
+      // archived/closed one just because its id happens to sort last.
+      const openIds = ids.filter(tid => !db.trainees[tid].archived && folderOpen(db.trainees[tid]));
+      selTid = openIds.length ? openIds.sort()[openIds.length - 1] : null;
+    }
     setSync(data === null && !first ? "err" : "ok");
     render();
   }
@@ -1167,7 +1172,7 @@
       wrap.style.marginTop = "14px";
       const lbl = document.createElement("div");
       lbl.textContent = "INSTRUCTOR COMMENTS";
-      lbl.style.cssText = "font-size:11px; letter-spacing:1px; color:var(--dim); padding:12px 14px 6px;";
+      lbl.style.cssText = "font-size:11px; letter-spacing:1px; font-weight:700; color:var(--dim); padding:12px 14px 6px;";
       wrap.appendChild(lbl);
       const ta = document.createElement("textarea");
       ta.id = "trComments";
