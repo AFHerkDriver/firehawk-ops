@@ -888,13 +888,14 @@
     if (!me || me.tier !== "owner" || !selTid) return;
     const tid = selTid, prev = db.trainees[tid];
     if (!prev) return;
-    const wasArchived = !!prev.archived;
-    db.trainees[tid] = Object.assign({}, prev, { archived: !wasArchived });
+    db.trainees[tid] = Object.assign({}, prev, { archived: true });
     selTid = null;   // folder goes back to sleep — drop out of the main picker on next render
     render();
-    const res = await fsUpdate(COL, DOC, { trainees: { [tid]: { archived: !wasArchived } } }, ["trainees." + tid + ".archived"]);
+    const res = await fsUpdate(COL, DOC, { trainees: { [tid]: { archived: true } } }, ["trainees." + tid + ".archived"]);
     if (!res.ok) { db.trainees[tid] = prev; selTid = tid; render(); toast("Archive failed — check connection"); return; }
-    toast((prev.name || "Trainee") + (wasArchived ? " unarchived" : " archived"));
+    // A fully-complete folder shows "closed" regardless of the archived flag (see folderOpen/status
+    // labeling) — so archiving an already-closed record is harmless and just stays "closed".
+    toast(folderOpen(prev) ? ((prev.name || "Trainee") + " archived") : ((prev.name || "Trainee") + " is already closed"));
   }
   async function deleteTrainee() {
     if (!me || me.tier !== "owner" || !selTid) return;
@@ -1020,15 +1021,17 @@
   }
 
   function render() {
+    // Poll refresh calls render() every 10s; don't blow away an in-progress, unsaved
+    // comment by rebuilding the DOM out from under an active textarea.
+    if (document.activeElement && document.activeElement.id === "trComments") return;
     renderTrainer();
     const isInstructor = !!(me && me.instructor);
     const delBtn = document.getElementById("btnDelTrainee");
     delBtn.style.display = (me && me.tier === "owner" && selTid) ? "" : "none";
     delBtn.textContent = confirmDel ? "Delete?" : "Delete";
     const arcBtn = document.getElementById("btnArchive");
-    const selRec = selTid ? db.trainees[selTid] : null;
     arcBtn.style.display = (me && me.tier === "owner" && selTid) ? "" : "none";
-    arcBtn.textContent = (selRec && selRec.archived) ? "Unarchive" : "Archive";
+    arcBtn.textContent = "Archive";
     document.getElementById("btnNewTrainee").style.display = isInstructor ? "" : "none";
     document.getElementById("traineeSel").style.display = isInstructor ? "" : "none";
 
@@ -1157,6 +1160,38 @@
       root.appendChild(el);
     });
 
+    // Instructor Comments — one per track (VO/RPIC/INST), optional, editable by instructors only.
+    if (t) {
+      const wrap = document.createElement("div");
+      wrap.className = "block";
+      wrap.style.marginTop = "14px";
+      const lbl = document.createElement("div");
+      lbl.textContent = "INSTRUCTOR COMMENTS";
+      lbl.style.cssText = "font-size:11px; letter-spacing:1px; color:var(--dim); padding:12px 14px 6px;";
+      wrap.appendChild(lbl);
+      const ta = document.createElement("textarea");
+      ta.id = "trComments";
+      ta.placeholder = isInstructor ? "Optional \u2014 notes for " + tr.label + "..." : "No comments yet";
+      ta.value = (t.comments && t.comments[tr.id]) || "";
+      ta.readOnly = !isInstructor;
+      ta.style.cssText = "width:100%; min-height:70px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; color:var(--text); font-family:'Barlow', sans-serif; font-size:15px; padding:10px 12px; margin:0 14px 14px; box-sizing:border-box; width:calc(100% - 28px); resize:vertical;";
+      if (isInstructor) {
+        ta.addEventListener("blur", async () => {
+          const val = ta.value;
+          const tid = selTid;
+          if (!tid || !db.trainees[tid]) return;
+          const prevVal = (db.trainees[tid].comments && db.trainees[tid].comments[tr.id]) || "";
+          if (val === prevVal) return;
+          db.trainees[tid].comments = db.trainees[tid].comments || {};
+          db.trainees[tid].comments[tr.id] = val;
+          const res = await fsUpdate(COL, DOC, { trainees: { [tid]: { comments: { [tr.id]: val } } } }, ["trainees." + tid + ".comments." + tr.id]);
+          if (!res.ok) toast("Comment save failed \u2014 check connection");
+        });
+      }
+      wrap.appendChild(ta);
+      root.appendChild(wrap);
+    }
+
     // Readiness (active track)
     const done = allItems.filter(it => checks[it.id]).length;
     const pct = t ? Math.round((done / total) * 100) : 0;
@@ -1256,9 +1291,10 @@
     if (!closed.length) { toast("Nothing to recall \u2014 no archived or fully-closed folders"); return; }
     closed.forEach(tid => {
       const o = document.createElement("option");
-      const m = (db.trainees[tid].crewId != null) ? crewById[String(db.trainees[tid].crewId)] : null;
-      const label = (m ? crewLabel(m) : (db.trainees[tid].name || tid));
-      o.value = tid; o.textContent = label + (db.trainees[tid].archived ? "  (archived)" : "  (closed)");
+      const t = db.trainees[tid];
+      const m = (t.crewId != null) ? crewById[String(t.crewId)] : null;
+      const label = (m ? crewLabel(m) : (t.name || tid));
+      o.value = tid; o.textContent = label + (!folderOpen(t) ? "  (closed)" : "  (archived)");
       sel.appendChild(o);
     });
     document.getElementById("rcErr").textContent = "";
