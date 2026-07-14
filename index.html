@@ -6776,6 +6776,7 @@ function SARModal({
     const [burnBan, setBurnBan]           = useState(null);   // 7.1 live weather (Cloudflare Worker → TFS / NWS)
     const [redFlag, setRedFlag]           = useState(null);
     const [floodWarning, setFloodWarning] = useState(null);
+    const [rainAccum, setRainAccum]       = useState(null);   // observed 6-hr rain total, fetched only while a flood alert is active
     const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
 
     // ── 4.1 access control: PIN → role detection (remember-login via localStorage) ──
@@ -6817,6 +6818,94 @@ function SARModal({
       };
       f(); const t = setInterval(f, 1800000); return () => clearInterval(t);
     }, []);
+
+    const STATION_REF = { lat: 29.4547, lon: -98.7553 };   // BC2FD Central Station, 2096 Talley Rd
+    useEffect(() => {   // observed past-6hr + forecast next-6hr rain — only fetched while a flood alert is active
+      if (!(floodWarning && floodWarning.active)) { setRainAccum(null); return; }
+      let cancelled = false;
+      // precipitation unit codes look like "wmoUnit:m" / "wmoUnit:mm" — match the suffix exactly
+      // (a substring search for "m" would false-match inside "wmoUnit" itself). Unrecognized units
+      // are skipped and flagged, never guessed.
+      const unitToInchesFactor = (unitCode) => {
+        const raw = String(unitCode || "");
+        const u = raw.indexOf(":") !== -1 ? raw.split(":").pop() : raw;
+        if (u === "m") return 39.3701;
+        if (u === "mm") return 0.0393701;
+        return null;
+      };
+      // "PT6H" -> 6, "PT1H" -> 1, "P1DT6H" -> 30. Returns null (don't guess) if unparseable.
+      const parseIso8601Hours = (dur) => {
+        if (!dur) return null;
+        const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?/.exec(String(dur));
+        if (!m || (!m[1] && !m[2])) return null;
+        return (m[1] ? parseInt(m[1], 10) : 0) * 24 + (m[2] ? parseInt(m[2], 10) : 0);
+      };
+      const f = async () => {
+        const pt = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.weather.gov/points/" + STATION_REF.lat + "," + STATION_REF.lon))).json().catch(() => null);
+        const stationsUrl = pt && pt.properties && pt.properties.observationStations;
+        const gridDataUrl = pt && pt.properties && pt.properties.forecastGridData;
+
+        // ---- PAST 6 HOURS (observed, from the nearest reporting station) ----
+        let past = { inches: null, error: true };
+        try {
+          if (!stationsUrl) throw new Error("no observationStations link");
+          const stList = await (await fetch(WX + "/?url=" + encodeURIComponent(stationsUrl))).json();
+          const stationId = stList && stList.features && stList.features[0] && stList.features[0].properties && stList.features[0].properties.stationIdentifier;
+          if (!stationId) throw new Error("no station found");
+          const obsUrl = "https://api.weather.gov/stations/" + stationId + "/observations?limit=10";
+          const obs = await (await fetch(WX + "/?url=" + encodeURIComponent(obsUrl))).json();
+          const feats = (obs && obs.features) || [];
+          const cutoff = Date.now() - 6 * 3600 * 1000;
+          let total = 0, hits = 0, skippedUnit = 0;
+          feats.forEach(ft => {
+            const p = ft && ft.properties;
+            if (!p || !p.timestamp) return;
+            const ts = new Date(p.timestamp).getTime();
+            if (ts < cutoff) return;
+            const q = p.precipitationLastHour;
+            if (!q || q.value == null) return;
+            const factor = unitToInchesFactor(q.unitCode);
+            if (factor != null) { total += q.value * factor; hits++; } else skippedUnit++;
+          });
+          // Roughly hourly obs expected → ~6 readings covers the window. Fewer than 4 means
+          // real gaps in reporting, not "no rain" — flag it rather than showing a clean number.
+          past = { inches: Math.round(total * 100) / 100, partial: hits < 4, hits, stationId, unitIssue: skippedUnit > 0, error: false };
+        } catch (ePast) { past = { inches: null, error: true }; }
+
+        // ---- NEXT 6 HOURS (forecast QPF, from the gridpoint raw forecast data) ----
+        let next = { inches: null, error: true };
+        try {
+          if (!gridDataUrl) throw new Error("no forecastGridData link");
+          const grid = await (await fetch(WX + "/?url=" + encodeURIComponent(gridDataUrl))).json();
+          const qpf = grid && grid.properties && grid.properties.quantitativePrecipitation;
+          if (!qpf || !Array.isArray(qpf.values)) throw new Error("no QPF series");
+          const factor = unitToInchesFactor(qpf.uom);
+          const now = Date.now(), winEnd = now + 6 * 3600 * 1000;
+          let total = 0, coveredMs = 0;
+          qpf.values.forEach(v => {
+            if (!v || v.value == null || !v.validTime) return;
+            const parts = String(v.validTime).split("/");
+            const start = Date.parse(parts[0]);
+            const durHrs = parseIso8601Hours(parts[1]);
+            if (!start || !durHrs) return;
+            const end = start + durHrs * 3600 * 1000;
+            const ovStart = Math.max(start, now), ovEnd = Math.min(end, winEnd);
+            if (ovEnd <= ovStart) return;   // this block doesn't overlap the next-6h window
+            // Prorate by the fraction of the block that falls inside our window — QPF blocks
+            // are often 3–6hr wide near-term, so a block straddling "now" only partially counts.
+            const frac = (ovEnd - ovStart) / (end - start);
+            if (factor != null) total += v.value * factor * frac;
+            coveredMs += (ovEnd - ovStart);
+          });
+          const coveragePct = Math.round((coveredMs / (6 * 3600 * 1000)) * 100);
+          next = { inches: factor != null ? Math.round(total * 100) / 100 : null, partial: coveragePct < 70, coveragePct, unitIssue: factor == null, error: false };
+        } catch (eNext) { next = { inches: null, error: true }; }
+
+        if (!cancelled) setRainAccum({ past, next, updated: new Date().toISOString() });
+      };
+      f(); const t = setInterval(f, 1800000);
+      return () => { cancelled = true; clearInterval(t); };
+    }, [floodWarning && floodWarning.active]);
 
     const me        = crew.find(c => c.id === authId && !c.archived) || null;  // archived members are locked out; unarchive restores access (PIN preserved)
     const tier      = me ? me.tier : null;                  // "owner" | "admin" | "staff" | null
@@ -6996,6 +7085,31 @@ function SARModal({
         (floodWarning && floodWarning.active) ? wxBanner("\uD83D\uDEA7", floodWarning.event ? floodWarning.event.toUpperCase() : "FLOOD WARNING",
           "Bexar County · until " + floodWarning.ends, "#4A90D9",
           "linear-gradient(135deg,rgba(74,144,217,0.20),rgba(0,80,180,0.10))", "rgba(74,144,217,0.5)", "NWS" + (fmtWxTime(floodWarning.updated) ? " · " + fmtWxTime(floodWarning.updated) : "")) : null,
+        (floodWarning && floodWarning.active) ? h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:"rgba(74,144,217,0.08)", border:"1px solid rgba(74,144,217,0.3)", fontSize:11, color:"#9FC5E8", display:"flex", flexDirection:"column", gap:4 } },
+          h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
+            h("span", null,
+              "\uD83D\uDCA7 Past 6h: ",
+              !rainAccum
+                ? h("span", { style:{ color:C.dim } }, "loading\u2026")
+                : (rainAccum.past && rainAccum.past.error)
+                  ? h("span", { style:{ color:C.dim } }, "data unavailable")
+                  : h(React.Fragment, null,
+                      h("b", null, rainAccum.past.inches.toFixed(2) + " in"),
+                      rainAccum.past.partial ? h("span", { style:{ color:C.dim } }, " (partial \u2014 " + rainAccum.past.hits + "/6 reports)") : null,
+                      rainAccum.past.unitIssue ? h("span", { style:{ color:C.dim }, title:"Some readings were in an unrecognized unit and skipped" }, " \u26A0") : null)),
+            (rainAccum && rainAccum.past && rainAccum.past.stationId) ? h("span", { style:{ color:C.dim, fontSize:9 } }, rainAccum.past.stationId) : null),
+          h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
+            h("span", null,
+              "\uD83C\uDF27\uFE0F Next 6h (forecast): ",
+              !rainAccum
+                ? h("span", { style:{ color:C.dim } }, "loading\u2026")
+                : (rainAccum.next && rainAccum.next.error)
+                  ? h("span", { style:{ color:C.dim } }, "data unavailable")
+                  : h(React.Fragment, null,
+                      h("b", null, rainAccum.next.inches.toFixed(2) + " in"),
+                      rainAccum.next.partial ? h("span", { style:{ color:C.dim } }, " (partial \u2014 " + rainAccum.next.coveragePct + "% of window)") : null,
+                      rainAccum.next.unitIssue ? h("span", { style:{ color:C.dim }, title:"Forecast precipitation unit was unrecognized" }, " \u26A0") : null)),
+            (rainAccum && rainAccum.updated && fmtWxTime(rainAccum.updated)) ? h("span", { style:{ color:C.dim, fontSize:9 } }, fmtWxTime(rainAccum.updated)) : null)) : null,
 
         // Top nav (Increment 6 shell)
         h("div", { style:{ display:"flex", gap:8, marginBottom:14 } },
