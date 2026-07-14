@@ -461,7 +461,11 @@
         ? h("select", {
             value: selId == null ? "" : selId, onChange: e => setSelId(parseInt(e.target.value)),
             style: { width:"100%", background:C.panel2, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, marginBottom:12 }
-          }, crew.filter(isActive).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + posLabel(c.role))))
+          }, crew.filter(isActive).sort((a, b) => {
+              if (me && a.id === me.id) return -1;
+              if (me && b.id === me.id) return 1;
+              return a.name.localeCompare(b.name);
+            }).map(c => h("option", { key:c.id, value:c.id }, c.name + " · " + posLabel(c.role))))
         : isStaff
           ? h("div", { style:{ width:"100%", boxSizing:"border-box", background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:"9px 10px", fontSize:13, color:C.text, marginBottom:12 } },
               "Your availability · ", h("b", null, me.name), h("span", { style:{ color:C.dim, fontWeight:400 } }, " · " + posLabel(me.role)))
