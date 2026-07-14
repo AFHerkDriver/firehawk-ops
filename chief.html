@@ -38,6 +38,11 @@
     .dot.synced { background: #34C759; box-shadow: 0 0 6px #34C759; }
     .dot.offline { background: #FF3B30; }
     .content { padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; max-width: 480px; margin: 0 auto; }
+    @media (min-width: 768px) {
+      .header { max-width: 960px; margin: 0 auto; padding: 22px 24px 14px; }
+      .banners { max-width: 960px; padding: 0 24px; }
+      .content { max-width: 960px; padding: 22px 24px 60px; }
+    }
     .card { background: #161B22; border: 1px solid #30363D; border-radius: 14px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; }
     .label { font-size: 9px; color: #8B949E; letter-spacing: 3px; margin-bottom: 5px; }
     .date { font-size: 24px; color: #E6EDF3; line-height: 1; font-weight: 700; letter-spacing: 1px; }
@@ -111,21 +116,31 @@
 </div>
 
 <div id="rainAccumBar" style="display:none;margin-top:-4px;margin-bottom:8px;padding:8px 12px;border-radius:8px;background:rgba(74,144,217,0.08);border:1px solid rgba(74,144,217,0.3);font-size:11px;color:#9FC5E8">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
-    <span>💧 Past 6h (worst): <span id="rainPastVal">loading…</span></span>
+  <div id="rainHeader" onclick="toggleRainPanel()" style="display:flex;align-items:center;justify-content:space-between;gap:4px;cursor:pointer">
+    <span id="rainDigest">💧 loading…</span>
+    <span id="rainChevron" style="color:#8B949E;font-size:10px">▼ expand</span>
   </div>
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;margin-top:4px">
-    <span>🌧️ Next 6h (forecast, worst): <span id="rainNextVal">loading…</span></span>
-    <span id="rainUpdated" style="color:#8B949E;font-size:9px"></span>
-  </div>
-  <details style="margin-top:4px">
-    <summary style="cursor:pointer;color:#8B949E;font-size:10px;list-style:none">Per-station breakdown — 6 stations</summary>
+  <div id="rainBody" style="display:none;margin-top:4px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
+      <span>💧 Past 6h (worst): <span id="rainPastVal">loading…</span></span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;margin-top:4px">
+      <span>🌧️ Next 6h (forecast, worst): <span id="rainNextVal">loading…</span></span>
+      <span id="rainUpdated" style="color:#8B949E;font-size:9px"></span>
+    </div>
+    <div style="margin-top:4px;color:#8B949E;font-size:10px">Per-station breakdown — 6 stations</div>
     <div id="rainBreakdown" style="margin-top:4px;display:flex;flex-direction:column;gap:3px"></div>
-  </details>
+  </div>
 </div>
 
 <div id="riverGaugeBar" style="display:none;margin-top:-4px;margin-bottom:8px;padding:8px 12px;border-radius:8px;background:rgba(74,144,217,0.08);border:1px solid rgba(74,144,217,0.3);font-size:11px;color:#9FC5E8">
-  <div id="riverGaugeRows"></div>
+  <div id="riverHeader" onclick="toggleRiverPanel()" style="display:flex;align-items:center;justify-content:space-between;gap:4px;cursor:pointer">
+    <span id="riverDigest">🌊 loading…</span>
+    <span id="riverChevron" style="color:#8B949E;font-size:10px">▼ expand</span>
+  </div>
+  <div id="riverBody" style="display:none;margin-top:4px">
+    <div id="riverGaugeRows"></div>
+  </div>
 </div>
 
 <div id="burnBanBar" class="banner" style="display:none;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.4)">
@@ -194,13 +209,13 @@ async function fetchFlood() {
   } catch(e) {}
 }
 
-const RAIN_STATIONS = [   // District 2 coverage — BC2FD stations
+const RAIN_STATIONS = [   // District 2 coverage — BC2FD stations, ordered 120-125
+  { id: "120", label: "Station 120 \u00B7 Spurs Ranch", lat: 29.3921, lon: -98.7099 },
   { id: "121", label: "Station 121 \u00B7 Central (Talley)", lat: 29.4547, lon: -98.7553 },
   { id: "122", label: "Station 122 \u00B7 Old Talley",  lat: 29.5052, lon: -98.7823 },
   { id: "123", label: "Station 123 \u00B7 Marbach",     lat: 29.4049, lon: -98.7026 },
   { id: "124", label: "Station 124 \u00B7 Omicron",     lat: 29.4134, lon: -98.7859 },
-  { id: "125", label: "Station 125 \u00B7 Roft",        lat: 29.4958, lon: -98.7446 },
-  { id: "120", label: "Station 120 \u00B7 Spurs Ranch", lat: 29.3921, lon: -98.7099 }
+  { id: "125", label: "Station 125 \u00B7 Roft",        lat: 29.4958, lon: -98.7446 }
 ];
 function rainUnitToInchesFactor(unitCode) {
   const raw = String(unitCode || "");
@@ -272,9 +287,16 @@ async function fetchOneStationRain(st, workerBase) {
 
   return { id: st.id, label: st.label, past, next };
 }
+let rainExpanded = false;
+function toggleRainPanel() {
+  rainExpanded = !rainExpanded;
+  document.getElementById("rainBody").style.display = rainExpanded ? "block" : "none";
+  document.getElementById("rainChevron").textContent = rainExpanded ? "\u25B2 collapse" : "\u25BC expand";
+}
 async function fetchRainAccum() {
   const bar = document.getElementById("rainAccumBar");
   bar.style.display = "block";
+  document.getElementById("rainDigest").textContent = "\uD83D\uDCA7 loading\u2026";
   document.getElementById("rainPastVal").textContent = "loading\u2026";
   document.getElementById("rainNextVal").textContent = "loading\u2026";
   document.getElementById("rainBreakdown").innerHTML = "";
@@ -287,6 +309,16 @@ async function fetchRainAccum() {
   const validNext = results.filter(r => !r.next.error);
   const worstPast = validPast.length ? validPast.reduce((a, b) => (b.past.inches > a.past.inches ? b : a)) : null;
   const worstNext = validNext.length ? validNext.reduce((a, b) => (b.next.inches > a.next.inches ? b : a)) : null;
+
+  // Digest: whichever of past/next is the bigger number identifies "the more important
+  // associated station" for the collapsed one-line summary.
+  const pv = worstPast ? worstPast.past.inches : -1, nv = worstNext ? worstNext.next.inches : -1;
+  if (!worstPast && !worstNext) {
+    document.getElementById("rainDigest").innerHTML = "\uD83D\uDCA7 <span style='color:#8B949E'>Rain data unavailable</span>";
+  } else {
+    const d = pv >= nv ? { label: worstPast.label, value: pv, kind: "observed" } : { label: worstNext.label, value: nv, kind: "forecast" };
+    document.getElementById("rainDigest").innerHTML = "\uD83D\uDCA7 <b>Increased Rainfall</b> \u2014 " + d.label + " (" + d.value.toFixed(2) + " in " + d.kind + ")";
+  }
 
   document.getElementById("rainPastVal").innerHTML = !worstPast ? "<span style='color:#8B949E'>data unavailable</span>" :
     "<b>" + worstPast.past.inches.toFixed(2) + " in</b> \u00B7 " + worstPast.label +
@@ -312,15 +344,16 @@ async function fetchRainAccum() {
 
 // River stage gauges (NOAA National Water Prediction Service) — actual observed river stage
 // against official NWS flood-category thresholds, not a rainfall estimate. All confirmed real
-// LIDs (supplied directly). Medina River chain ordered upstream-to-downstream: Medina Lake ->
-// La Coste -> Macdona. Macdona is District 5 (mutual aid area, not primary BC2FD district) —
-// kept in the same panel since it's immediately downstream and worth knowing about regardless.
+// LIDs (supplied directly). Two gauges are mutual-aid areas, not primary BC2FD district —
+// Culebra Creek (District 7) and Medina River near Macdona (District 5) — kept in the same
+// panel since they're adjacent/relevant regardless, but labeled so it's clear in the field.
+// Medina River chain ordered upstream-to-downstream: Medina Lake -> La Coste -> Macdona.
 const RIVER_GAUGES = [
-  { lid: "gcct2", label: "Culebra Creek near Helotes" },
-  { lid: "LECT2", label: "Leon Creek at Loop 410 near Leon Valley" },
-  { lid: "MDLT2", label: "Medina River near Medina Lake" },
-  { lid: "LACT2", label: "Medina River near La Coste" },
-  { lid: "MMDT2", label: "Medina River near Macdona (District 5 \u2014 mutual aid)" }
+  { lid: "gcct2", label: "Culebra Creek near Helotes (District 7)" },
+  { lid: "LECT2", label: "Leon Creek at Loop 410 near Leon Valley", priority: true },
+  { lid: "MDLT2", label: "Medina River near Medina Lake (Medina County)" },
+  { lid: "LACT2", label: "Medina River near La Coste (Medina County)" },
+  { lid: "MMDT2", label: "Medina River near Macdona (District 5)" }
 ];
 function categorizeStage(stage, cats) {
   // NWPS uses -9999 as a sentinel for "threshold not defined for this gauge" — treat as absent,
@@ -333,13 +366,54 @@ function categorizeStage(stage, cats) {
   if (valid(cats.action) && stage >= cats.action) return "action";
   return "normal";
 }
+// Classifies flow trend from the observed series. Looks ~2 hours back from the latest valid
+// reading for a stable rate estimate, rather than comparing to the immediately-prior reading
+// (which can be noisy). Thresholds (ft/hr) are a reasonable heuristic, not an official NWS
+// standard — adjust here if field experience says otherwise.
+function classifyTrend(readings) {
+  const valid = (readings || []).filter(r => r && r.primary != null && r.primary > -990 && r.validTime);
+  if (valid.length < 2) return { trend: "unknown", ratePerHr: null };
+  const latest = valid[valid.length - 1];
+  const latestMs = new Date(latest.validTime).getTime();
+  const targetMs = latestMs - 2 * 3600 * 1000;
+  let prior = valid[0];
+  for (let i = valid.length - 1; i >= 0; i--) {
+    const ms = new Date(valid[i].validTime).getTime();
+    if (ms <= targetMs) { prior = valid[i]; break; }
+  }
+  const priorMs = new Date(prior.validTime).getTime();
+  const hrs = (latestMs - priorMs) / 3600000;
+  if (hrs <= 0) return { trend: "unknown", ratePerHr: null };
+  const rate = (latest.primary - prior.primary) / hrs;
+  let trend;
+  if (rate >= 0.5) trend = "rapidly_rising";
+  else if (rate >= 0.1) trend = "rising";
+  else if (rate <= -0.3) trend = "falling";
+  else trend = "normal";
+  return { trend, ratePerHr: rate };
+}
+let riverExpanded = false;
+function toggleRiverPanel() {
+  riverExpanded = !riverExpanded;
+  document.getElementById("riverBody").style.display = riverExpanded ? "block" : "none";
+  document.getElementById("riverChevron").textContent = riverExpanded ? "\u25B2 collapse" : "\u25BC expand";
+}
+const TREND_LABEL = { normal:"Normal Flow", rising:"Rising Flow", rapidly_rising:"Rapidly Rising Flow", falling:"Falling", unknown:"Unavailable" };
+const TREND_COLOR = { normal:"#4ADE80", rising:"#FBBF24", rapidly_rising:"#F87171", falling:"#60A5FA", unknown:"#8B949E" };
 async function fetchRiverGauge() {
   const bar = document.getElementById("riverGaugeBar");
   bar.style.display = "block";
+  document.getElementById("riverDigest").textContent = "\uD83C\uDF0A loading\u2026";
   document.getElementById("riverGaugeRows").innerHTML = "<div>\uD83C\uDF0A River Stage: <span style='color:#8B949E'>loading\u2026</span></div>";
   const workerBase = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
   const catColor = { normal:"#4ADE80", action:"#FBBF24", minor:"#FB923C", moderate:"#F87171", major:"#DC2626" };
   const catLabel = { normal:"Normal", action:"Action Stage", minor:"Minor Flood", moderate:"Moderate Flood", major:"Major Flood" };
+  // Flood category (when elevated) takes priority over the trend word, since that's the
+  // safety-critical fact; at "normal" category the friendlier flow-trend label leads.
+  const labelFor = (g) => (g.category && g.category !== "normal")
+    ? catLabel[g.category] + " \u00B7 " + (TREND_LABEL[g.trend] || "")
+    : (TREND_LABEL[g.trend] || "Unavailable");
+  const colorFor = (g) => (g.category && g.category !== "normal") ? (catColor[g.category] || "#8B949E") : (TREND_COLOR[g.trend] || "#8B949E");
   const results = await Promise.all(RIVER_GAUGES.map(async (g) => {
     try {
       const meta = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid)).then(r => r.json());
@@ -356,17 +430,28 @@ async function fetchRiverGauge() {
         if (readings[i] && readings[i].primary != null && readings[i].primary > -990) { latest = readings[i]; break; }
       }
       const stage = latest ? latest.primary : null;
-      return { lid: g.lid, label: g.label, stage, category: categorizeStage(stage, cats), error: false };
+      const { trend } = classifyTrend(readings);
+      return { lid: g.lid, label: g.label, priority: !!g.priority, stage, category: categorizeStage(stage, cats), trend, error: false };
     } catch (e) {
-      return { lid: g.lid, label: g.label, stage: null, category: null, error: true };
+      return { lid: g.lid, label: g.label, priority: !!g.priority, stage: null, category: null, trend: "unknown", error: true };
     }
   }));
+
+  const leon = results.find(g => g.priority);
+  if (!leon) {
+    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A <span style='color:#8B949E'>River data unavailable</span>";
+  } else if (leon.error || leon.stage == null) {
+    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A \u2B50 <b>Leon Creek</b>: <span style='color:#8B949E'>data unavailable</span>";
+  } else {
+    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A \u2B50 <b>Leon Creek</b>: <span style='color:" + colorFor(leon) + ";font-weight:700'>" + labelFor(leon) + "</span>";
+  }
+
   document.getElementById("riverGaugeRows").innerHTML = results.map(g => {
     const valStr = (g.error || g.stage == null)
       ? "<span style='color:#8B949E'>data unavailable</span>"
-      : "<b>" + g.stage.toFixed(2) + " ft</b> \u00B7 <span style='color:" + (catColor[g.category] || "#8B949E") + ";font-weight:700'>" + (catLabel[g.category] || "Unavailable") + "</span>";
+      : "<b>" + g.stage.toFixed(2) + " ft</b> \u00B7 <span style='color:" + colorFor(g) + ";font-weight:700'>" + labelFor(g) + "</span>";
     return "<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px'>" +
-      "<span>\uD83C\uDF0A River Stage \u2014 " + g.label + ": " + valStr + "</span></div>";
+      "<span>" + (g.priority ? "\u2B50 " : "") + "River Stage \u2014 " + g.label + ": " + valStr + "</span></div>";
   }).join("");
 }
 
