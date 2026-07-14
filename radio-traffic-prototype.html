@@ -106,15 +106,19 @@
   // Channel definitions — label shown in UI + regex used to match against
   // the live OpenMHz talkgroup "alpha"/"description" fields. Adjust the
   // regexes here if a channel comes back unresolved once tested live.
+  // Regexes tightened against Ryan's actual ThinLine talkgroup labels
+  // (BCFA Dispatch / BCFA Access West / BCFA Ops West / BCFA FG N West).
+  // Kept loose enough to also catch "Fireground" spelled out, in case
+  // OpenMHz's copy of the talkgroup names differs slightly from his.
   var CHANNELS = [
-    { key: "dispatch",  label: "BCFA Dispatch",         re: /bcfa.*dispatch|dispatch.*bcfa|^dispatch$/i },
-    { key: "ops_west",  label: "Operations West",       re: /oper(ation)?s?.*west/i },
-    { key: "access_west", label: "Access West",         re: /access.*west/i },
-    { key: "fg6",  label: "Fireground 6 West",  re: /fire\s*-?ground\s*6.*west|fg\s*-?6.*west/i },
-    { key: "fg7",  label: "Fireground 7 West",  re: /fire\s*-?ground\s*7.*west|fg\s*-?7.*west/i },
-    { key: "fg8",  label: "Fireground 8 West",  re: /fire\s*-?ground\s*8.*west|fg\s*-?8.*west/i },
-    { key: "fg9",  label: "Fireground 9 West",  re: /fire\s*-?ground\s*9.*west|fg\s*-?9.*west/i },
-    { key: "fg10", label: "Fireground 10 West", re: /fire\s*-?ground\s*10.*west|fg\s*-?10.*west/i }
+    { key: "dispatch",    label: "BCFA Dispatch",     re: /\bbcfa\b.*\bdispatch\b|\bdispatch\b.*\bbcfa\b/i },
+    { key: "access_west", label: "BCFA Access West",  re: /\baccess\b.*\bwest\b/i },
+    { key: "ops_west",    label: "BCFA Operations West", re: /\bop(erations?|s)\b.*\bwest\b/i },
+    { key: "fg6",  label: "BCFA FG 6 West",  re: /\b(fg|fireground)\s*-?\s*6\b.*\bwest\b/i },
+    { key: "fg7",  label: "BCFA FG 7 West",  re: /\b(fg|fireground)\s*-?\s*7\b.*\bwest\b/i },
+    { key: "fg8",  label: "BCFA FG 8 West",  re: /\b(fg|fireground)\s*-?\s*8\b.*\bwest\b/i },
+    { key: "fg9",  label: "BCFA FG 9 West",  re: /\b(fg|fireground)\s*-?\s*9\b.*\bwest\b/i },
+    { key: "fg10", label: "BCFA FG 10 West", re: /\b(fg|fireground)\s*-?\s*10\b.*\bwest\b/i }
   ];
 
   var lanesEl = document.getElementById("lanes");
@@ -168,8 +172,9 @@
       else if (s.status === "unresolved") { dotClass = "bad"; statusText = "Not found"; }
       else if (s.status === "error") { dotClass = "bad"; statusText = "Unreachable"; }
 
+      var idNote = s.num != null ? (' <span style="color:#8B949E;font-weight:400;">#' + s.num + '</span>') : '';
       head.innerHTML =
-        '<div class="name">' + c.label + '</div>' +
+        '<div class="name">' + c.label + idNote + '</div>' +
         '<div class="status"><span class="dot ' + dotClass + '"></span>' + statusText + '</div>';
       lane.appendChild(head);
 
@@ -177,7 +182,12 @@
       body.className = "lane-body";
 
       if (s.status === "unresolved") {
-        body.innerHTML = '<div class="lane-error">Channel name not found in OpenMHz talkgroup list — needs a label fix, not silently hidden.</div>';
+        var hints = (s.candidates || []).slice(0, 4).map(function(cand){
+          return '<div style="margin-top:4px;">' + cand.label + ' <span style="color:#8B949E;">#' + cand.num + '</span></div>';
+        }).join("");
+        body.innerHTML = '<div class="lane-error">Channel name not found — needs a label fix, not silently hidden.' +
+          (hints ? '<div style="margin-top:8px;font-size:10.5px;color:#FFC107;">Closest OpenMHz labels containing "west":' + hints + '</div>' : '<div style="margin-top:8px;font-size:10.5px;color:#8B949E;">No talkgroup on this system even contains "west" — check spelling/site.</div>') +
+          '</div>';
       } else if (s.status === "error") {
         body.innerHTML = '<div class="lane-error">Feed unreachable — treat as unknown, not quiet.</div>';
       } else if (!s.calls.length) {
@@ -269,6 +279,22 @@
             state[c.key].num = match.num != null ? match.num : match.id;
           } else {
             state[c.key].status = "unresolved";
+            // Loose fallback scan so a mismatch can be diagnosed from the
+            // panel itself instead of a fresh screenshot round-trip: pull
+            // any talkgroup whose label contains the channel's core
+            // keyword (e.g. "west", "dispatch") for the person to eyeball.
+            // Every one of our 8 channels is West-side, so "west" is the
+            // one keyword guaranteed useful across all of them — simpler
+            // and more reliable than trying to infer per-channel keywords.
+            var keyword = "west";
+            state[c.key].candidates = list
+              .filter(function(tg){
+                var label = (tg.alpha || tg.description || tg.name || "").toLowerCase();
+                return label.indexOf(keyword) !== -1;
+              })
+              .map(function(tg){
+                return { label: (tg.alpha || tg.description || tg.name || "(unnamed)"), num: tg.num != null ? tg.num : tg.id };
+              });
           }
         });
         var resolvedCount = CHANNELS.filter(function(c){ return state[c.key].num != null; }).length;
