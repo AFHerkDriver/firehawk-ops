@@ -38,9 +38,14 @@
   .lane-head {
     display: flex; align-items: center; justify-content: space-between;
     padding: 10px 12px; border-bottom: 1px solid #30363D; background: #1C2230;
+    cursor: pointer; user-select: none;
   }
-  .lane-head .name { font-size: 13px; font-weight: 500; letter-spacing: .3px; }
+  .lane-head.collapsed { border-bottom: none; }
+  .lane-head .name { font-size: 13px; font-weight: 500; letter-spacing: .3px; display: flex; align-items: center; gap: 8px; }
   .lane-head .status { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #8B949E; text-transform: uppercase; letter-spacing: .5px; }
+  .chev { display: inline-block; color: #8B949E; font-size: 10px; transition: transform .15s ease; }
+  .chev.open { transform: rotate(90deg); }
+  .now-playing { color: #FF6B35; font-size: 10px; text-transform: none; letter-spacing: 0; margin-right: 8px; }
 
   .lane-body { padding: 6px 8px; }
   .lane-empty { padding: 14px 6px; font-size: 11.5px; color: #8B949E; text-align: center; }
@@ -86,7 +91,9 @@
 
   <footer class="legend">
     <b>Prototype notes —</b> data pulled live in this browser from api.openmhz.com/bexar (community-run feed,
-    not a BC2FD system — treat as supplementary, never authoritative). Green dot = channel resolved and polling.
+    not a BC2FD system — treat as supplementary, never authoritative). Tap a channel name to expand it —
+    all start closed. Tap any call to play it and auto-continue through every newer call in that channel,
+    catch-up style; tap the playing row again to stop. Green dot = channel resolved and polling.
     Amber = resolved, feed quiet. Red = channel name not found or feed unreachable — this is intentional
     fail-loud behavior, not a bug: a red lane must never be mistaken for a quiet one.
   </footer>
@@ -125,13 +132,21 @@
   var globalDot = document.getElementById("globalDot");
   var globalMsg = document.getElementById("globalMsg");
   var player = document.getElementById("player");
-  var playingBtn = null;
 
   var state = {}; // key -> { num, calls: [], newestTime: null, status: 'resolving'|'ok'|'quiet'|'unresolved'|'error' }
+  var expanded = {}; // key -> bool, default closed
 
   CHANNELS.forEach(function(c){
     state[c.key] = { num: null, calls: [], newestTime: null, status: "resolving" };
+    expanded[c.key] = false;
   });
+
+  // Calls are refetched on every poll, so object references don't survive
+  // between renders — identity for matching "is this the row that's
+  // playing" has to be content-based, not reference-based.
+  function callKey(call){
+    return call.id != null ? String(call.id) : (call.talkgroupNum + "|" + call.time);
+  }
 
   function fmtTime(iso){
     try {
@@ -159,11 +174,16 @@
     lanesEl.innerHTML = "";
     CHANNELS.forEach(function(c){
       var s = state[c.key];
+      var isOpen = expanded[c.key];
       var lane = document.createElement("div");
       lane.className = "lane";
 
       var head = document.createElement("div");
-      head.className = "lane-head";
+      head.className = "lane-head" + (isOpen ? "" : " collapsed");
+      head.addEventListener("click", function(){
+        expanded[c.key] = !expanded[c.key];
+        render();
+      });
 
       var dotClass = "wait";
       var statusText = "Resolving…";
@@ -173,81 +193,123 @@
       else if (s.status === "error") { dotClass = "bad"; statusText = "Unreachable"; }
 
       var idNote = s.num != null ? (' <span style="color:#8B949E;font-weight:400;">#' + s.num + '</span>') : '';
+      var isPlayingLane = playState.key === c.key;
+      var nowPlayingNote = isPlayingLane
+        ? '<span class="now-playing">▶ ' + (playState.idx + 1) + '/' + playState.queue.length + '</span>'
+        : '';
+
       head.innerHTML =
-        '<div class="name">' + c.label + idNote + '</div>' +
-        '<div class="status"><span class="dot ' + dotClass + '"></span>' + statusText + '</div>';
+        '<div class="name"><span class="chev' + (isOpen ? ' open' : '') + '">▸</span>' + c.label + idNote + '</div>' +
+        '<div class="status">' + nowPlayingNote + '<span class="dot ' + dotClass + '"></span>' + statusText + '</div>';
       lane.appendChild(head);
 
-      var body = document.createElement("div");
-      body.className = "lane-body";
+      if (isOpen) {
+        var body = document.createElement("div");
+        body.className = "lane-body";
 
-      if (s.status === "unresolved") {
-        var hints = (s.candidates || []).slice(0, 4).map(function(cand){
-          return '<div style="margin-top:4px;">' + cand.label + ' <span style="color:#8B949E;">#' + cand.num + '</span></div>';
-        }).join("");
-        body.innerHTML = '<div class="lane-error">Channel name not found — needs a label fix, not silently hidden.' +
-          (hints ? '<div style="margin-top:8px;font-size:10.5px;color:#FFC107;">Closest OpenMHz labels containing "west":' + hints + '</div>' : '<div style="margin-top:8px;font-size:10.5px;color:#8B949E;">No talkgroup on this system even contains "west" — check spelling/site.</div>') +
-          '</div>';
-      } else if (s.status === "error") {
-        body.innerHTML = '<div class="lane-error">Feed unreachable — treat as unknown, not quiet.</div>';
-      } else if (!s.calls.length) {
-        body.innerHTML = '<div class="lane-empty">' + (s.status === "resolving" ? "Resolving…" : "No recent traffic") + '</div>';
-      } else {
-        s.calls.slice(0, MAX_ROWS).forEach(function(call){
-          var row = document.createElement("div");
-          row.className = "call-row";
+        if (s.status === "unresolved") {
+          var hints = (s.candidates || []).slice(0, 4).map(function(cand){
+            return '<div style="margin-top:4px;">' + cand.label + ' <span style="color:#8B949E;">#' + cand.num + '</span></div>';
+          }).join("");
+          body.innerHTML = '<div class="lane-error">Channel name not found — needs a label fix, not silently hidden.' +
+            (hints ? '<div style="margin-top:8px;font-size:10.5px;color:#FFC107;">Closest OpenMHz labels containing "west":' + hints + '</div>' : '<div style="margin-top:8px;font-size:10.5px;color:#8B949E;">No talkgroup on this system even contains "west" — check spelling/site.</div>') +
+            '</div>';
+        } else if (s.status === "error") {
+          body.innerHTML = '<div class="lane-error">Feed unreachable — treat as unknown, not quiet.</div>';
+        } else if (!s.calls.length) {
+          body.innerHTML = '<div class="lane-empty">' + (s.status === "resolving" ? "Resolving…" : "No recent traffic") + '</div>';
+        } else {
+          s.calls.slice(0, MAX_ROWS).forEach(function(call, idx){
+            var row = document.createElement("div");
+            row.className = "call-row";
 
-          var btn = document.createElement("button");
-          btn.className = "play-btn";
-          btn.textContent = "▶";
-          btn.setAttribute("aria-label", "Play call");
-          btn.addEventListener("click", function(){ playCall(call, btn); });
+            var isThisPlaying = isPlayingLane &&
+              playState.queue[playState.idx] &&
+              callKey(playState.queue[playState.idx]) === callKey(call) &&
+              !player.paused;
 
-          var meta = document.createElement("div");
-          meta.className = "call-meta";
-          meta.innerHTML =
-            '<span class="call-time">' + fmtTime(call.time) + '</span>' +
-            '<span class="call-dur">' + fmtDur(call.len) + '</span>';
+            var btn = document.createElement("button");
+            btn.className = "play-btn" + (isThisPlaying ? " playing" : "");
+            btn.textContent = isThisPlaying ? "❚❚" : "▶";
+            btn.setAttribute("aria-label", isThisPlaying ? "Pause" : "Play this call and every newer call after it");
+            btn.addEventListener("click", function(e){
+              e.stopPropagation();
+              onRowTap(c.key, s.calls, idx);
+            });
 
-          row.appendChild(btn);
-          row.appendChild(meta);
-          body.appendChild(row);
-        });
+            var meta = document.createElement("div");
+            meta.className = "call-meta";
+            meta.innerHTML =
+              '<span class="call-time">' + fmtTime(call.time) + '</span>' +
+              '<span class="call-dur">' + fmtDur(call.len) + '</span>';
+
+            row.appendChild(btn);
+            row.appendChild(meta);
+            row.addEventListener("click", function(){ onRowTap(c.key, s.calls, idx); });
+            body.appendChild(row);
+          });
+        }
+
+        lane.appendChild(body);
       }
 
-      lane.appendChild(body);
       lanesEl.appendChild(lane);
     });
   }
 
-  function playCall(call, btn){
+  // Tapping a call plays it, then keeps playing forward in time through
+  // every newer call already loaded in that same channel — a "catch up"
+  // listen rather than a single clip. Only cycles within one channel;
+  // channels are independent radio traffic and shouldn't bleed together.
+  var playState = { key: null, queue: [], idx: -1 };
+
+  player.addEventListener("ended", function(){ advanceQueue(); });
+
+  function startQueueFrom(channelKey, calls, startIdx){
+    // calls is sorted newest-first; build the forward (chronological)
+    // sequence from the tapped call through to the most recent one.
+    var seq = [];
+    for (var i = startIdx; i >= 0; i--) seq.push(calls[i]);
+    playState = { key: channelKey, queue: seq, idx: 0 };
+    playCurrent();
+  }
+
+  function playCurrent(){
+    var call = playState.queue[playState.idx];
+    if (!call) { stopPlayback(); return; }
     var url = callAudioUrl(call);
-    if (!url) {
-      btn.textContent = "!";
-      setTimeout(function(){ btn.textContent = "▶"; }, 1200);
-      return;
-    }
-    if (playingBtn && playingBtn !== btn) {
-      playingBtn.textContent = "▶";
-      playingBtn.classList.remove("playing");
-    }
-    if (playingBtn === btn && !player.paused) {
-      player.pause();
-      btn.textContent = "▶";
-      btn.classList.remove("playing");
-      playingBtn = null;
-      return;
-    }
+    if (!url) { advanceQueue(); return; } // skip anything we can't play, don't stall the queue
     player.src = url;
     player.play().catch(function(){});
-    btn.textContent = "❚❚";
-    btn.classList.add("playing");
-    playingBtn = btn;
-    player.onended = function(){
-      btn.textContent = "▶";
-      btn.classList.remove("playing");
-      playingBtn = null;
-    };
+    render();
+  }
+
+  function advanceQueue(){
+    if (playState.key == null) return;
+    playState.idx += 1;
+    if (playState.idx < playState.queue.length) {
+      playCurrent();
+    } else {
+      stopPlayback();
+    }
+  }
+
+  function stopPlayback(){
+    player.pause();
+    playState = { key: null, queue: [], idx: -1 };
+    render();
+  }
+
+  function onRowTap(channelKey, calls, idx){
+    var call = calls[idx];
+    var isActiveRow = playState.key === channelKey &&
+      playState.queue[playState.idx] &&
+      callKey(playState.queue[playState.idx]) === callKey(call);
+    if (isActiveRow && !player.paused) {
+      stopPlayback();
+      return;
+    }
+    startQueueFrom(channelKey, calls, idx);
   }
 
   function setGlobal(dotClass, msg){
