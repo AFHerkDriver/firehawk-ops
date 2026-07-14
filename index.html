@@ -7041,7 +7041,7 @@ function SARModal({
       setSessionPin(entered);
       setAuthId(found.id); setShowPin(false); setPinInput(""); setPinError(false);
       const now = new Date();
-      const second = (found.title && found.title.trim()) ? found.title : found.role;
+      const second = (found.title && found.title.trim()) ? found.title : posLabel(found.role);
       const label = (found.first ? found.first.trim() + " " : "") + found.name + " (" + (found.rank || found.role) + " - " + second + ")";
       const entry = { name: label, color: found.color || "#FFFFFF", time: now.toISOString(), ts: now.getTime() };
       fsGet(DEV_COL, "access_log").then(log => {
