@@ -110,6 +110,17 @@
   <div id="floodTime" style="font-size:8px;color:#8B949E;letter-spacing:0.5px;flex-shrink:0;text-align:right"></div>
 </div>
 
+<div id="rainAccumBar" style="display:none;margin-top:-4px;margin-bottom:8px;padding:8px 12px;border-radius:8px;background:rgba(74,144,217,0.08);border:1px solid rgba(74,144,217,0.3);font-size:11px;color:#9FC5E8">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
+    <span>💧 Past 6h: <span id="rainPastVal">loading…</span></span>
+    <span id="rainPastStation" style="color:#8B949E;font-size:9px"></span>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;margin-top:4px">
+    <span>🌧️ Next 6h (forecast): <span id="rainNextVal">loading…</span></span>
+    <span id="rainUpdated" style="color:#8B949E;font-size:9px"></span>
+  </div>
+</div>
+
 <div id="burnBanBar" class="banner" style="display:none;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.4)">
   <div style="display:flex;align-items:center;gap:10px;min-width:0">
     <span style="font-size:16px;flex-shrink:0">🔥</span>
@@ -166,10 +177,105 @@ async function fetchFlood() {
       document.getElementById("floodEnds").textContent = "BEXAR COUNTY \u00B7 " + ends;
       document.getElementById("floodTime").textContent = "NWS";
       floodBar.style.display = "flex";
+      fetchRainAccum();
     } else {
       floodBar.style.display = "none";
+      document.getElementById("rainAccumBar").style.display = "none";
     }
   } catch(e) {}
+}
+
+const RAIN_STATION_REF = { lat: 29.4547, lon: -98.7553 };
+function rainUnitToInchesFactor(unitCode) {
+  const raw = String(unitCode || "");
+  const u = raw.indexOf(":") !== -1 ? raw.split(":").pop() : raw;
+  if (u === "m") return 39.3701;
+  if (u === "mm") return 0.0393701;
+  return null;
+}
+function rainParseIso8601Hours(dur) {
+  if (!dur) return null;
+  const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?/.exec(String(dur));
+  if (!m || (!m[1] && !m[2])) return null;
+  return (m[1] ? parseInt(m[1], 10) : 0) * 24 + (m[2] ? parseInt(m[2], 10) : 0);
+}
+async function fetchRainAccum() {
+  const bar = document.getElementById("rainAccumBar");
+  bar.style.display = "block";
+  document.getElementById("rainPastVal").textContent = "loading\u2026";
+  document.getElementById("rainNextVal").textContent = "loading\u2026";
+  document.getElementById("rainPastStation").textContent = "";
+  const workerBase = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
+  const pt = await fetch(workerBase + encodeURIComponent("https://api.weather.gov/points/" + RAIN_STATION_REF.lat + "," + RAIN_STATION_REF.lon)).then(r => r.json()).catch(() => null);
+  const stationsUrl = pt && pt.properties && pt.properties.observationStations;
+  const gridDataUrl = pt && pt.properties && pt.properties.forecastGridData;
+
+  try {
+    if (!stationsUrl) throw new Error("no observationStations link");
+    const stList = await fetch(workerBase + encodeURIComponent(stationsUrl)).then(r => r.json());
+    const stationId = stList && stList.features && stList.features[0] && stList.features[0].properties && stList.features[0].properties.stationIdentifier;
+    if (!stationId) throw new Error("no station found");
+    const obsUrl = "https://api.weather.gov/stations/" + stationId + "/observations?limit=10";
+    const obs = await fetch(workerBase + encodeURIComponent(obsUrl)).then(r => r.json());
+    const feats = (obs && obs.features) || [];
+    const cutoff = Date.now() - 6 * 3600 * 1000;
+    let total = 0, hits = 0, skippedUnit = 0;
+    feats.forEach(ft => {
+      const p = ft && ft.properties;
+      if (!p || !p.timestamp) return;
+      const ts = new Date(p.timestamp).getTime();
+      if (ts < cutoff) return;
+      const q = p.precipitationLastHour;
+      if (!q || q.value == null) return;
+      const factor = rainUnitToInchesFactor(q.unitCode);
+      if (factor != null) { total += q.value * factor; hits++; } else skippedUnit++;
+    });
+    const partial = hits < 4;
+    const inches = Math.round(total * 100) / 100;
+    document.getElementById("rainPastVal").innerHTML = "<b>" + inches.toFixed(2) + " in</b>" +
+      (partial ? " <span style='color:#8B949E'>(partial \u2014 " + hits + "/6 reports)</span>" : "") +
+      (skippedUnit > 0 ? " <span style='color:#8B949E' title='Some readings were in an unrecognized unit and skipped'>\u26A0</span>" : "");
+    document.getElementById("rainPastStation").textContent = stationId;
+  } catch (ePast) {
+    document.getElementById("rainPastVal").innerHTML = "<span style='color:#8B949E'>data unavailable</span>";
+  }
+
+  try {
+    if (!gridDataUrl) throw new Error("no forecastGridData link");
+    const grid = await fetch(workerBase + encodeURIComponent(gridDataUrl)).then(r => r.json());
+    const qpf = grid && grid.properties && grid.properties.quantitativePrecipitation;
+    if (!qpf || !Array.isArray(qpf.values)) throw new Error("no QPF series");
+    const factor = rainUnitToInchesFactor(qpf.uom);
+    const now = Date.now(), winEnd = now + 6 * 3600 * 1000;
+    let total = 0, coveredMs = 0;
+    qpf.values.forEach(v => {
+      if (!v || v.value == null || !v.validTime) return;
+      const parts = String(v.validTime).split("/");
+      const start = Date.parse(parts[0]);
+      const durHrs = rainParseIso8601Hours(parts[1]);
+      if (!start || !durHrs) return;
+      const end = start + durHrs * 3600 * 1000;
+      const ovStart = Math.max(start, now), ovEnd = Math.min(end, winEnd);
+      if (ovEnd <= ovStart) return;
+      const frac = (ovEnd - ovStart) / (end - start);
+      if (factor != null) total += v.value * factor * frac;
+      coveredMs += (ovEnd - ovStart);
+    });
+    const coveragePct = Math.round((coveredMs / (6 * 3600 * 1000)) * 100);
+    const partial = coveragePct < 70;
+    if (factor == null) {
+      document.getElementById("rainNextVal").innerHTML = "<span style='color:#8B949E'>data unavailable</span> <span style='color:#8B949E' title='Forecast precipitation unit was unrecognized'>\u26A0</span>";
+    } else {
+      const inches = Math.round(total * 100) / 100;
+      document.getElementById("rainNextVal").innerHTML = "<b>" + inches.toFixed(2) + " in</b>" +
+        (partial ? " <span style='color:#8B949E'>(partial \u2014 " + coveragePct + "% of window)</span>" : "");
+    }
+  } catch (eNext) {
+    document.getElementById("rainNextVal").innerHTML = "<span style='color:#8B949E'>data unavailable</span>";
+  }
+
+  const t = new Date().toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"});
+  document.getElementById("rainUpdated").textContent = t;
 }
 
 // Fetch Red Flag Warning status
