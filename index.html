@@ -6981,6 +6981,16 @@ function SARModal({
         else trend = "normal";
         return { trend, ratePerHr: rate };
       };
+      // Actual observed change between the two most recent valid readings — stated honestly
+      // with the real elapsed time, never assumed to be exactly "last hour" if it isn't.
+      const lastReadingDelta = (readings) => {
+        const valid = (readings || []).filter(r => r && r.primary != null && r.primary > -990 && r.validTime);
+        if (valid.length < 2) return null;
+        const latest = valid[valid.length - 1], prev = valid[valid.length - 2];
+        const hrs = (new Date(latest.validTime).getTime() - new Date(prev.validTime).getTime()) / 3600000;
+        if (hrs <= 0) return null;
+        return { deltaFt: latest.primary - prev.primary, hrs };
+      };
       const fetchGauge = async (g) => {
         try {
           const meta = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid))).json();
@@ -6999,9 +7009,10 @@ function SARModal({
           }
           const stage = latest ? latest.primary : null;
           const { trend } = classifyTrend(readings);
-          return { lid: g.lid, label: g.label, priority: !!g.priority, stage, category: categorize(stage, cats), trend, validTime: latest ? latest.validTime : null, error: false };
+          const delta = lastReadingDelta(readings);
+          return { lid: g.lid, label: g.label, priority: !!g.priority, stage, category: categorize(stage, cats), trend, delta, validTime: latest ? latest.validTime : null, error: false };
         } catch (e) {
-          return { lid: g.lid, label: g.label, priority: !!g.priority, stage: null, category: null, trend: "unknown", error: true };
+          return { lid: g.lid, label: g.label, priority: !!g.priority, stage: null, category: null, trend: "unknown", delta: null, error: true };
         }
       };
       const f = async () => {
@@ -7248,6 +7259,14 @@ function SARModal({
             ? catLabel[g.category] + " \u00B7 " + (trendLabel[g.trend] || "")
             : (trendLabel[g.trend] || "Unavailable");
           const colorFor = (g) => (g.category && g.category !== "normal") ? (catColor[g.category] || C.dim) : (trendColor[g.trend] || C.dim);
+          // Actual observed change since the prior reading, stated with the real elapsed time
+          // rather than assumed to be exactly "last hour."
+          const formatDelta = (delta) => {
+            if (!delta) return "";
+            const sign = delta.deltaFt >= 0 ? "+" : "";
+            const period = Math.abs(delta.hrs - 1) < 0.25 ? "last hr" : "over " + delta.hrs.toFixed(1) + "h";
+            return " (" + sign + delta.deltaFt.toFixed(2) + " ft " + period + ")";
+          };
           const leon = riverGauge && riverGauge.gauges && riverGauge.gauges.find(g => g.priority);
           return h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:"rgba(74,144,217,0.08)", border:"1px solid rgba(74,144,217,0.3)", fontSize:11, color:"#9FC5E8", display:"flex", flexDirection:"column", gap:4 } },
             h("div", { onClick: () => setRiverExpanded(v => !v), style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:4, cursor:"pointer" } },
@@ -7260,7 +7279,9 @@ function SARModal({
                     : h(React.Fragment, null, "\u2B50 ", h("b", null, "Leon Creek"), ": ",
                         leon.error || leon.stage == null
                           ? h("span", { style:{ color:C.dim } }, "data unavailable")
-                          : h("span", { style:{ color:colorFor(leon), fontWeight:700 } }, labelFor(leon)))),
+                          : h(React.Fragment, null,
+                              h("span", { style:{ color:colorFor(leon), fontWeight:700 } }, labelFor(leon)),
+                              formatDelta(leon.delta)))),
               h("span", { style:{ color:C.dim, fontSize:10 } }, riverExpanded ? "\u25B2 collapse" : "\u25BC expand")),
             riverExpanded ? h(React.Fragment, null,
               !riverGauge ? null : riverGauge.gauges.map(g => h("div", { key:g.lid, style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
@@ -7271,7 +7292,8 @@ function SARModal({
                     : h(React.Fragment, null,
                         h("b", null, g.stage.toFixed(2) + " ft"),
                         " \u00B7 ",
-                        h("span", { style:{ color:colorFor(g), fontWeight:700 } }, labelFor(g)))),
+                        h("span", { style:{ color:colorFor(g), fontWeight:700 } }, labelFor(g)),
+                        formatDelta(g.delta))),
                 (riverGauge.updated && fmtWxTime(riverGauge.updated)) ? h("span", { style:{ color:C.dim, fontSize:9 } }, fmtWxTime(riverGauge.updated)) : null))
             ) : null);
         })() : null,

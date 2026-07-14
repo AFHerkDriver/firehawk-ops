@@ -392,6 +392,22 @@ function classifyTrend(readings) {
   else trend = "normal";
   return { trend, ratePerHr: rate };
 }
+// Actual observed change between the two most recent valid readings — stated honestly with
+// the real elapsed time, never assumed to be exactly "last hour" if it isn't.
+function lastReadingDelta(readings) {
+  const valid = (readings || []).filter(r => r && r.primary != null && r.primary > -990 && r.validTime);
+  if (valid.length < 2) return null;
+  const latest = valid[valid.length - 1], prev = valid[valid.length - 2];
+  const hrs = (new Date(latest.validTime).getTime() - new Date(prev.validTime).getTime()) / 3600000;
+  if (hrs <= 0) return null;
+  return { deltaFt: latest.primary - prev.primary, hrs };
+}
+function formatDelta(delta) {
+  if (!delta) return "";
+  const sign = delta.deltaFt >= 0 ? "+" : "";
+  const period = Math.abs(delta.hrs - 1) < 0.25 ? "last hr" : "over " + delta.hrs.toFixed(1) + "h";
+  return " (" + sign + delta.deltaFt.toFixed(2) + " ft " + period + ")";
+}
 let riverExpanded = false;
 function toggleRiverPanel() {
   riverExpanded = !riverExpanded;
@@ -431,9 +447,10 @@ async function fetchRiverGauge() {
       }
       const stage = latest ? latest.primary : null;
       const { trend } = classifyTrend(readings);
-      return { lid: g.lid, label: g.label, priority: !!g.priority, stage, category: categorizeStage(stage, cats), trend, error: false };
+      const delta = lastReadingDelta(readings);
+      return { lid: g.lid, label: g.label, priority: !!g.priority, stage, category: categorizeStage(stage, cats), trend, delta, error: false };
     } catch (e) {
-      return { lid: g.lid, label: g.label, priority: !!g.priority, stage: null, category: null, trend: "unknown", error: true };
+      return { lid: g.lid, label: g.label, priority: !!g.priority, stage: null, category: null, trend: "unknown", delta: null, error: true };
     }
   }));
 
@@ -443,13 +460,13 @@ async function fetchRiverGauge() {
   } else if (leon.error || leon.stage == null) {
     document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A \u2B50 <b>Leon Creek</b>: <span style='color:#8B949E'>data unavailable</span>";
   } else {
-    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A \u2B50 <b>Leon Creek</b>: <span style='color:" + colorFor(leon) + ";font-weight:700'>" + labelFor(leon) + "</span>";
+    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A \u2B50 <b>Leon Creek</b>: <span style='color:" + colorFor(leon) + ";font-weight:700'>" + labelFor(leon) + "</span>" + formatDelta(leon.delta);
   }
 
   document.getElementById("riverGaugeRows").innerHTML = results.map(g => {
     const valStr = (g.error || g.stage == null)
       ? "<span style='color:#8B949E'>data unavailable</span>"
-      : "<b>" + g.stage.toFixed(2) + " ft</b> \u00B7 <span style='color:" + colorFor(g) + ";font-weight:700'>" + labelFor(g) + "</span>";
+      : "<b>" + g.stage.toFixed(2) + " ft</b> \u00B7 <span style='color:" + colorFor(g) + ";font-weight:700'>" + labelFor(g) + "</span>" + formatDelta(g.delta);
     return "<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px'>" +
       "<span>" + (g.priority ? "\u2B50 " : "") + "River Stage \u2014 " + g.label + ": " + valStr + "</span></div>";
   }).join("");
