@@ -368,11 +368,19 @@
   // any qualification held → "qualified"; none held → "in_training".
   // Completion of a track = every item in it signed off.
   function trackComplete(t, tr) { const checks = (t && t[tr.key]) || {}; return tr.allItems.every(it => checks[it.id]); }
+  // True once at least one item has actually been signed off in any assigned track —
+  // distinguishes "record exists, empty shell" from "workbook genuinely open."
+  function hasAnyProgress(t) {
+    if (!t) return false;
+    return assignedTracks(t).some(trId => { const tr = TRACK_BY_ID[trId]; return tr && t[tr.key] && Object.keys(t[tr.key]).length > 0; });
+  }
   // Derived training status from OPEN assigned tracks (not from quals held):
+  //   No items signed off yet anywhere → null (not shown as "In Training" on the roster)
   //   Instructor track assigned & not 100% → "in_upgrade"
   //   any VO/RPIC track assigned & not 100% → "in_training"
   //   otherwise → "qualified"
   function computeStatus(t) {
+    if (!hasAnyProgress(t)) return null;
     const assigned = assignedTracks(t);
     if (assigned.indexOf("INST") >= 0) { const itr = TRACK_BY_ID.INST; if (itr && !trackComplete(t, itr)) return "in_upgrade"; }
     for (const trId of assigned) { if (trId === "INST") continue; const tr = TRACK_BY_ID[trId]; if (tr && !trackComplete(t, tr)) return "in_training"; }
@@ -842,7 +850,8 @@
     }
     render();
     const res = await fsUpdate(COL, DOC, body, masks);
-    if (!res.ok) { delete t[key][item.id]; if (linkId && t[linkKey]) delete t[linkKey][linkId]; render(); toast("Save failed — check connection"); }
+    if (!res.ok) { delete t[key][item.id]; if (linkId && t[linkKey]) delete t[linkKey][linkId]; render(); toast("Save failed — check connection"); return; }
+    await syncStatus(t);
   }
   async function removeSignOff(item) {
     const t = db.trainees[selTid];
@@ -863,7 +872,8 @@
     }
     render();
     const res = await fsUpdate(COL, DOC, body, masks);
-    if (!res.ok) { t[key][item.id] = prev; if (linkId) { t[linkKey] = t[linkKey] || {}; if (prevLink) t[linkKey][linkId] = prevLink; } render(); toast("Save failed — check connection"); }
+    if (!res.ok) { t[key][item.id] = prev; if (linkId) { t[linkKey] = t[linkKey] || {}; if (prevLink) t[linkKey][linkId] = prevLink; } render(); toast("Save failed — check connection"); return; }
+    await syncStatus(t);
   }
   function onItemTap(item) {
     if (!me) { pendingItem = item; showPin(); return; }
@@ -928,8 +938,8 @@
     db.trainees[tid] = rec; selTid = tid; render();
     const res = await fsUpdate(COL, DOC, { trainees: { [tid]: rec } }, ["trainees." + tid]);
     if (!res.ok) { delete db.trainees[tid]; selTid = null; render(); toast("Save failed — trainee not created"); return false; }
-    const cs = await setCrewTrainingStatus(m.id, "in_training");
-    if (!cs.ok) toast("Record created, but roster status didn't update");
+    // Roster shows "In Training" once real work starts (first item signed off), not just
+    // because an empty record exists — see hasAnyProgress()/computeStatus() and signOff().
     await loadCrew();
     return true;
   }

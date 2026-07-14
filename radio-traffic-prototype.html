@@ -70,6 +70,17 @@
   .call-time { color: #E6EDF3; }
   .call-dur { color: #8B949E; margin-left: 6px; }
 
+  .lane-more {
+    display: flex; gap: 8px; padding: 10px 6px 4px; border-top: 1px solid #21262D; margin-top: 4px;
+  }
+  .more-btn {
+    flex: 1; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: .3px;
+    padding: 8px 6px; border-radius: 8px; border: 1px solid #30363D; background: #0D1117;
+    color: #E6EDF3; cursor: pointer; text-align: center;
+  }
+  .more-btn:disabled { color: #8B949E; cursor: default; opacity: .6; }
+  .lane-note { padding: 8px 6px 2px; font-size: 10.5px; color: #8B949E; text-align: center; }
+
   footer.legend { margin-top: 18px; font-size: 10.5px; color: #8B949E; line-height: 1.6; }
   footer.legend b { color: #E6EDF3; }
 </style>
@@ -93,7 +104,9 @@
     <b>Prototype notes —</b> data pulled live in this browser from api.openmhz.com/bexar (community-run feed,
     not a BC2FD system — treat as supplementary, never authoritative). Tap a channel name to expand it —
     all start closed. Tap any call to play it and auto-continue through every newer call in that channel,
-    catch-up style; tap the playing row again to stop. Green dot = channel resolved and polling.
+    catch-up style; tap the playing row again to stop. Each lane shows 12 calls at a time — Load more
+    reveals older ones in batches, View full day pages back to local midnight. OpenMHz itself only keeps
+    30 days regardless of what's shown here. Green dot = channel resolved and polling.
     Amber = resolved, feed quiet. Red = channel name not found or feed unreachable — this is intentional
     fail-loud behavior, not a bug: a red lane must never be mistaken for a quiet one.
   </footer>
@@ -137,7 +150,7 @@
   var expanded = {}; // key -> bool, default closed
 
   CHANNELS.forEach(function(c){
-    state[c.key] = { num: null, calls: [], newestTime: null, status: "resolving" };
+    state[c.key] = { num: null, calls: [], newestTime: null, status: "resolving", visibleCount: MAX_ROWS, loading: null, noMoreHistory: false, loadError: null };
     expanded[c.key] = false;
   });
 
@@ -218,7 +231,7 @@
         } else if (!s.calls.length) {
           body.innerHTML = '<div class="lane-empty">' + (s.status === "resolving" ? "Resolving…" : "No recent traffic") + '</div>';
         } else {
-          s.calls.slice(0, MAX_ROWS).forEach(function(call, idx){
+          s.calls.slice(0, s.visibleCount).forEach(function(call, idx){
             var row = document.createElement("div");
             row.className = "call-row";
 
@@ -247,6 +260,44 @@
             row.addEventListener("click", function(){ onRowTap(c.key, s.calls, idx); });
             body.appendChild(row);
           });
+
+          if (s.loading) {
+            var note = document.createElement("div");
+            note.className = "lane-note";
+            note.textContent = s.loading === "day" ? "Loading full day…" : "Loading more…";
+            body.appendChild(note);
+          } else if (s.noMoreHistory) {
+            var doneNote = document.createElement("div");
+            doneNote.className = "lane-note";
+            doneNote.textContent = "No older traffic available (OpenMHz's 30-day archive limit).";
+            body.appendChild(doneNote);
+          } else {
+            var moreRow = document.createElement("div");
+            moreRow.className = "lane-more";
+
+            var moreBtn = document.createElement("button");
+            moreBtn.className = "more-btn";
+            moreBtn.textContent = "Load more";
+            moreBtn.addEventListener("click", function(e){ e.stopPropagation(); loadMore(c.key); });
+
+            var dayBtn = document.createElement("button");
+            dayBtn.className = "more-btn";
+            dayBtn.textContent = s.dayLoaded ? "Full day loaded" : "View full day";
+            dayBtn.disabled = !!s.dayLoaded;
+            dayBtn.addEventListener("click", function(e){ e.stopPropagation(); loadFullDay(c.key); });
+
+            moreRow.appendChild(moreBtn);
+            moreRow.appendChild(dayBtn);
+            body.appendChild(moreRow);
+          }
+
+          if (s.loadError) {
+            var errNote = document.createElement("div");
+            errNote.className = "lane-note";
+            errNote.style.color = "#FF3B30";
+            errNote.textContent = s.loadError;
+            body.appendChild(errNote);
+          }
         }
 
         lane.appendChild(body);
@@ -314,6 +365,97 @@
   function setGlobal(dotClass, msg){
     globalDot.className = "dot " + dotClass;
     globalMsg.textContent = msg;
+  }
+
+  // Fetches one page of calls older than the currently-oldest loaded call
+  // for a single channel, merges them in (de-duped, re-sorted), and
+  // returns how many genuinely new calls were added. This never replaces
+  // s.calls wholesale — poll() already learned that lesson.
+  function fetchOlderBatch(channelKey){
+    var s = state[channelKey];
+    if (s.num == null || !s.calls.length) return Promise.resolve(0);
+    var oldest = s.calls[s.calls.length - 1];
+    var beforeMs = new Date(oldest.time).getTime();
+    return fetch(API + "/calls/older?time=" + beforeMs + "&filter-type=talkgroup&filter-code=" + s.num)
+      .then(function(r){
+        if (!r.ok) throw new Error("older HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        var older = (data && data.calls) || [];
+        var existingKeys = {};
+        s.calls.forEach(function(c){ existingKeys[callKey(c)] = true; });
+        var addedCount = 0;
+        older.forEach(function(c){
+          var k = callKey(c);
+          if (!existingKeys[k]) { s.calls.push(c); existingKeys[k] = true; addedCount++; }
+        });
+        s.calls.sort(function(a,b){ return new Date(b.time) - new Date(a.time); });
+        return addedCount;
+      });
+  }
+
+  function loadMore(channelKey){
+    var s = state[channelKey];
+    if (s.loading) return;
+    s.loadError = null;
+    // Rows beyond visibleCount but already fetched this session — just
+    // reveal them, no network call needed.
+    if (s.visibleCount < s.calls.length) {
+      s.visibleCount = Math.min(s.calls.length, s.visibleCount + MAX_ROWS);
+      render();
+      return;
+    }
+    s.loading = "more";
+    render();
+    fetchOlderBatch(channelKey)
+      .then(function(added){
+        if (added === 0) s.noMoreHistory = true;
+        s.visibleCount = Math.min(s.calls.length, s.visibleCount + MAX_ROWS);
+      })
+      .catch(function(err){ s.loadError = "Couldn't load older calls: " + err.message; })
+      .then(function(){ s.loading = null; render(); });
+  }
+
+  function loadFullDay(channelKey){
+    var s = state[channelKey];
+    if (s.loading || !s.calls.length) return;
+    s.loadError = null;
+    s.loading = "day";
+    render();
+
+    var midnight = new Date();
+    midnight.setHours(0,0,0,0);
+    var midnightMs = midnight.getTime();
+    var pages = 0, MAX_PAGES = 15; // safety cap so a dead-quiet channel can't loop forever
+
+    function reachedMidnight(){
+      var oldest = s.calls[s.calls.length - 1];
+      return new Date(oldest.time).getTime() <= midnightMs;
+    }
+
+    function step(){
+      if (reachedMidnight() || pages >= MAX_PAGES) { finish(pages >= MAX_PAGES); return; }
+      pages++;
+      fetchOlderBatch(channelKey)
+        .then(function(added){
+          if (added === 0) { finish(false); return; }
+          step();
+        })
+        .catch(function(err){
+          s.loadError = "Couldn't load full day: " + err.message;
+          finish(false);
+        });
+    }
+    function finish(hitCap){
+      var visible = s.calls.filter(function(c){ return new Date(c.time).getTime() >= midnightMs; }).length;
+      s.visibleCount = Math.max(visible, Math.min(s.calls.length, MAX_ROWS));
+      s.dayLoaded = !hitCap;
+      s.loading = null;
+      if (hitCap) s.loadError = "Hit the safety limit before reaching midnight — tap Load more to keep going.";
+      render();
+    }
+    step();
   }
 
   function resolveTalkgroups(){
@@ -395,8 +537,20 @@
           if (s.num == null) return;
           var mine = calls.filter(function(call){ return call.talkgroupNum === s.num; });
           if (mine.length) {
-            mine.sort(function(a,b){ return new Date(b.time) - new Date(a.time); });
-            s.calls = mine;
+            // Merge, don't replace — s.calls may hold older history pulled
+            // in by Load more / View full day, and a live poll must not
+            // silently erase it.
+            var existingKeys = {};
+            s.calls.forEach(function(existing){ existingKeys[callKey(existing)] = true; });
+            var addedNew = false;
+            mine.forEach(function(call){
+              var k = callKey(call);
+              if (!existingKeys[k]) { s.calls.push(call); existingKeys[k] = true; addedNew = true; }
+            });
+            if (addedNew) s.calls.sort(function(a,b){ return new Date(b.time) - new Date(a.time); });
+            // Cap unbounded growth over a long session while a channel is
+            // collapsed and no one's paging back through history.
+            if (s.calls.length > 300) s.calls.length = 300;
             s.status = "ok";
           } else if (s.status !== "unresolved") {
             s.status = "quiet";
