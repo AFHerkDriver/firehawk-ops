@@ -7508,7 +7508,7 @@ function SARModal({
               return " (" + sign + delta.deltaFt.toFixed(2) + " ft " + period + ")";
             };
             const compactDelta = (d) => { if (!d) return ""; const sign = d.deltaFt >= 0 ? "+" : ""; const win = d.hrs < 1 ? Math.round(d.hrs * 60) + "m" : d.hrs.toFixed(1) + "h"; return sign + d.deltaFt.toFixed(2) + " (" + win + ")"; };
-            const compactStatus = (g) => (g.category && g.category !== "normal") ? catLabel[g.category] : (g.trend === "flash" ? "Flash Flood Rise" : g.trend === "surging" ? "Surging" : "");
+            const compactStatus = (g) => (g.category && g.category !== "normal") ? catLabel[g.category] : (g.trend === "flash" ? "Flash Flood Rise" : "");
             const readingStale = (iso) => { if (!iso) return false; return (Date.now() - new Date(iso).getTime()) > 75 * 60000; };
             const catScore   = { major:9, moderate:7, minor:5, action:3, normal:0 };
             const trendScore = { flash:8, surging:5, rapidly_rising:2, rising:1, normal:0, falling:0, unknown:0 };

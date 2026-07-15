@@ -631,7 +631,7 @@ async function fetchRiverGauge() {
     : (TREND_LABEL[g.trend] || "Unavailable");
   const colorFor = (g) => (g.trend === "flash" || g.trend === "surging") ? (TREND_COLOR[g.trend] || "#8B949E") : (g.category && g.category !== "normal") ? (catColor[g.category] || "#8B949E") : (TREND_COLOR[g.trend] || "#8B949E");
   const compactDelta = (d) => { if (!d) return ""; const sign = d.deltaFt >= 0 ? "+" : ""; const win = d.hrs < 1 ? Math.round(d.hrs * 60) + "m" : d.hrs.toFixed(1) + "h"; return sign + d.deltaFt.toFixed(2) + " (" + win + ")"; };
-  const compactStatus = (g) => (g.category && g.category !== "normal") ? catLabel[g.category] : (g.trend === "flash" ? "Flash Flood Rise" : g.trend === "surging" ? "Surging" : "");
+  const compactStatus = (g) => (g.category && g.category !== "normal") ? catLabel[g.category] : (g.trend === "flash" ? "Flash Flood Rise" : "");
   const results = await Promise.all(RIVER_GAUGES.map(async (g) => {
     try {
       const meta = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid) + "&_cb=" + Date.now(), { cache: "no-store" }).then(r => r.json());
