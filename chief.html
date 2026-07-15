@@ -214,43 +214,55 @@ async function fetchEro() {
   const bar = document.getElementById("eroBar");
   try {
     const workerBase = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
-    const EROLABEL = { "1":"MRGL", "2":"SLGT", "3":"MDT", "4":"HIGH", "MRGL":"MRGL", "SLGT":"SLGT", "MDT":"MDT", "HIGH":"HIGH" };
+    const DN_MAP = { 1:"MRGL", 2:"SLGT", 3:"MDT", 4:"HIGH" };   // dn = the service's canonical level field (per the WPC renderer)
+    const eroLevel = (dn, outlook) => {   // dn (integer 1-4) primary; outlook string fallback; null = present-but-unmapped
+      if (dn != null && DN_MAP[dn]) return DN_MAP[dn];
+      if (outlook == null) return null;
+      const s = String(outlook).trim().toUpperCase();
+      if (/HIGH|^4$/.test(s)) return "HIGH";
+      if (/MOD|MDT|^3$/.test(s)) return "MDT";
+      if (/SLIGHT|SLGT|^2$/.test(s)) return "SLGT";
+      if (/MARG|MRGL|^1$/.test(s)) return "MRGL";
+      return null;
+    };
     const PT = { lat: 29.4547, lon: -98.7553 };
     const qUrl = (layer) => "https://mapservices.weather.noaa.gov/vector/rest/services/hazards/wpc_precip_hazards/MapServer/" + layer +
-      "/query?geometry=" + PT.lon + "," + PT.lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=outlook,issue_time&f=json";
+      "/query?geometry=" + PT.lon + "," + PT.lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=dn,outlook,issue_time&f=json";
     const days = await Promise.all([0, 1, 2].map(layer =>
       fetch(workerBase + encodeURIComponent(qUrl(layer)) + "&_cb=" + Date.now(), { cache: "no-store" }).then(r => r.json()).catch(() => null)
     ));
     const parsed = days.map((d, i) => {
-      const feat = d && d.features && d.features[0];
-      const raw = feat && feat.attributes && feat.attributes.outlook;
-      const code = raw != null ? (EROLABEL[String(raw)] || null) : null;
-      return { day: i + 1, code, error: !d };   // error = the layer fetch itself failed (null), NOT "no polygon"
+      if (!d) return { day: i + 1, code: null, unknown: false, error: true };   // the layer fetch itself failed
+      const feat = d.features && d.features[0];
+      if (!feat) return { day: i + 1, code: null, unknown: false, error: false };   // no polygon = genuinely no risk this day
+      const a = feat.attributes || {};
+      const code = eroLevel(a.dn, a.outlook);
+      return { day: i + 1, code, unknown: code == null, error: false };   // feature present but unmapped → fail loud, never silent no-risk
     });
     const eroColor = { MRGL:"#FBBF24", SLGT:"#F97316", MDT:"#F87171", HIGH:"#DC2626" };
     const order = { MRGL:1, SLGT:2, MDT:3, HIGH:4 };
     const worst = parsed.reduce((best, d) => { if (!d.code) return best; if (!best || order[d.code] > order[best.code]) return d; return best; }, null);
-    const elevated = worst && (worst.code === "MDT" || worst.code === "HIGH");
-    const anyError = parsed.some(d => d.error);
-    const allError = parsed.every(d => d.error);
-    const anyRisk  = parsed.some(d => d.code);
+    const elevated   = worst && (worst.code === "MDT" || worst.code === "HIGH");
+    const anyError   = parsed.some(d => d.error);
+    const allError   = parsed.every(d => d.error);
+    const anyUnknown = parsed.some(d => d.unknown);
     const stamp = new Date().toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
-    // Three distinct states — never let "checked, no risk" look the same as "fetch failed".
-    bar.style.background = elevated ? "rgba(220,38,38,0.08)" : allError ? "rgba(255,194,0,0.08)" : "rgba(74,144,217,0.06)";
-    bar.style.border = "1px solid " + (elevated ? "rgba(220,38,38,0.35)" : allError ? "rgba(255,194,0,0.35)" : "#30363D");
+    // MODERATE+ gate: nothing at MDT/HIGH and nothing to fail loud about → hide the bar
+    // (Marginal/Slight/no-risk = the everyday noise). allError and anyUnknown always surface.
+    if (!allError && !anyUnknown && !elevated) { bar.style.display = "none"; return; }
+    bar.style.background = elevated ? "rgba(220,38,38,0.08)" : "rgba(255,194,0,0.08)";
+    bar.style.border = "1px solid " + (elevated ? "rgba(220,38,38,0.35)" : "rgba(255,194,0,0.35)");
     document.getElementById("eroDays").innerHTML = allError
       ? "<span style='font-size:11px;font-weight:700;color:#FFC107'>\u26A0 unavailable</span>"
       : parsed.map(d =>
-          "<span style='font-size:11px;font-weight:700;color:" + (d.error ? "#FFC107" : d.code ? (eroColor[d.code] || "#8B949E") : "#4ADE80") + ";margin-left:10px'>D" + d.day + " " + (d.error ? "\u26A0" : d.code || "\u2013") + "</span>"
+          "<span style='font-size:11px;font-weight:700;color:" + ((d.error || d.unknown) ? "#FFC107" : d.code ? (eroColor[d.code] || "#8B949E") : "#4ADE80") + ";margin-left:10px'>D" + d.day + " " + (d.error ? "\u26A0" : d.unknown ? "?" : d.code || "\u2013") + "</span>"
         ).join("");
     document.getElementById("eroNote").innerHTML = allError
       ? "<span style='color:#FFC107'>ERO data unavailable \u2014 verify at wpc.ncep.noaa.gov</span>"
       : elevated
         ? ((worst.code === "HIGH" ? "High risk" : "Moderate risk") + " of excessive rainfall forecast Day " + worst.day + " \u2014 " +
-           (worst.code === "HIGH" ? "widespread flash flooding possible" : "numerous flash floods likely") + ". Not yet an active NWS alert \u2014 a heads-up ahead of one.")
-        : anyRisk
-          ? ("Flash-flood risk in the outlook \u2014 see D1/D2/D3 above." + (anyError ? " Some days unavailable." : "") + " Checked " + stamp + ".")
-          : ("No excessive-rainfall risk over the district, next 3 days." + (anyError ? " (Some days unavailable.)" : "") + " Checked " + stamp + ".");
+           (worst.code === "HIGH" ? "widespread flash flooding possible" : "numerous flash floods likely") + ". Not yet an active NWS alert \u2014 a heads-up ahead of one. Checked " + stamp + ".")
+        : "<span style='color:#FFC107'>Excessive-rainfall risk present but level unrecognized \u2014 verify at wpc.ncep.noaa.gov (checked " + stamp + ")</span>";
     bar.style.display = "block";
   } catch (e) {
     // Total failure — fail LOUD, never leave the panel silently hidden.
