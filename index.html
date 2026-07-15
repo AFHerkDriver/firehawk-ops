@@ -6934,34 +6934,26 @@ function SARModal({
       };
       const fetchStation = async (st) => {
         const pt = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.weather.gov/points/" + st.lat + "," + st.lon))).json().catch(() => null);
-        const stationsUrl = pt && pt.properties && pt.properties.observationStations;
         const gridDataUrl = pt && pt.properties && pt.properties.forecastGridData;
 
-        // ---- PAST 6 HOURS (observed, from the nearest reporting station) ----
+        // ---- PAST 6 HOURS (observed) — MRMS QPE, the NWS multi-radar precip-estimate mosaic.
+        // Replaces the per-station precipitationLastHour field, which NWS rounds DOWN to the nearest
+        // cm (so anything under ~0.4 in read as 0.00) and frequently reports null. MRMS is a gridded
+        // radar estimate in inches at this point — not a physical gauge, labeled accordingly. The
+        // rft_6hr raster function returns the trailing-6h accumulation. Negative pixel values are the
+        // service's no-data/no-coverage sentinel and are treated as "no estimate," never as 0 rain.
         let past = { inches: null, error: true };
         try {
-          if (!stationsUrl) throw new Error("no observationStations link");
-          const stList = await (await fetch(WX + "/?url=" + encodeURIComponent(stationsUrl))).json();
-          const stationId = stList && stList.features && stList.features[0] && stList.features[0].properties && stList.features[0].properties.stationIdentifier;
-          if (!stationId) throw new Error("no station found");
-          const obsUrl = "https://api.weather.gov/stations/" + stationId + "/observations?limit=10";
-          const obs = await (await fetch(WX + "/?url=" + encodeURIComponent(obsUrl))).json();
-          const feats = (obs && obs.features) || [];
-          const cutoff = Date.now() - 6 * 3600 * 1000;
-          let total = 0, hits = 0, skippedUnit = 0;
-          feats.forEach(ft => {
-            const p = ft && ft.properties;
-            if (!p || !p.timestamp) return;
-            const ts = new Date(p.timestamp).getTime();
-            if (ts < cutoff) return;
-            const q = p.precipitationLastHour;
-            if (!q || q.value == null) return;
-            const factor = unitToInchesFactor(q.unitCode);
-            if (factor != null) { total += q.value * factor; hits++; } else skippedUnit++;
-          });
-          // Roughly hourly obs expected → ~6 readings covers the window. Fewer than 4 means
-          // real gaps in reporting, not "no rain" — flag it rather than showing a clean number.
-          past = { inches: Math.round(total * 100) / 100, partial: hits < 4, hits, stationId, unitIssue: skippedUnit > 0, error: false };
+          const mrmsBase = "https://mapservices.weather.noaa.gov/raster/rest/services/obs/mrms_qpe/ImageServer/identify";
+          const geom = encodeURIComponent(JSON.stringify({ x: st.lon, y: st.lat, spatialReference: { wkid: 4326 } }));
+          const rule = encodeURIComponent(JSON.stringify({ rasterFunction: "rft_6hr" }));
+          const mrmsUrl = mrmsBase + "?geometry=" + geom + "&geometryType=esriGeometryPoint&renderingRule=" + rule + "&returnGeometry=false&f=json";
+          const q = await (await fetch(WX + "/?url=" + encodeURIComponent(mrmsUrl) + "&_cb=" + Date.now(), { cache: "no-store" })).json();
+          // ArcGIS identify returns the pixel value in `value` (string) and/or numeric in `values[0]`.
+          const raw = q && (q.value != null ? q.value : (Array.isArray(q.values) ? q.values[0] : null));
+          const num = (raw == null || raw === "NoData") ? NaN : parseFloat(raw);
+          if (!isFinite(num) || num < 0) throw new Error("no valid MRMS estimate at point");
+          past = { inches: Math.round(num * 100) / 100, partial: false, radar: true, error: false };
         } catch (ePast) { past = { inches: null, error: true }; }
 
         // ---- NEXT 6 HOURS (forecast QPF, from the gridpoint raw forecast data) ----
@@ -7421,17 +7413,33 @@ function SARModal({
             return best;
           }, null);
           const elevated = worst && (worst.code === "MDT" || worst.code === "HIGH");
-          return h("div", { style:{ background: elevated ? "rgba(220,38,38,0.08)" : "rgba(74,144,217,0.06)", border:"1px solid " + (elevated ? "rgba(220,38,38,0.35)" : C.border), borderRadius:10, padding:"9px 13px", marginBottom:10 } },
+          const anyError = eroOutlook.days.some(d => d.error);
+          const allError = eroOutlook.days.every(d => d.error);
+          const anyRisk = eroOutlook.days.some(d => d.code);
+          const stamp = fmtWxTime(eroOutlook.updated);
+          // Three distinct states — never let "checked, no risk" look the same as "fetch failed":
+          //   allError  → red, explicit "data unavailable" (fail loud, verify at WPC)
+          //   anyRisk   → colored D1/D2/D3 badges + (if MDT/HIGH) a plain-language line
+          //   otherwise → explicit "No excessive-rainfall risk" WITH a checked-time stamp so an
+          //               all-clear is a positively confirmed state, not an ambiguous blank.
+          return h("div", { style:{ background: elevated ? "rgba(220,38,38,0.08)" : allError ? "rgba(255,178,0,0.08)" : "rgba(74,144,217,0.06)", border:"1px solid " + (elevated ? "rgba(220,38,38,0.35)" : allError ? "rgba(255,178,0,0.35)" : C.border), borderRadius:10, padding:"9px 13px", marginBottom:10 } },
             h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap" } },
               h("div", { style:{ fontSize:11, fontWeight:700, color:C.dim, letterSpacing:1 } }, "\uD83C\uDF27\uFE0F EXCESSIVE RAINFALL OUTLOOK · WPC"),
-              h("div", { style:{ display:"flex", gap:10 } },
-                eroOutlook.days.map(d => h("span", { key:d.day, style:{ fontSize:11, fontWeight:700, color: d.code ? (eroColor[d.code] || C.dim) : C.dim } },
-                  "D" + d.day + " " + (d.code || "\u2014")))
-              )
+              allError
+                ? h("div", { style:{ fontSize:11, fontWeight:700, color:C.amber } }, "\u26A0 unavailable")
+                : h("div", { style:{ display:"flex", gap:10 } },
+                    eroOutlook.days.map(d => h("span", { key:d.day, style:{ fontSize:11, fontWeight:700, color: d.error ? C.amber : d.code ? (eroColor[d.code] || C.dim) : "#4ADE80" } },
+                      "D" + d.day + " " + (d.error ? "\u26A0" : d.code || "\u2013"))))
             ),
-            elevated ? h("div", { style:{ fontSize:10, color:C.dim, marginTop:4 } },
-              (worst.code === "HIGH" ? "High risk" : "Moderate risk") + " of excessive rainfall forecast Day " + worst.day + " \u2014 " +
-              (worst.code === "HIGH" ? "widespread flash flooding possible" : "numerous flash floods likely") + ". Not yet an active NWS alert \u2014 a heads-up ahead of one.") : null
+            allError
+              ? h("div", { style:{ fontSize:10, color:C.amber, marginTop:4 } }, "ERO data unavailable \u2014 verify at wpc.ncep.noaa.gov")
+              : elevated
+                ? h("div", { style:{ fontSize:10, color:C.dim, marginTop:4 } },
+                    (worst.code === "HIGH" ? "High risk" : "Moderate risk") + " of excessive rainfall forecast Day " + worst.day + " \u2014 " +
+                    (worst.code === "HIGH" ? "widespread flash flooding possible" : "numerous flash floods likely") + ". Not yet an active NWS alert \u2014 a heads-up ahead of one.")
+                : anyRisk
+                  ? h("div", { style:{ fontSize:10, color:C.dim, marginTop:4 } }, "Flash-flood risk in the outlook \u2014 see D1/D2/D3 above." + (anyError ? " Some days unavailable." : "") + (stamp ? " Checked " + stamp + "." : ""))
+                  : h("div", { style:{ fontSize:10, color:C.dim, marginTop:4 } }, "No excessive-rainfall risk over the district, next 3 days." + (anyError ? " (Some days unavailable.)" : "") + (stamp ? " Checked " + stamp + "." : ""))
           );
         })(),
         (floodWarning && floodWarning.warning) ? (() => {
@@ -7451,7 +7459,7 @@ function SARModal({
                         h("b", null, p.past.inches.toFixed(2) + " in"),
                         " \u00B7 " + p.label,
                         p.past.partial ? h("span", { style:{ color:C.dim } }, " (partial)") : null,
-                        p.past.unitIssue ? h("span", { style:{ color:C.dim }, title:"Some readings were in an unrecognized unit and skipped" }, " \u26A0") : null))),
+                        p.past.radar ? h("span", { style:{ color:C.dim }, title:"MRMS radar precipitation estimate (not a physical gauge)" }, " (radar)") : null))),
               h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
                 h("span", null,
                   "\uD83C\uDF27\uFE0F Next 6h (forecast, worst): ",
@@ -7513,8 +7521,7 @@ function SARModal({
             const body = h(React.Fragment, null,
               h("div", { style:{ display:"flex", flexWrap:"wrap", gap:"3px 12px", fontSize:9, color:C.dim, marginBottom:5, paddingBottom:4, borderBottom:"1px solid " + C.border } },
                 [["normal","Normal"],["rising","Rising"],["rapidly_rising","Rapidly"],["surging","Surging"],["flash","Flash"],["falling","Falling"]].map(kv =>
-                  h("span", { key:kv[0], style:{ display:"inline-flex", alignItems:"center", gap:3 } },
-                    h("span", { style:{ color: trendColor[kv[0]] } }, "\u25CF"), kv[1]))),
+                  h("span", { key:kv[0], style:{ color: trendColor[kv[0]], fontWeight:700 } }, kv[1]))),
               !riverGauge ? null : riverGauge.gauges.map(g => h("div", { key:g.lid, style:{ display:"flex", flexDirection:"column", marginBottom:3 } },
                 h("div", { style:{ display:"flex", alignItems:"baseline", justifyContent:"space-between", flexWrap:"wrap", gap:6, fontSize:11 } },
                 h("span", { style:{ flex:"1 1 130px", minWidth:0 } },
@@ -7525,15 +7532,14 @@ function SARModal({
                   : h("span", { style:{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:5, whiteSpace:"nowrap" } },
                       compactStatus(g) ? h("span", { style:{ color: colorFor(g), fontWeight:700 } }, compactStatus(g)) : null,
                       h("b", null, g.stage.toFixed(2) + " ft"),
-                      h("span", { style:{ color: colorFor(g), fontSize:9 } }, "\u25CF"),
-                      h("span", { style:{ color:C.dim, fontSize:10 } }, compactDelta(g.delta)),
+                      h("span", { style:{ color: colorFor(g), fontSize:10, fontWeight:700 } }, compactDelta(g.delta)),
                       g.validTime ? h("span", { style:{ color: readingStale(g.validTime) ? C.amber : C.dim, fontSize:9 } }, (readingStale(g.validTime) ? "\u26A0 " : "") + fmtWxTime(g.validTime)) : null)),
                 !g.error ? (
                   (g.forecastAvailable && g.forecastPeak)
                     ? h("div", { style:{ fontSize:10, marginTop:1, color: (g.forecastPeak.category && g.forecastPeak.category !== "normal") ? (catColor[g.forecastPeak.category] || C.dim) : C.dim, fontWeight: (g.forecastPeak.category && g.forecastPeak.category !== "normal") ? 700 : 400 } },
                         "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? "rising to " + catLabel[g.forecastPeak.category] + " " : "peaks ") +
                         "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + fmtWxTime(g.forecastPeak.validTime))
-                    : h("div", { style:{ fontSize:10, marginTop:1, color:C.dim } }, "No official forecast for this gauge")
+                    : null
                 ) : null
               )),
               (riverGauge && riverGauge.updated) ? h("div", { style:{ color:C.dim, fontSize:9, marginTop:2 } }, "Updated " + fmtWxTime(riverGauge.updated)) : null
@@ -7577,7 +7583,7 @@ function SARModal({
             return { digestText, digestColor: alarm ? "#FF8A8A" : null, body };
           })();
 
-          const masterDigest = [rainSection.digestText, riverSection.digestText, crossingsSection.digestText].filter(Boolean).join(" \u00B7 ");
+          const masterDigest = [rainSection.digestText, crossingsSection.digestText, riverSection.digestText].filter(Boolean).join(" \u00B7 ");
           const anyAlarm = !!crossingsSection.digestColor;
 
           return h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background: anyAlarm ? "rgba(254,0,0,0.06)" : "rgba(74,144,217,0.08)", border:"1px solid " + (anyAlarm ? "rgba(254,0,0,0.3)" : "rgba(74,144,217,0.3)"), fontSize:11, color:"#9FC5E8", display:"flex", flexDirection:"column", gap:4 } },
@@ -7587,10 +7593,10 @@ function SARModal({
             floodDataExpanded ? h(React.Fragment, null,
               h("div", { style:{ fontSize:9, color:C.dim, letterSpacing:1, marginTop:4, marginBottom:2 } }, "\uD83D\uDCA7 RAINFALL"),
               rainSection.body,
-              h("div", { style:{ fontSize:9, color:C.dim, letterSpacing:1, marginTop:8, marginBottom:2, paddingTop:6, borderTop:"1px solid " + C.border } }, "\uD83C\uDF0A RIVER LEVELS"),
-              riverSection.body,
               h("div", { style:{ fontSize:9, color: crossingsSection.digestColor || C.dim, letterSpacing:1, marginTop:8, marginBottom:2, paddingTop:6, borderTop:"1px solid " + C.border } }, "\uD83D\uDEA7 LOW-WATER CROSSINGS"),
-              crossingsSection.body
+              crossingsSection.body,
+              h("div", { style:{ fontSize:9, color:C.dim, letterSpacing:1, marginTop:8, marginBottom:2, paddingTop:6, borderTop:"1px solid " + C.border } }, "\uD83C\uDF0A RIVER LEVELS"),
+              riverSection.body
             ) : null);
         })() : null,
 
