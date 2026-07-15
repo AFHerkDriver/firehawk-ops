@@ -7408,7 +7408,7 @@ function SARModal({
           };
           const compactDelta = (d) => { if (!d) return ""; const sign = d.deltaFt >= 0 ? "+" : ""; const win = d.hrs < 1 ? Math.round(d.hrs * 60) + "m" : d.hrs.toFixed(1) + "h"; return sign + d.deltaFt.toFixed(2) + " (" + win + ")"; };
           const compactStatus = (g) => (g.category && g.category !== "normal") ? catLabel[g.category] : (g.trend === "flash" ? "Flash Flood Rise" : g.trend === "surging" ? "Surging" : "");
-          const readingStale = (iso) => { if (!iso) return false; return (Date.now() - new Date(iso).getTime()) > 25 * 60000; };
+          const readingStale = (iso) => { if (!iso) return false; return (Date.now() - new Date(iso).getTime()) > 75 * 60000; };   // NWPS gauges normally post every 15-90 min; 75 flags genuinely late, not routine cadence
           // Headline = worst-condition gauge. Flood category outranks flow trend (category is the
           // safety-critical fact); Culebra ("home", closest to our response area) wins a true tie,
           // so it leads by default unless another gauge is strictly more severe.

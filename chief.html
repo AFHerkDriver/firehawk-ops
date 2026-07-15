@@ -587,7 +587,7 @@ async function fetchRiverGauge() {
         "<span style='display:inline-flex;align-items:center;gap:3px'><span style='color:" + TREND_COLOR[kv[0]] + "'>\u25CF</span>" + kv[1] + "</span>").join("") +
     "</div>" +
     results.map(g => {
-      const stale = g.validTime && (Date.now() - new Date(g.validTime).getTime()) > 25 * 60000;
+      const stale = g.validTime && (Date.now() - new Date(g.validTime).getTime()) > 75 * 60000;   // NWPS gauges normally post every 15-90 min; 75 flags genuinely late, not routine cadence
       const rt = g.validTime ? new Date(g.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) : "";
       const stats = (g.error || g.stage == null)
         ? "<span style='color:#8B949E'>data unavailable</span>"
