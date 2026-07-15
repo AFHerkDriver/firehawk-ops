@@ -437,18 +437,28 @@ function classifyTrend(readings) {
   if (valid.length < 2) return { trend: "unknown", ratePerHr: null };
   const latest = valid[valid.length - 1];
   const latestMs = new Date(latest.validTime).getTime();
-  const targetMs = latestMs - 2 * 3600 * 1000;
-  let prior = valid[0];
-  for (let i = valid.length - 1; i >= 0; i--) {
-    const ms = new Date(valid[i].validTime).getTime();
-    if (ms <= targetMs) { prior = valid[i]; break; }
-  }
-  const priorMs = new Date(prior.validTime).getTime();
-  const hrs = (latestMs - priorMs) / 3600000;
-  if (hrs <= 0) return { trend: "unknown", ratePerHr: null };
-  const rate = (latest.primary - prior.primary) / hrs;
+  // Rate over a lookback window: latest vs the newest reading at/before (latest - hoursBack ago).
+  const rateOver = (hoursBack) => {
+    const targetMs = latestMs - hoursBack * 3600000;
+    let prior = null;
+    for (let i = valid.length - 1; i >= 0; i--) {
+      if (new Date(valid[i].validTime).getTime() <= targetMs) { prior = valid[i]; break; }
+    }
+    if (!prior) return null;
+    const hrs = (latestMs - new Date(prior.validTime).getTime()) / 3600000;
+    if (hrs <= 0) return null;
+    return (latest.primary - prior.primary) / hrs;
+  };
+  // Two windows: long (~2h, stable) and short (~0.75h) to catch a flash spike the 2h average would
+  // smooth away. Classify on whichever is STEEPER (upward-biased) — never average out a fast rise.
+  const rates = [rateOver(2), rateOver(0.75)].filter(r => r != null);
+  if (!rates.length) return { trend: "unknown", ratePerHr: null };
+  const rate = Math.max.apply(null, rates);
+  // ft/hr thresholds — heuristic, not an official NWS standard. Tune from field experience.
   let trend;
-  if (rate >= 0.5) trend = "rapidly_rising";
+  if (rate >= 4.0) trend = "flash";
+  else if (rate >= 2.0) trend = "surging";
+  else if (rate >= 0.5) trend = "rapidly_rising";
   else if (rate >= 0.1) trend = "rising";
   else if (rate <= -0.3) trend = "falling";
   else trend = "normal";
@@ -476,8 +486,8 @@ function toggleRiverPanel() {
   document.getElementById("riverBody").style.display = riverExpanded ? "block" : "none";
   document.getElementById("riverChevron").textContent = riverExpanded ? "\u25B2 collapse" : "\u25BC expand";
 }
-const TREND_LABEL = { normal:"Normal Flow", rising:"Rising Flow", rapidly_rising:"Rapidly Rising Flow", falling:"Falling", unknown:"Unavailable" };
-const TREND_COLOR = { normal:"#4ADE80", rising:"#FBBF24", rapidly_rising:"#F87171", falling:"#60A5FA", unknown:"#8B949E" };
+const TREND_LABEL = { normal:"Normal Flow", rising:"Rising Flow", rapidly_rising:"Rapidly Rising Flow", surging:"Surging", flash:"\u26A0\uFE0F Flash Flood Rise", falling:"Falling", unknown:"Unavailable" };
+const TREND_COLOR = { normal:"#4ADE80", rising:"#FBBF24", rapidly_rising:"#F87171", surging:"#F97316", flash:"#DC2626", falling:"#60A5FA", unknown:"#8B949E" };
 async function fetchRiverGauge() {
   const bar = document.getElementById("riverGaugeBar");
   bar.style.display = "block";
@@ -491,7 +501,7 @@ async function fetchRiverGauge() {
   const labelFor = (g) => (g.category && g.category !== "normal")
     ? catLabel[g.category] + " \u00B7 " + (TREND_LABEL[g.trend] || "")
     : (TREND_LABEL[g.trend] || "Unavailable");
-  const colorFor = (g) => (g.category && g.category !== "normal") ? (catColor[g.category] || "#8B949E") : (TREND_COLOR[g.trend] || "#8B949E");
+  const colorFor = (g) => (g.trend === "flash" || g.trend === "surging") ? (TREND_COLOR[g.trend] || "#8B949E") : (g.category && g.category !== "normal") ? (catColor[g.category] || "#8B949E") : (TREND_COLOR[g.trend] || "#8B949E");
   const results = await Promise.all(RIVER_GAUGES.map(async (g) => {
     try {
       const meta = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid)).then(r => r.json());
@@ -508,18 +518,20 @@ async function fetchRiverGauge() {
         if (readings[i] && readings[i].primary != null && readings[i].primary > -990) { latest = readings[i]; break; }
       }
       const stage = latest ? latest.primary : null;
-      const { trend } = classifyTrend(readings);
+      const { trend, ratePerHr } = classifyTrend(readings);
       const delta = lastReadingDelta(readings);
-      return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorizeStage(stage, cats), trend, delta, error: false };
+      return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorizeStage(stage, cats), trend, riseRate: ratePerHr, delta, error: false };
     } catch (e) {
-      return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", delta: null, error: true };
+      return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", riseRate: null, delta: null, error: true };
     }
   }));
 
-  const catRank   = { major:5, moderate:4, minor:3, action:2, normal:0 };
-  const trendRank = { rapidly_rising:3, rising:2, normal:1, falling:0, unknown:0 };
-  const sevOf  = (g) => (!g || g.error || g.stage == null) ? -1 : (catRank[g.category] || 0) * 10 + (trendRank[g.trend] || 0);
-  const rateOf = (g) => (g && g.delta && g.delta.hrs) ? g.delta.deltaFt / g.delta.hrs : 0;
+  // Additive severity: category (how high now) + trend (how fast climbing). Ordinary rise stays
+  // subordinate to category, but Surging/Flash-rate outrank a statically-elevated gauge.
+  const catScore   = { major:9, moderate:7, minor:5, action:3, normal:0 };
+  const trendScore = { flash:8, surging:5, rapidly_rising:2, rising:1, normal:0, falling:0, unknown:0 };
+  const sevOf  = (g) => (!g || g.error || g.stage == null) ? -1 : (catScore[g.category] || 0) + (trendScore[g.trend] || 0);
+  const rateOf = (g) => (g && g.riseRate != null) ? g.riseRate : ((g && g.delta && g.delta.hrs) ? g.delta.deltaFt / g.delta.hrs : 0);
   // Headline = worst-condition gauge; category outranks trend; Culebra (home) wins a true tie.
   const leon = results.length ? results.reduce((best, g) => {
     if (!best) return g;

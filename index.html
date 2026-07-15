@@ -6992,18 +6992,29 @@ function SARModal({
         if (valid.length < 2) return { trend: "unknown", ratePerHr: null };
         const latest = valid[valid.length - 1];
         const latestMs = new Date(latest.validTime).getTime();
-        const targetMs = latestMs - 2 * 3600 * 1000;
-        let prior = valid[0];
-        for (let i = valid.length - 1; i >= 0; i--) {
-          const ms = new Date(valid[i].validTime).getTime();
-          if (ms <= targetMs) { prior = valid[i]; break; }
-        }
-        const priorMs = new Date(prior.validTime).getTime();
-        const hrs = (latestMs - priorMs) / 3600000;
-        if (hrs <= 0) return { trend: "unknown", ratePerHr: null };
-        const rate = (latest.primary - prior.primary) / hrs;
+        // Rate over a lookback window: latest vs the newest reading at/before (latest - hoursBack ago).
+        const rateOver = (hoursBack) => {
+          const targetMs = latestMs - hoursBack * 3600000;
+          let prior = null;
+          for (let i = valid.length - 1; i >= 0; i--) {
+            if (new Date(valid[i].validTime).getTime() <= targetMs) { prior = valid[i]; break; }
+          }
+          if (!prior) return null;
+          const hrs = (latestMs - new Date(prior.validTime).getTime()) / 3600000;
+          if (hrs <= 0) return null;
+          return (latest.primary - prior.primary) / hrs;
+        };
+        // Two windows: long (~2h, stable) and short (~0.75h) to catch a flash spike the 2h average
+        // would smooth away. Classify on whichever is STEEPER (upward-biased) so a sharp short-term
+        // rise is never averaged out — fail toward warning, never a false all-clear on a fast rise.
+        const rates = [rateOver(2), rateOver(0.75)].filter(r => r != null);
+        if (!rates.length) return { trend: "unknown", ratePerHr: null };
+        const rate = Math.max.apply(null, rates);
+        // ft/hr thresholds — heuristic, not an official NWS standard. Tune from field experience.
         let trend;
-        if (rate >= 0.5) trend = "rapidly_rising";
+        if (rate >= 4.0) trend = "flash";
+        else if (rate >= 2.0) trend = "surging";
+        else if (rate >= 0.5) trend = "rapidly_rising";
         else if (rate >= 0.1) trend = "rising";
         else if (rate <= -0.3) trend = "falling";
         else trend = "normal";
@@ -7036,11 +7047,11 @@ function SARModal({
             if (readings[i] && readings[i].primary != null && readings[i].primary > -990) { latest = readings[i]; break; }
           }
           const stage = latest ? latest.primary : null;
-          const { trend } = classifyTrend(readings);
+          const { trend, ratePerHr } = classifyTrend(readings);
           const delta = lastReadingDelta(readings);
-          return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorize(stage, cats), trend, delta, validTime: latest ? latest.validTime : null, error: false };
+          return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorize(stage, cats), trend, riseRate: ratePerHr, delta, validTime: latest ? latest.validTime : null, error: false };
         } catch (e) {
-          return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", delta: null, error: true };
+          return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", riseRate: null, delta: null, error: true };
         }
       };
       const f = async () => {
@@ -7324,16 +7335,16 @@ function SARModal({
             ) : null);
         })() : null,
         (floodWarning && floodWarning.active) ? (() => {
-          const trendLabel = { normal:"Normal Flow", rising:"Rising Flow", rapidly_rising:"Rapidly Rising Flow", falling:"Falling", unknown:"Unavailable" };
+          const trendLabel = { normal:"Normal Flow", rising:"Rising Flow", rapidly_rising:"Rapidly Rising Flow", surging:"Surging", flash:"\u26A0\uFE0F Flash Flood Rise", falling:"Falling", unknown:"Unavailable" };
           const catLabel = { normal:"Normal", action:"Action Stage", minor:"Minor Flood", moderate:"Moderate Flood", major:"Major Flood" };
           const catColor = { normal:"#4ADE80", action:"#FBBF24", minor:"#FB923C", moderate:"#F87171", major:"#DC2626" };
-          const trendColor = { normal:"#4ADE80", rising:"#FBBF24", rapidly_rising:"#F87171", falling:"#60A5FA", unknown:C.dim };
+          const trendColor = { normal:"#4ADE80", rising:"#FBBF24", rapidly_rising:"#F87171", surging:"#F97316", flash:"#DC2626", falling:"#60A5FA", unknown:C.dim };
           // Flood category (when elevated) takes priority over the trend word, since that's the
           // safety-critical fact; at "normal" category the friendlier flow-trend label leads.
           const labelFor = (g) => (g.category && g.category !== "normal")
             ? catLabel[g.category] + " \u00B7 " + (trendLabel[g.trend] || "")
             : (trendLabel[g.trend] || "Unavailable");
-          const colorFor = (g) => (g.category && g.category !== "normal") ? (catColor[g.category] || C.dim) : (trendColor[g.trend] || C.dim);
+          const colorFor = (g) => (g.trend === "flash" || g.trend === "surging") ? (trendColor[g.trend] || C.dim) : (g.category && g.category !== "normal") ? (catColor[g.category] || C.dim) : (trendColor[g.trend] || C.dim);
           // Actual observed change since the prior reading, stated with the real elapsed time
           // rather than assumed to be exactly "last hour."
           const formatDelta = (delta) => {
@@ -7345,10 +7356,13 @@ function SARModal({
           // Headline = worst-condition gauge. Flood category outranks flow trend (category is the
           // safety-critical fact); Culebra ("home", closest to our response area) wins a true tie,
           // so it leads by default unless another gauge is strictly more severe.
-          const catRank   = { major:5, moderate:4, minor:3, action:2, normal:0 };
-          const trendRank = { rapidly_rising:3, rising:2, normal:1, falling:0, unknown:0 };
-          const sevOf  = (g) => (!g || g.error || g.stage == null) ? -1 : (catRank[g.category] || 0) * 10 + (trendRank[g.trend] || 0);
-          const rateOf = (g) => (g && g.delta && g.delta.hrs) ? g.delta.deltaFt / g.delta.hrs : 0;
+          // Additive severity: how HIGH it is now (category) + how FAST it is climbing (trend). Ordinary
+          // rise stays subordinate to category, but Surging/Flash-rate carry enough weight to outrank
+          // a statically-elevated gauge — a creek flashing up through the categories is the worse call.
+          const catScore   = { major:9, moderate:7, minor:5, action:3, normal:0 };
+          const trendScore = { flash:8, surging:5, rapidly_rising:2, rising:1, normal:0, falling:0, unknown:0 };
+          const sevOf  = (g) => (!g || g.error || g.stage == null) ? -1 : (catScore[g.category] || 0) + (trendScore[g.trend] || 0);
+          const rateOf = (g) => (g && g.riseRate != null) ? g.riseRate : ((g && g.delta && g.delta.hrs) ? g.delta.deltaFt / g.delta.hrs : 0);
           const headline = (riverGauge && riverGauge.gauges && riverGauge.gauges.length)
             ? riverGauge.gauges.reduce((best, g) => {
                 if (!best) return g;
