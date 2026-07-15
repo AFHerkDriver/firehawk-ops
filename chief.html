@@ -198,8 +198,11 @@ async function fetchFlood() {
     const workerBase = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
     const alertResp = await fetch(workerBase + encodeURIComponent("https://api.weather.gov/alerts/active?zone=TXZ205,TXC029"));
     const alertData = await alertResp.json();
-    const floodEvents = ["Flood Warning","Flash Flood Warning","Flood Watch","Flash Flood Watch","Flash Flood Statement"];
-    const flood = (alertData.features || []).find(f => floodEvents.includes(f.properties.event));
+    const floodRank = { "Flash Flood Warning":5, "Flood Warning":4, "Flash Flood Watch":3, "Flood Watch":2, "Flash Flood Statement":1 };
+    // Pick by explicit severity, not first-in-feed, so a reissued Watch can never downgrade an active Warning.
+    const flood = (alertData.features || [])
+      .filter(f => f && f.properties && floodRank[f.properties.event])
+      .sort((a, b) => floodRank[b.properties.event] - floodRank[a.properties.event])[0] || null;
     const floodBar = document.getElementById("floodBar");
     if (flood) {
       document.getElementById("floodEvent").textContent = flood.properties.event.toUpperCase();
@@ -209,8 +212,14 @@ async function fetchFlood() {
       document.getElementById("floodEnds").textContent = "BEXAR COUNTY \u00B7 " + ends;
       document.getElementById("floodTime").textContent = "NWS";
       floodBar.style.display = "flex";
-      fetchRainAccum();
-      fetchRiverGauge();
+      // Warning-tier (rank >= 4) unlocks the water-data panels; a Watch shows on the banner only.
+      if (floodRank[flood.properties.event] >= 4) {
+        fetchRainAccum();
+        fetchRiverGauge();
+      } else {
+        document.getElementById("rainAccumBar").style.display = "none";
+        document.getElementById("riverGaugeBar").style.display = "none";
+      }
     } else {
       floodBar.style.display = "none";
       document.getElementById("rainAccumBar").style.display = "none";

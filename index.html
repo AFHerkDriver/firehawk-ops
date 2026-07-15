@@ -6812,10 +6812,16 @@ function SARModal({
           const r = await fetch(WX + "/?url=" + encodeURIComponent("https://api.weather.gov/alerts/active?zone=TXZ205,TXC029"));
           if (!r.ok) return;
           const data = await r.json();
-          const floodTypes = ["Flood Warning","Flash Flood Warning","Flood Watch","Flash Flood Watch","Flash Flood Statement"];
-          const hit = (data.features || []).find(x => x && x.properties && floodTypes.indexOf(x.properties.event) !== -1);
+          const floodRank = { "Flash Flood Warning":5, "Flood Warning":4, "Flash Flood Watch":3, "Flood Watch":2, "Flash Flood Statement":1 };
+          // Pick by explicit severity, not first-in-feed, so a reissued Watch can never downgrade an
+          // active Warning. Warning-tier (rank >= 4) also unlocks the water-data panels below; a
+          // Watch shows on the banner only.
+          const hit = (data.features || [])
+            .filter(x => x && x.properties && floodRank[x.properties.event])
+            .sort((a, b) => floodRank[b.properties.event] - floodRank[a.properties.event])[0] || null;
           setFloodWarning(hit ? {
             active: true,
+            warning: floodRank[hit.properties.event] >= 4,
             event: hit.properties.event,
             ends: hit.properties.ends ? new Date(hit.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) : "further notice",
             updated: new Date().toISOString()
@@ -6856,7 +6862,7 @@ function SARModal({
       { id: "162", label: "Station 162 · Sandy Oaks (District 6)",  lat: 29.1680, lon: -98.2980 }
     ];
     useEffect(() => {   // observed past-6hr + forecast next-6hr rain, per station — only fetched while a flood alert is active
-      if (!(floodWarning && floodWarning.active)) { setRainAccum(null); return; }
+      if (!(floodWarning && floodWarning.warning)) { setRainAccum(null); return; }
       let cancelled = false;
       // precipitation unit codes look like "wmoUnit:m" / "wmoUnit:mm" — match the suffix exactly
       // (a substring search for "m" would false-match inside "wmoUnit" itself). Unrecognized units
@@ -6950,7 +6956,7 @@ function SARModal({
       };
       f(); const t = setInterval(f, 1800000);
       return () => { cancelled = true; clearInterval(t); };
-    }, [floodWarning && floodWarning.active]);
+    }, [floodWarning && floodWarning.warning]);
 
     // River stage gauges (NOAA National Water Prediction Service) — actual observed river
     // stage against official NWS flood-category thresholds (action/minor/moderate/major),
@@ -6970,7 +6976,7 @@ function SARModal({
       { lid: "ELMT2", label: "San Antonio River at Elmendorf (mutual aid)", short: "SA River \u00B7 Elmendorf" }
     ];
     useEffect(() => {
-      if (!(floodWarning && floodWarning.active)) { setRiverGauge(null); return; }
+      if (!(floodWarning && floodWarning.warning)) { setRiverGauge(null); return; }
       let cancelled = false;
       // NWPS uses -9999 as a sentinel for "threshold not defined for this gauge" — must be
       // treated as absent, not as a real negative-9999-foot flood stage.
@@ -7060,7 +7066,7 @@ function SARModal({
       };
       f(); const t = setInterval(f, 1800000);
       return () => { cancelled = true; clearInterval(t); };
-    }, [floodWarning && floodWarning.active]);
+    }, [floodWarning && floodWarning.warning]);
 
     const me        = crew.find(c => c.id === authId && !c.archived) || null;  // archived members are locked out; unarchive restores access (PIN preserved)
     const tier      = me ? me.tier : null;                  // "owner" | "admin" | "staff" | null
@@ -7287,7 +7293,7 @@ function SARModal({
         (floodWarning && floodWarning.active) ? wxBanner("\uD83D\uDEA7", floodWarning.event ? floodWarning.event.toUpperCase() : "FLOOD WARNING",
           "Bexar County · until " + floodWarning.ends, "#4A90D9",
           "linear-gradient(135deg,rgba(74,144,217,0.20),rgba(0,80,180,0.10))", "rgba(74,144,217,0.5)", "NWS" + (fmtWxTime(floodWarning.updated) ? " · " + fmtWxTime(floodWarning.updated) : "")) : null,
-        (floodWarning && floodWarning.active) ? (() => {
+        (floodWarning && floodWarning.warning) ? (() => {
           const p = rainAccum && rainAccum.worstPast, n = rainAccum && rainAccum.worstNext;
           const pv = p ? p.past.inches : -1, nv = n ? n.next.inches : -1;
           const digest = (p || n) ? (pv >= nv ? { label: p.label, value: pv, kind: "observed" } : { label: n.label, value: nv, kind: "forecast" }) : null;
@@ -7334,7 +7340,7 @@ function SARModal({
               ) : null
             ) : null);
         })() : null,
-        (floodWarning && floodWarning.active) ? (() => {
+        (floodWarning && floodWarning.warning) ? (() => {
           const trendLabel = { normal:"Normal Flow", rising:"Rising Flow", rapidly_rising:"Rapidly Rising Flow", surging:"Surging", flash:"\u26A0\uFE0F Flash Flood Rise", falling:"Falling", unknown:"Unavailable" };
           const catLabel = { normal:"Normal", action:"Action Stage", minor:"Minor Flood", moderate:"Moderate Flood", major:"Major Flood" };
           const catColor = { normal:"#4ADE80", action:"#FBBF24", minor:"#FB923C", moderate:"#F87171", major:"#DC2626" };
