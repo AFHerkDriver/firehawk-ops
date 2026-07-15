@@ -7544,7 +7544,7 @@ function SARModal({
                 !g.error ? (
                   (g.forecastAvailable && g.forecastPeak)
                     ? h("div", { style:{ fontSize:10, marginTop:1, color: (g.forecastPeak.category && g.forecastPeak.category !== "normal") ? (catColor[g.forecastPeak.category] || C.dim) : C.dim, fontWeight: (g.forecastPeak.category && g.forecastPeak.category !== "normal") ? 700 : 400 } },
-                        "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? "rising to " + catLabel[g.forecastPeak.category] + " " : "peaks ") +
+                        "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? catLabel[g.forecastPeak.category] + " " : "peaks ") +
                         "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + fmtWxTime(g.forecastPeak.validTime))
                     : null
                 ) : null
