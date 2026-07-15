@@ -153,6 +153,16 @@
   </div>
 </div>
 
+<div id="crossingsBar" style="display:none;margin-top:-4px;margin-bottom:8px;padding:8px 12px;border-radius:8px;font-size:11px">
+  <div id="crossingsHeader" onclick="toggleCrossingsPanel()" style="display:flex;align-items:center;justify-content:space-between;gap:4px;cursor:pointer">
+    <span id="crossingsDigest">🚧 loading…</span>
+    <span id="crossingsChevron" style="color:#8B949E;font-size:10px">▼ expand</span>
+  </div>
+  <div id="crossingsBody" style="display:none;margin-top:4px">
+    <div id="crossingsRows"></div>
+  </div>
+</div>
+
 <div id="burnBanBar" class="banner" style="display:none;background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.4)">
   <div style="display:flex;align-items:center;gap:10px;min-width:0">
     <span style="font-size:16px;flex-shrink:0">🔥</span>
@@ -398,14 +408,17 @@ async function fetchRainAccum() {
     (worstNext.next.partial ? " <span style='color:#8B949E'>(partial \u2014 " + worstNext.next.coveragePct + "% of window)</span>" : "") +
     (worstNext.next.unitIssue ? " <span style='color:#8B949E' title='Forecast precipitation unit was unrecognized'>\u26A0</span>" : "");
 
-  document.getElementById("rainBreakdown").innerHTML = results.map(r =>
-    "<div style='display:flex;align-items:baseline;gap:6px;font-size:10px;color:#9FC5E8'>" +
-      "<span style='flex-shrink:0;min-width:20px;font-weight:700;font-size:8px;letter-spacing:0.5px;color:" + (r.dist === "D6" ? "#FFB27A" : "#6EA8FF") + "'>" + (r.dist || "") + "</span>" +
-      "<span style='flex:0 0 auto;white-space:nowrap'>" + r.label + "</span>" +
-      "<span style='flex-shrink:0;white-space:nowrap'>" + (r.past.error ? "past: n/a" : "past: " + r.past.inches.toFixed(2) + "in") + "&nbsp;&nbsp;\u00B7&nbsp;&nbsp;" +
-                 (r.next.error ? "next: n/a" : "next: " + r.next.inches.toFixed(2) + "in") + "</span>" +
-    "</div>"
-  ).join("");
+  document.getElementById("rainBreakdown").innerHTML =
+    "<div style='display:grid;grid-template-columns:22px 90px 1fr 1fr;gap:10px;font-size:8px;letter-spacing:0.5px;color:#8B949E;padding-bottom:2px;border-bottom:1px solid #30363D'>" +
+      "<span></span><span>STATION</span><span style='text-align:right'>PAST 6H</span><span style='text-align:right'>NEXT 6H</span></div>" +
+    results.map(r =>
+      "<div style='display:grid;grid-template-columns:22px 90px 1fr 1fr;gap:10px;font-size:10px;color:#9FC5E8;align-items:baseline'>" +
+        "<span style='font-weight:700;font-size:8px;letter-spacing:0.5px;color:" + (r.dist === "D6" ? "#FFB27A" : "#6EA8FF") + "'>" + (r.dist || "") + "</span>" +
+        "<span style='white-space:nowrap'>" + r.label + "</span>" +
+        "<span style='text-align:right;white-space:nowrap'>" + (r.past.error ? "n/a" : r.past.inches.toFixed(2) + "in") + "</span>" +
+        "<span style='text-align:right;white-space:nowrap'>" + (r.next.error ? "n/a" : r.next.inches.toFixed(2) + "in") + "</span>" +
+      "</div>"
+    ).join("");
 
   const t = new Date().toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"});
   document.getElementById("rainUpdated").textContent = t;
@@ -418,14 +431,14 @@ async function fetchRainAccum() {
 // panel since they're adjacent/relevant regardless, but labeled so it's clear in the field.
 // Medina River chain ordered upstream-to-downstream: Medina Lake -> La Coste -> Macdona.
 const RIVER_GAUGES = [
-  { lid: "gcct2", label: "Culebra Creek near Helotes (District 7)", short: "Culebra Creek", home: true },
-  { lid: "LECT2", label: "Leon Creek at Loop 410 near Leon Valley", short: "Leon Creek" },
-  { lid: "MDLT2", label: "Medina River near Medina Lake (Medina County)", short: "Medina \u00B7 Medina Lk" },
-  { lid: "LACT2", label: "Medina River near La Coste (Medina County)", short: "Medina \u00B7 La Coste" },
-  { lid: "MMDT2", label: "Medina River near Macdona (District 5)", short: "Medina \u00B7 Macdona" },
-  { lid: "SMMT2", label: "Medina River near Somerset (District 5)", short: "Medina \u00B7 Somerset" },
-  { lid: "SAAT2", label: "Medina River at San Antonio US 281S (upstream of District 6)", short: "Medina \u00B7 San Antonio" },
-  { lid: "ELMT2", label: "San Antonio River at Elmendorf (District 10)", short: "SA River \u00B7 Elmendorf" }
+  { lid: "gcct2", dist: "D7", label: "Culebra Creek near Helotes (District 7)", short: "Culebra Creek", home: true },
+  { lid: "MDLT2", dist: "Med Co", label: "Medina River near Medina Lake (Medina County)", short: "Medina \u00B7 Medina Lk" },
+  { lid: "LACT2", dist: "Med Co", label: "Medina River near La Coste (Medina County)", short: "Medina \u00B7 La Coste" },
+  { lid: "MMDT2", dist: "D5", label: "Medina River near Macdona (District 5)", short: "Medina \u00B7 Macdona" },
+  { lid: "SMMT2", dist: "D5", label: "Medina River near Somerset (District 5)", short: "Medina \u00B7 Somerset" },
+  { lid: "SAAT2", dist: "D6", label: "Medina River at San Antonio US 281S (upstream of District 6)", short: "Medina \u00B7 San Antonio" },
+  { lid: "SNPT2", dist: "", label: "San Antonio River at Loop 410 (upstream of Elmendorf)", short: "SA River \u00B7 Loop 410" },
+  { lid: "ELMT2", dist: "D10", label: "San Antonio River at Elmendorf (District 10)", short: "SA River \u00B7 Elmendorf" }
 ];
 function categorizeStage(stage, cats) {
   // NWPS uses -9999 as a sentinel for "threshold not defined for this gauge" — treat as absent,
@@ -496,6 +509,12 @@ function toggleRiverPanel() {
   document.getElementById("riverBody").style.display = riverExpanded ? "block" : "none";
   document.getElementById("riverChevron").textContent = riverExpanded ? "\u25B2 collapse" : "\u25BC expand";
 }
+let crossingsExpanded = false;
+function toggleCrossingsPanel() {
+  crossingsExpanded = !crossingsExpanded;
+  document.getElementById("crossingsBody").style.display = crossingsExpanded ? "block" : "none";
+  document.getElementById("crossingsChevron").textContent = crossingsExpanded ? "\u25B2 collapse" : "\u25BC expand";
+}
 const TREND_LABEL = { normal:"Normal Flow", rising:"Rising Flow", rapidly_rising:"Rapidly Rising Flow", surging:"Surging", flash:"\u26A0\uFE0F Flash Flood Rise", falling:"Falling", unknown:"Unavailable" };
 const TREND_COLOR = { normal:"#4ADE80", rising:"#FBBF24", rapidly_rising:"#F87171", surging:"#F97316", flash:"#DC2626", falling:"#60A5FA", unknown:"#8B949E" };
 async function fetchRiverGauge() {
@@ -512,6 +531,8 @@ async function fetchRiverGauge() {
     ? catLabel[g.category] + " \u00B7 " + (TREND_LABEL[g.trend] || "")
     : (TREND_LABEL[g.trend] || "Unavailable");
   const colorFor = (g) => (g.trend === "flash" || g.trend === "surging") ? (TREND_COLOR[g.trend] || "#8B949E") : (g.category && g.category !== "normal") ? (catColor[g.category] || "#8B949E") : (TREND_COLOR[g.trend] || "#8B949E");
+  const compactDelta = (d) => { if (!d) return ""; const sign = d.deltaFt >= 0 ? "+" : ""; const win = d.hrs < 1 ? Math.round(d.hrs * 60) + "m" : d.hrs.toFixed(1) + "h"; return sign + d.deltaFt.toFixed(2) + " (" + win + ")"; };
+  const compactStatus = (g) => (g.category && g.category !== "normal") ? catLabel[g.category] : (g.trend === "flash" ? "Flash Flood Rise" : g.trend === "surging" ? "Surging" : "");
   const results = await Promise.all(RIVER_GAUGES.map(async (g) => {
     try {
       const meta = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid)).then(r => r.json());
@@ -530,9 +551,9 @@ async function fetchRiverGauge() {
       const stage = latest ? latest.primary : null;
       const { trend, ratePerHr } = classifyTrend(readings);
       const delta = lastReadingDelta(readings);
-      return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorizeStage(stage, cats), trend, riseRate: ratePerHr, delta, error: false };
+      return { lid: g.lid, dist: g.dist, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorizeStage(stage, cats), trend, riseRate: ratePerHr, delta, error: false };
     } catch (e) {
-      return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", riseRate: null, delta: null, error: true };
+      return { lid: g.lid, dist: g.dist, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", riseRate: null, delta: null, error: true };
     }
   }));
 
@@ -558,13 +579,28 @@ async function fetchRiverGauge() {
     document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A \u2B50 <b>" + leon.short + "</b>: <span style='color:" + colorFor(leon) + ";font-weight:700'>" + labelFor(leon) + "</span>" + formatDelta(leon.delta);
   }
 
-  document.getElementById("riverGaugeRows").innerHTML = results.map(g => {
-    const valStr = (g.error || g.stage == null)
-      ? "<span style='color:#8B949E'>data unavailable</span>"
-      : "<b>" + g.stage.toFixed(2) + " ft</b> \u00B7 <span style='color:" + colorFor(g) + ";font-weight:700'>" + labelFor(g) + "</span>" + formatDelta(g.delta);
-    return "<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px'>" +
-      "<span>" + ((leon && g.lid === leon.lid) ? "\u2B50 " : "") + g.label + ": " + valStr + "</span></div>";
-  }).join("");
+  document.getElementById("riverGaugeRows").innerHTML =
+    "<div style='display:flex;flex-wrap:wrap;gap:3px 12px;font-size:9px;color:#8B949E;margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid #30363D'>" +
+      [["normal","Normal"],["rising","Rising"],["rapidly_rising","Rapidly"],["surging","Surging"],["flash","Flash"]].map(kv =>
+        "<span style='display:inline-flex;align-items:center;gap:3px'><span style='color:" + TREND_COLOR[kv[0]] + "'>\u25CF</span>" + kv[1] + "</span>").join("") +
+    "</div>" +
+    results.map(g => {
+      const stale = g.validTime && (Date.now() - new Date(g.validTime).getTime()) > 25 * 60000;
+      const rt = g.validTime ? new Date(g.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) : "";
+      const stats = (g.error || g.stage == null)
+        ? "<span style='color:#8B949E'>data unavailable</span>"
+        : "<span style='display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap'>" +
+            "<b>" + g.stage.toFixed(2) + " ft</b>" +
+            "<span style='color:" + colorFor(g) + ";font-size:9px'>\u25CF</span>" +
+            (compactStatus(g) ? "<span style='color:" + colorFor(g) + ";font-weight:700'>" + compactStatus(g) + "</span>" : "") +
+            "<span style='color:#8B949E;font-size:10px'>" + compactDelta(g.delta) + "</span>" +
+            (rt ? "<span style='color:" + (stale ? "#FFC107" : "#8B949E") + ";font-size:9px'>" + (stale ? "\u26A0 " : "") + rt + "</span>" : "") +
+          "</span>";
+      return "<div style='display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:3px;font-size:11px'>" +
+        "<span style='flex:1 1 130px;min-width:0'>" + ((leon && g.lid === leon.lid) ? "\u2B50 " : "") + (g.short || g.label) + (g.dist ? "<span style='color:#8B949E;font-size:9px'> " + g.dist + "</span>" : "") + "</span>" +
+        stats +
+      "</div>";
+    }).join("");
 }
 
 // Fetch Red Flag Warning status
@@ -592,12 +628,59 @@ async function fetchRedFlag() {
   } catch(e) {}
 }
 
+async function fetchCrossings() {
+  const bar = document.getElementById("crossingsBar");
+  const CX_URL = "https://api.bexarflood.org/api/sensors/GetAll";
+  const CX_RADIUS_MI = 7;
+  const wx = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
+  const distMi = (la1, lo1, la2, lo2) => { const x = (lo2 - lo1) * Math.cos((la1 + la2) / 2 * Math.PI / 180), y = (la2 - la1); return Math.sqrt(x * x + y * y) * 69.0; };
+  const CROSSINGS_WATCH = { "2311":"D2", "2325":"D2", "2322":"D2", "2321":"D2", "2308":"D6", "2561":"D6", "2580":"D6", "2377":"D6" };   // named priority crossings — always monitored (even Open / outside radius)
+  const inAO = (c) => CROSSINGS_WATCH[String(c.id)] !== undefined;   // watch-only: exactly the Program Manager's named in-district crossings, no radius neighbors
+  const _cxWatchDist = (c) => { let best = "", bd = Infinity; RAIN_STATIONS.forEach(s => { const d = distMi(c.lat, c.lng, s.lat, s.lon); if (d < bd) { bd = d; best = s.dist; } }); return best; };
+  const grab = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); };
+  let data = null;
+  try { data = await grab(wx + encodeURIComponent(CX_URL)); } catch (e1) { try { data = await grab(CX_URL); } catch (e2) { data = null; } }
+  bar.style.display = "block";
+  if (!Array.isArray(data)) {
+    bar.style.background = "rgba(255,194,0,0.08)"; bar.style.border = "1px solid rgba(255,194,0,0.35)"; bar.style.color = "#FFC107";
+    document.getElementById("crossingsDigest").innerHTML = "\uD83D\uDEA7 <b>Low-Water Crossings</b> \u2014 data unavailable";
+    document.getElementById("crossingsRows").innerHTML = "";
+    return;
+  }
+  const CX_COLOR = { 1:"#FE0000", 2:"#98CD00", 3:"#808080", 4:"#FFC200" };
+  const CX_LABEL = { 1:"CLOSED", 2:"Open", 3:"OFFLINE", 4:"CAUTION" };
+  const cxRank = { 1:0, 4:1, 3:2, 2:3 };   // worst first: Closed, Caution, Inactive/offline, Open
+  const ao = data.filter(c => c && c.lat != null && c.lng != null && c.statusTypeID != null && inAO(c)).map(c => ({ id:c.id, title:c.title || "Unnamed crossing", status:c.statusTypeID, updated:c.lastUpdated || null, watch: CROSSINGS_WATCH[String(c.id)] !== undefined, dist: CROSSINGS_WATCH[String(c.id)] || _cxWatchDist(c) }));
+  const closed = ao.filter(c => c.status === 1).length, caution = ao.filter(c => c.status === 4).length, offline = ao.filter(c => c.status === 3).length, openN = ao.filter(c => c.status === 2).length;
+  const alarm = closed > 0 || caution > 0;
+  const warnActive = document.getElementById("floodBar").style.display !== "none";
+  const parts = []; if (closed) parts.push(closed + " CLOSED"); if (caution) parts.push(caution + " Caution");
+  const digest = alarm ? (parts.join(" \u00B7 ") + " near you") : (ao.length ? ("All " + ao.length + " crossings open near you" + (offline ? " \u00B7 " + offline + " offline" : "")) : "No monitored crossings in range");
+  bar.style.background = alarm ? "rgba(254,0,0,0.08)" : "rgba(152,205,0,0.05)";
+  bar.style.border = "1px solid " + (alarm ? "rgba(254,0,0,0.35)" : "rgba(152,205,0,0.25)");
+  bar.style.color = alarm ? "#FF8A8A" : "#B9D66B";
+  document.getElementById("crossingsDigest").innerHTML = "\uD83D\uDEA7 <b>Low-Water Crossings</b> \u2014 " + digest;
+  const show = ao.filter(c => c.status !== 2 || c.watch).sort((a, b) => (cxRank[a.status] - cxRank[b.status]) || (b.watch - a.watch) || String(a.title).localeCompare(String(b.title)));
+  const openOther = ao.filter(c => c.status === 2 && !c.watch).length;
+  const fmt = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }); } catch (e) { return ""; } };
+  const isStale = (c) => warnActive && c.status !== 2 && c.status !== 3 && c.updated && ((Date.now() - new Date(c.updated).getTime()) / 60000 > 120);
+  let rows = show.length ? show.map(c =>
+    "<div style='display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:2px'>" +
+      "<span style='flex:1 1 160px;min-width:0'>" + (c.dist ? "<span style='color:" + (c.dist === "D6" ? "#FFB27A" : "#6EA8FF") + ";font-weight:700;font-size:8px;margin-right:4px'>" + c.dist + "</span>" : "") + "<span style='color:" + (CX_COLOR[c.status] || "#8B949E") + ";font-weight:700'>\u25CF " + (CX_LABEL[c.status] || "?") + "</span> " + c.title + "</span>" +
+      "<span style='flex-shrink:0;color:" + (isStale(c) ? "#FFC107" : "#8B949E") + ";font-size:9px'>" + (c.updated ? fmt(c.updated) : "") + (isStale(c) ? " \u26A0" : "") + "</span>" +
+    "</div>").join("") : "<div style='color:#8B949E;margin-top:2px'>No monitored crossings in range.</div>";
+  rows += "<div style='color:#8B949E;font-size:9px;margin-top:3px'>" + ((openOther ? openOther + " other open nearby" : "") + " \u00B7 Bexar County HALT") + "</div>";
+  document.getElementById("crossingsRows").innerHTML = rows;
+}
+
 fetchBurnBan();
 fetchRedFlag();
 fetchFlood();
+fetchCrossings();
 setInterval(fetchBurnBan, 3600000);
 setInterval(fetchRedFlag, 1800000);
-setInterval(fetchFlood, 1800000);
+setInterval(fetchFlood, 300000);
+setInterval(fetchCrossings, 300000);
 
 const CREW = [
   {id:1,name:"Sanchez",  role:"RPIC",color:"#4A90D9",initials:"AS"},
