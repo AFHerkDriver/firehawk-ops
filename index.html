@@ -6780,6 +6780,9 @@ function SARModal({
     const [riverGauge, setRiverGauge]     = useState(null);   // NWPS river stage + flood category, fetched only while a flood alert is active
     const [rainExpanded, setRainExpanded]   = useState(false);   // both panels start collapsed (digest view)
     const [riverExpanded, setRiverExpanded] = useState(false);
+    const [rfHourly, setRfHourly]           = useState(null);   // hourly fire weather (temp/RH/wind), fetched only while a Red Flag Warning is active
+    const [rfHourlyErr, setRfHourlyErr]     = useState(false);
+    const [rfExpanded, setRfExpanded]       = useState(false);   // hourly strip starts collapsed (digest view)
     const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2200); };
 
     // ── 4.1 access control: PIN → role detection (remember-login via localStorage) ──
@@ -6822,13 +6825,35 @@ function SARModal({
       f(); const t = setInterval(f, 1800000); return () => clearInterval(t);
     }, []);
 
+    useEffect(() => {   // hourly fire weather (temp / RH / wind) — only fetched while a Red Flag Warning is active
+      if (!(redFlag && redFlag.active)) { setRfHourly(null); setRfHourlyErr(false); return; }
+      let cancelled = false;
+      const PT = { lat: 29.4547, lon: -98.7553 };   // Station 121 Central (Talley) — district-representative point
+      const gj = async (u) => { const r = await fetch(WX + "/?url=" + encodeURIComponent(u)); if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); };
+      const load = async () => {
+        try {
+          const pt = await gj("https://api.weather.gov/points/" + PT.lat + "," + PT.lon);
+          const hUrl = pt && pt.properties && pt.properties.forecastHourly;
+          if (!hUrl) throw new Error("no forecastHourly");
+          const hf = await gj(hUrl);
+          const per = hf && hf.properties && hf.properties.periods;
+          if (!Array.isArray(per) || !per.length) throw new Error("no periods");
+          if (!cancelled) { setRfHourly(per.slice(0, 12)); setRfHourlyErr(false); }
+        } catch (e) { if (!cancelled) { setRfHourly(null); setRfHourlyErr(true); } }
+      };
+      load(); const t = setInterval(load, 1800000);
+      return () => { cancelled = true; clearInterval(t); };
+    }, [redFlag && redFlag.active]);
+
     const RAIN_STATIONS = [   // District 2 coverage — BC2FD stations, ordered 120-125
       { id: "120", label: "Station 120 · Spurs Ranch", lat: 29.3921, lon: -98.7099 },
       { id: "121", label: "Station 121 · Central (Talley)", lat: 29.4547, lon: -98.7553 },
       { id: "122", label: "Station 122 · Old Talley",  lat: 29.5052, lon: -98.7823 },
       { id: "123", label: "Station 123 · Marbach",     lat: 29.4049, lon: -98.7026 },
       { id: "124", label: "Station 124 · Omicron",     lat: 29.4134, lon: -98.7859 },
-      { id: "125", label: "Station 125 · Roft",        lat: 29.4958, lon: -98.7446 }
+      { id: "125", label: "Station 125 · Roft",        lat: 29.4958, lon: -98.7446 },
+      { id: "161", label: "Station 161 · S Loop 1604 (District 6)", lat: 29.2200, lon: -98.3400 },
+      { id: "162", label: "Station 162 · Sandy Oaks (District 6)",  lat: 29.1680, lon: -98.2980 }
     ];
     useEffect(() => {   // observed past-6hr + forecast next-6hr rain, per station — only fetched while a flood alert is active
       if (!(floodWarning && floodWarning.active)) { setRainAccum(null); return; }
@@ -6935,11 +6960,14 @@ function SARModal({
     // regardless, but labeled so it's clear in the field. Medina River chain ordered
     // upstream-to-downstream: Medina Lake -> La Coste -> Macdona.
     const RIVER_GAUGES = [
-      { lid: "gcct2", label: "Culebra Creek near Helotes (District 7)" },
-      { lid: "LECT2", label: "Leon Creek at Loop 410 near Leon Valley", priority: true },
-      { lid: "MDLT2", label: "Medina River near Medina Lake (Medina County)" },
-      { lid: "LACT2", label: "Medina River near La Coste (Medina County)" },
-      { lid: "MMDT2", label: "Medina River near Macdona (District 5)" }
+      { lid: "gcct2", label: "Culebra Creek near Helotes (District 7)", short: "Culebra Creek", home: true },
+      { lid: "LECT2", label: "Leon Creek at Loop 410 near Leon Valley", short: "Leon Creek" },
+      { lid: "MDLT2", label: "Medina River near Medina Lake (Medina County)", short: "Medina \u00B7 Medina Lk" },
+      { lid: "LACT2", label: "Medina River near La Coste (Medina County)", short: "Medina \u00B7 La Coste" },
+      { lid: "MMDT2", label: "Medina River near Macdona (District 5)", short: "Medina \u00B7 Macdona" },
+      { lid: "SMMT2", label: "Medina River near Somerset (District 5)", short: "Medina \u00B7 Somerset" },
+      { lid: "SAAT2", label: "Medina River at San Antonio US 281S (upstream of District 6)", short: "Medina \u00B7 San Antonio" },
+      { lid: "ELMT2", label: "San Antonio River at Elmendorf (mutual aid)", short: "SA River \u00B7 Elmendorf" }
     ];
     useEffect(() => {
       if (!(floodWarning && floodWarning.active)) { setRiverGauge(null); return; }
@@ -7010,9 +7038,9 @@ function SARModal({
           const stage = latest ? latest.primary : null;
           const { trend } = classifyTrend(readings);
           const delta = lastReadingDelta(readings);
-          return { lid: g.lid, label: g.label, priority: !!g.priority, stage, category: categorize(stage, cats), trend, delta, validTime: latest ? latest.validTime : null, error: false };
+          return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorize(stage, cats), trend, delta, validTime: latest ? latest.validTime : null, error: false };
         } catch (e) {
-          return { lid: g.lid, label: g.label, priority: !!g.priority, stage: null, category: null, trend: "unknown", delta: null, error: true };
+          return { lid: g.lid, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", delta: null, error: true };
         }
       };
       const f = async () => {
@@ -7195,6 +7223,53 @@ function SARModal({
         (redFlag && redFlag.active) ? wxBanner("\uD83D\uDEA9", "RED FLAG WARNING", "Extreme fire weather conditions", C.red,
           "linear-gradient(135deg,rgba(255,59,48,0.20),rgba(180,0,0,0.10))", "rgba(255,59,48,0.5)",
           "NWS" + (fmtWxTime(redFlag.updated) ? " · " + fmtWxTime(redFlag.updated) : "")) : null,
+
+        // 7.1b hourly fire-weather strip — shows only during an active Red Flag Warning (ported from Wildland Ops)
+        (redFlag && redFlag.active) ? (() => {
+          // Fire behavior is driven by RH and wind; temp stays neutral. Missing/unparseable never fakes a green.
+          const rhHue   = (v)  => v == null ? C.dim : v <= 20 ? C.red : v <= 30 ? C.amber : C.green;
+          const windHiOf = (s) => { const n = String(s || "").match(/\d+/g); return n && n.length ? Math.max.apply(null, n.map(Number)) : null; };  // high end of "10 to 15 mph"
+          const windHue = (hi) => hi == null ? C.dim : hi >= 25 ? C.red : hi >= 15 ? C.amber : C.green;
+          // worst upcoming hour = highest fire-weather severity (RH + wind), tiebreak lowest RH then highest wind
+          let worst = null;
+          (rfHourly || []).forEach(p => {
+            const rh = (p.relativeHumidity && p.relativeHumidity.value != null) ? p.relativeHumidity.value : null;
+            const hi = windHiOf(p.windSpeed);
+            const rhS = rh == null ? 0 : rh <= 20 ? 2 : rh <= 30 ? 1 : 0;
+            const wS  = hi == null ? 0 : hi >= 25 ? 2 : hi >= 15 ? 1 : 0;
+            const cand = { p, rh, score: rhS + wS, rhLow: rh == null ? 999 : rh, windHi: hi == null ? -1 : hi };
+            if (!worst || cand.score > worst.score || (cand.score === worst.score && (cand.rhLow < worst.rhLow || (cand.rhLow === worst.rhLow && cand.windHi > worst.windHi)))) worst = cand;
+          });
+          const digest = worst ? (new Date(worst.p.startTime).toLocaleTimeString("en-US", { hour:"numeric" }) + " — " + (worst.rh == null ? "—" : worst.rh + "% RH") + " · " + (worst.p.windSpeed || "—") + " " + (worst.p.windDirection || "")) : null;
+          return h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:"rgba(255,59,48,0.06)", border:"1px solid rgba(255,59,48,0.28)", fontSize:11, color:"#FF9B94", display:"flex", flexDirection:"column", gap:6 } },
+            h("div", { onClick: () => setRfExpanded(v => !v), style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:4, cursor:"pointer" } },
+              h("span", null, "\uD83D\uDD25 ",
+                rfHourlyErr
+                  ? h("span", { style:{ color:C.dim } }, "Hourly data unavailable")
+                  : !rfHourly
+                    ? h("span", { style:{ color:C.dim } }, "loading\u2026")
+                    : !digest
+                      ? h("span", { style:{ color:C.dim } }, "Hourly data unavailable")
+                      : h("span", null, h("span", { style:{ fontWeight:700 } }, "Peak fire wx "), digest)),
+              h("span", { style:{ fontSize:10, color:C.dim } }, rfExpanded ? "\u25B2" : "\u25BC")),
+            rfExpanded ? (
+              (rfHourlyErr || !rfHourly || !rfHourly.length)
+                ? h("div", { style:{ fontSize:10, color:C.amber } }, "HOURLY DATA UNAVAILABLE \u2014 verify at weather.gov")
+                : h("div", { style:{ display:"flex", overflowX:"auto", gap:6, paddingBottom:4 } },
+                    rfHourly.map((p, i) => {
+                      const rhv = (p.relativeHumidity && p.relativeHumidity.value != null) ? p.relativeHumidity.value : null;
+                      const rhH = rhHue(rhv);
+                      const wHi = windHiOf(p.windSpeed);
+                      const wH  = windHue(wHi);
+                      return h("div", { key:i, style:{ flex:"1 0 56px", minWidth:56, textAlign:"center", background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:"7px 4px" } },
+                        h("div", { style:{ fontSize:9, color:C.dim } }, new Date(p.startTime).toLocaleTimeString("en-US", { hour:"numeric" })),
+                        h("div", { style:{ fontSize:13, fontWeight:700, marginTop:2, color:C.text } }, p.temperature + "\u00B0"),
+                        h("div", { style:{ fontSize:10, fontWeight:700, color:rhH, marginTop:2 } }, rhv == null ? "\u2014" : rhv + "%"),
+                        h("div", { style:{ fontSize:8, fontWeight: (wH === C.red || wH === C.amber) ? 700 : 400, color:wH, marginTop:2 } }, (p.windSpeed || "\u2014") + " " + (p.windDirection || "")));
+                    }))
+            ) : null);
+        })() : null,
+
         (burnBan && burnBan.underBan) ? wxBanner("\uD83D\uDD25", "BURN BAN IN EFFECT", "Unincorporated Bexar County", C.accent,
           "linear-gradient(135deg,rgba(255,107,53,0.16),rgba(204,32,32,0.10))", "rgba(255,107,53,0.4)",
           "TFS" + (fmtWxTime(burnBan.updated) ? " · " + fmtWxTime(burnBan.updated) : "")) : null,
@@ -7267,26 +7342,41 @@ function SARModal({
             const period = Math.abs(delta.hrs - 1) < 0.25 ? "last hr" : "over " + delta.hrs.toFixed(1) + "h";
             return " (" + sign + delta.deltaFt.toFixed(2) + " ft " + period + ")";
           };
-          const leon = riverGauge && riverGauge.gauges && riverGauge.gauges.find(g => g.priority);
+          // Headline = worst-condition gauge. Flood category outranks flow trend (category is the
+          // safety-critical fact); Culebra ("home", closest to our response area) wins a true tie,
+          // so it leads by default unless another gauge is strictly more severe.
+          const catRank   = { major:5, moderate:4, minor:3, action:2, normal:0 };
+          const trendRank = { rapidly_rising:3, rising:2, normal:1, falling:0, unknown:0 };
+          const sevOf  = (g) => (!g || g.error || g.stage == null) ? -1 : (catRank[g.category] || 0) * 10 + (trendRank[g.trend] || 0);
+          const rateOf = (g) => (g && g.delta && g.delta.hrs) ? g.delta.deltaFt / g.delta.hrs : 0;
+          const headline = (riverGauge && riverGauge.gauges && riverGauge.gauges.length)
+            ? riverGauge.gauges.reduce((best, g) => {
+                if (!best) return g;
+                const sg = sevOf(g), sb = sevOf(best);
+                if (sg !== sb) return sg > sb ? g : best;
+                if (!!g.home !== !!best.home) return g.home ? g : best;
+                return rateOf(g) > rateOf(best) ? g : best;
+              }, null)
+            : null;
           return h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:"rgba(74,144,217,0.08)", border:"1px solid rgba(74,144,217,0.3)", fontSize:11, color:"#9FC5E8", display:"flex", flexDirection:"column", gap:4 } },
             h("div", { onClick: () => setRiverExpanded(v => !v), style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:4, cursor:"pointer" } },
               h("span", null,
                 "\uD83C\uDF0A ",
                 !riverGauge
                   ? h("span", { style:{ color:C.dim } }, "loading\u2026")
-                  : !leon
+                  : !headline
                     ? h("span", { style:{ color:C.dim } }, "River data unavailable")
-                    : h(React.Fragment, null, "\u2B50 ", h("b", null, "Leon Creek"), ": ",
-                        leon.error || leon.stage == null
+                    : h(React.Fragment, null, "\u2B50 ", h("b", null, headline.short || headline.label), ": ",
+                        headline.error || headline.stage == null
                           ? h("span", { style:{ color:C.dim } }, "data unavailable")
                           : h(React.Fragment, null,
-                              h("span", { style:{ color:colorFor(leon), fontWeight:700 } }, labelFor(leon)),
-                              formatDelta(leon.delta)))),
+                              h("span", { style:{ color:colorFor(headline), fontWeight:700 } }, labelFor(headline)),
+                              formatDelta(headline.delta)))),
               h("span", { style:{ color:C.dim, fontSize:10 } }, riverExpanded ? "\u25B2 collapse" : "\u25BC expand")),
             riverExpanded ? h(React.Fragment, null,
               !riverGauge ? null : riverGauge.gauges.map(g => h("div", { key:g.lid, style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
                 h("span", null,
-                  (g.priority ? "\u2B50 " : ""), "River Stage \u2014 " + g.label + ": ",
+                  ((headline && g.lid === headline.lid) ? "\u2B50 " : ""), "River Stage \u2014 " + g.label + ": ",
                   g.error || g.stage == null
                     ? h("span", { style:{ color:C.dim } }, "data unavailable")
                     : h(React.Fragment, null,
