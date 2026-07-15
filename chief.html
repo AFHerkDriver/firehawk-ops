@@ -537,14 +537,14 @@ async function fetchRiverGauge() {
   const compactStatus = (g) => (g.category && g.category !== "normal") ? catLabel[g.category] : (g.trend === "flash" ? "Flash Flood Rise" : g.trend === "surging" ? "Surging" : "");
   const results = await Promise.all(RIVER_GAUGES.map(async (g) => {
     try {
-      const meta = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid)).then(r => r.json());
+      const meta = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid) + "&_cb=" + Date.now(), { cache: "no-store" }).then(r => r.json());
       const cats = {
         action: meta && meta.flood && meta.flood.categories && meta.flood.categories.action ? meta.flood.categories.action.stage : null,
         minor: meta && meta.flood && meta.flood.categories && meta.flood.categories.minor ? meta.flood.categories.minor.stage : null,
         moderate: meta && meta.flood && meta.flood.categories && meta.flood.categories.moderate ? meta.flood.categories.moderate.stage : null,
         major: meta && meta.flood && meta.flood.categories && meta.flood.categories.major ? meta.flood.categories.major.stage : null
       };
-      const obs = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid + "/stageflow/observed")).then(r => r.json());
+      const obs = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid + "/stageflow/observed") + "&_cb=" + Date.now(), { cache: "no-store" }).then(r => r.json());
       const readings = (obs && obs.data) || [];
       let latest = null;
       for (let i = readings.length - 1; i >= 0; i--) {

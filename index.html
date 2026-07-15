@@ -7049,14 +7049,14 @@ function SARModal({
       };
       const fetchGauge = async (g) => {
         try {
-          const meta = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid))).json();
+          const meta = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid) + "&_cb=" + Date.now(), { cache: "no-store" })).json();
           const cats = {
             action: meta && meta.flood && meta.flood.categories && meta.flood.categories.action ? meta.flood.categories.action.stage : null,
             minor: meta && meta.flood && meta.flood.categories && meta.flood.categories.minor ? meta.flood.categories.minor.stage : null,
             moderate: meta && meta.flood && meta.flood.categories && meta.flood.categories.moderate ? meta.flood.categories.moderate.stage : null,
             major: meta && meta.flood && meta.flood.categories && meta.flood.categories.major ? meta.flood.categories.major.stage : null
           };
-          const obs = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid + "/stageflow/observed"))).json();
+          const obs = await (await fetch(WX + "/?url=" + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid + "/stageflow/observed") + "&_cb=" + Date.now(), { cache: "no-store" })).json();
           const readings = (obs && obs.data) || [];
           // Readings are chronological; take the most recent VALID one (NWPS uses <= -990 for missing).
           let latest = null;
