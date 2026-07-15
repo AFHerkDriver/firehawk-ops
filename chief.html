@@ -114,6 +114,17 @@
   </div>
 </div>
 
+<div id="disasterBar" class="banner" style="display:none;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.5)">
+  <div style="display:flex;align-items:center;gap:10px;min-width:0">
+    <span style="font-size:16px;flex-shrink:0">⚠️</span>
+    <div style="min-width:0">
+      <div id="disasterEvent" style="font-size:11px;font-weight:700;color:#F59E0B;letter-spacing:1.5px">REGIONAL DISASTER WATCH</div>
+      <div id="disasterEnds" style="font-size:9px;color:#8B949E;letter-spacing:0.5px;margin-top:1px">Bexar County</div>
+    </div>
+  </div>
+  <div id="disasterTime" style="font-size:8px;color:#8B949E;letter-spacing:0.5px;flex-shrink:0;text-align:right"></div>
+</div>
+
 <div id="floodBar" class="banner" style="display:none;background:rgba(74,144,217,0.1);border:1px solid rgba(74,144,217,0.35)">
   <div style="display:flex;align-items:center;gap:10px;min-width:0">
     <span style="font-size:16px;flex-shrink:0">🚧</span>
@@ -125,12 +136,21 @@
   <div id="floodTime" style="font-size:8px;color:#8B949E;letter-spacing:0.5px;flex-shrink:0;text-align:right"></div>
 </div>
 
-<div id="rainAccumBar" style="display:none;margin-top:-4px;margin-bottom:8px;padding:8px 12px;border-radius:8px;background:rgba(74,144,217,0.08);border:1px solid rgba(74,144,217,0.3);font-size:11px;color:#9FC5E8">
-  <div id="rainHeader" onclick="toggleRainPanel()" style="display:flex;align-items:center;justify-content:space-between;gap:4px;cursor:pointer">
-    <span id="rainDigest">💧 loading…</span>
-    <span id="rainChevron" style="color:#8B949E;font-size:10px">▼ expand</span>
+<div id="eroBar" style="display:none;border-radius:10px;padding:9px 13px;margin-bottom:10px">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+    <div style="font-size:11px;font-weight:700;color:#8B949E;letter-spacing:1px">🌧️ EXCESSIVE RAINFALL OUTLOOK · WPC</div>
+    <div id="eroDays" style="display:flex"></div>
   </div>
-  <div id="rainBody" style="display:none;margin-top:4px">
+  <div id="eroNote" style="font-size:10px;color:#8B949E;margin-top:4px"></div>
+</div>
+
+<div id="floodDataBar" style="display:none;margin-top:-4px;margin-bottom:8px;padding:8px 12px;border-radius:8px;background:rgba(74,144,217,0.08);border:1px solid rgba(74,144,217,0.3);font-size:11px;color:#9FC5E8">
+  <div id="floodDataHeader" onclick="toggleFloodDataPanel()" style="display:flex;align-items:center;justify-content:space-between;gap:4px;cursor:pointer">
+    <span id="floodDataDigest">🌊 <b>Flood Conditions</b> — loading…</span>
+    <span id="floodDataChevron" style="color:#8B949E;font-size:10px;flex-shrink:0">▼ expand</span>
+  </div>
+  <div id="floodDataBody" style="display:none;margin-top:4px">
+    <div style="font-size:9px;color:#8B949E;letter-spacing:1px;margin-bottom:2px">💧 RAINFALL</div>
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
       <span>💧 Past 6h (worst): <span id="rainPastVal">loading…</span></span>
     </div>
@@ -140,25 +160,11 @@
     </div>
     <div style="margin-top:4px;color:#8B949E;font-size:10px">Per-station breakdown — 8 stations</div>
     <div id="rainBreakdown" style="margin-top:4px;display:flex;flex-direction:column;gap:3px"></div>
-  </div>
-</div>
 
-<div id="riverGaugeBar" style="display:none;margin-top:-4px;margin-bottom:8px;padding:8px 12px;border-radius:8px;background:rgba(74,144,217,0.08);border:1px solid rgba(74,144,217,0.3);font-size:11px;color:#9FC5E8">
-  <div id="riverHeader" onclick="toggleRiverPanel()" style="display:flex;align-items:center;justify-content:space-between;gap:4px;cursor:pointer">
-    <span id="riverDigest">🌊 loading…</span>
-    <span id="riverChevron" style="color:#8B949E;font-size:10px">▼ expand</span>
-  </div>
-  <div id="riverBody" style="display:none;margin-top:4px">
+    <div style="font-size:9px;color:#8B949E;letter-spacing:1px;margin-top:8px;margin-bottom:2px;padding-top:6px;border-top:1px solid #30363D">🌊 RIVER LEVELS</div>
     <div id="riverGaugeRows"></div>
-  </div>
-</div>
 
-<div id="crossingsBar" style="display:none;margin-top:-4px;margin-bottom:8px;padding:8px 12px;border-radius:8px;font-size:11px">
-  <div id="crossingsHeader" onclick="toggleCrossingsPanel()" style="display:flex;align-items:center;justify-content:space-between;gap:4px;cursor:pointer">
-    <span id="crossingsDigest">🚧 loading…</span>
-    <span id="crossingsChevron" style="color:#8B949E;font-size:10px">▼ expand</span>
-  </div>
-  <div id="crossingsBody" style="display:none;margin-top:4px">
+    <div id="crossingsSectionLabel" style="font-size:9px;color:#8B949E;letter-spacing:1px;margin-top:8px;margin-bottom:2px;padding-top:6px;border-top:1px solid #30363D">🚧 LOW-WATER CROSSINGS</div>
     <div id="crossingsRows"></div>
   </div>
 </div>
@@ -202,6 +208,42 @@ async function fetchBurnBan() {
   } catch(e) {}
 }
 
+// WPC Excessive Rainfall Outlook — Day 1/2/3 flash-flood risk forecast, proactive (shown regardless
+// of any active alert). District-representative point: Station 121 Central (Talley).
+async function fetchEro() {
+  try {
+    const workerBase = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
+    const EROLABEL = { "1":"MRGL", "2":"SLGT", "3":"MDT", "4":"HIGH", "MRGL":"MRGL", "SLGT":"SLGT", "MDT":"MDT", "HIGH":"HIGH" };
+    const PT = { lat: 29.4547, lon: -98.7553 };
+    const qUrl = (layer) => "https://mapservices.weather.noaa.gov/vector/rest/services/hazards/wpc_precip_hazards/MapServer/" + layer +
+      "/query?geometry=" + PT.lon + "," + PT.lat + "&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=outlook,issue_time&f=json";
+    const days = await Promise.all([0, 1, 2].map(layer =>
+      fetch(workerBase + encodeURIComponent(qUrl(layer)) + "&_cb=" + Date.now(), { cache: "no-store" }).then(r => r.json()).catch(() => null)
+    ));
+    const parsed = days.map((d, i) => {
+      const feat = d && d.features && d.features[0];
+      const raw = feat && feat.attributes && feat.attributes.outlook;
+      const code = raw != null ? (EROLABEL[String(raw)] || null) : null;
+      return { day: i + 1, code };
+    });
+    const eroColor = { MRGL:"#FBBF24", SLGT:"#F97316", MDT:"#F87171", HIGH:"#DC2626" };
+    const order = { MRGL:1, SLGT:2, MDT:3, HIGH:4 };
+    const worst = parsed.reduce((best, d) => { if (!d.code) return best; if (!best || order[d.code] > order[best.code]) return d; return best; }, null);
+    const elevated = worst && (worst.code === "MDT" || worst.code === "HIGH");
+    const bar = document.getElementById("eroBar");
+    bar.style.background = elevated ? "rgba(220,38,38,0.08)" : "rgba(74,144,217,0.06)";
+    bar.style.border = "1px solid " + (elevated ? "rgba(220,38,38,0.35)" : "#30363D");
+    document.getElementById("eroDays").innerHTML = parsed.map(d =>
+      "<span style='font-size:11px;font-weight:700;color:" + (d.code ? (eroColor[d.code] || "#8B949E") : "#8B949E") + ";margin-left:10px'>D" + d.day + " " + (d.code || "\u2014") + "</span>"
+    ).join("");
+    document.getElementById("eroNote").innerHTML = elevated
+      ? ((worst.code === "HIGH" ? "High risk" : "Moderate risk") + " of excessive rainfall forecast Day " + worst.day + " \u2014 " +
+         (worst.code === "HIGH" ? "widespread flash flooding possible" : "numerous flash floods likely") + ". Not yet an active NWS alert \u2014 a heads-up ahead of one.")
+      : "";
+    bar.style.display = "block";
+  } catch (e) {}
+}
+
 // Fetch flood warnings
 async function fetchFlood() {
   try {
@@ -213,29 +255,55 @@ async function fetchFlood() {
     const flood = (alertData.features || [])
       .filter(f => f && f.properties && floodRank[f.properties.event])
       .sort((a, b) => floodRank[b.properties.event] - floodRank[a.properties.event])[0] || null;
+
+    // Regional Disaster Watch — any Extreme-severity NWS alert that ISN'T already a flood event
+    // (flood has its own banner above). Extreme is NWS's own top severity tier — catch-all for
+    // tornado, extreme wind, extreme heat, etc. — a mutual-aid heads-up signal.
+    const disaster = (alertData.features || [])
+      .filter(f => f && f.properties && f.properties.severity === "Extreme" && !floodRank[f.properties.event])
+      .sort((a, b) => new Date(b.properties.effective || 0) - new Date(a.properties.effective || 0))[0] || null;
+    const disasterBar = document.getElementById("disasterBar");
+    if (disaster) {
+      document.getElementById("disasterEvent").textContent = disaster.properties.event.toUpperCase();
+      const dEnds = disaster.properties.ends
+        ? new Date(disaster.properties.ends).toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"})
+        : "Until further notice";
+      document.getElementById("disasterEnds").textContent = (disaster.properties.areaDesc || "BEXAR COUNTY").toUpperCase() + " \u00B7 " + dEnds;
+      document.getElementById("disasterTime").textContent = "NWS";
+      disasterBar.style.display = "flex";
+    } else {
+      disasterBar.style.display = "none";
+    }
+
     const floodBar = document.getElementById("floodBar");
     if (flood) {
-      document.getElementById("floodEvent").textContent = flood.properties.event.toUpperCase();
+      // Official NWS impact-based-warning tag — a human forecaster's judgment call, only present on
+      // Flash Flood Warnings when there's credible evidence of Considerable/Catastrophic damage. Far
+      // more authoritative than any rate-of-rise math we could compute ourselves.
+      const damageThreat = (flood.properties.parameters && flood.properties.parameters.flashFloodDamageThreat && flood.properties.parameters.flashFloodDamageThreat[0]) || null;
+      document.getElementById("floodEvent").textContent = flood.properties.event.toUpperCase() + (damageThreat ? " \u2014 " + damageThreat : "");
+      document.getElementById("floodEvent").style.color = damageThreat ? "#FF3B30" : "#4A90D9";
+      floodBar.style.background = damageThreat ? "rgba(255,59,48,0.15)" : "rgba(74,144,217,0.1)";
+      floodBar.style.border = "1px solid " + (damageThreat ? "rgba(255,59,48,0.6)" : "rgba(74,144,217,0.35)");
       const ends = flood.properties.ends
         ? new Date(flood.properties.ends).toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"})
         : "Until further notice";
       document.getElementById("floodEnds").textContent = "BEXAR COUNTY \u00B7 " + ends;
       document.getElementById("floodTime").textContent = "NWS";
       floodBar.style.display = "flex";
-      fetchCrossings();   // coupled to the banner — refreshes on the 5-min fetchFlood cycle while an alert is active
-      // Warning-tier (rank >= 4) unlocks the water-data panels; a Watch shows on the banner only.
+      // Warning-tier (rank >= 4) unlocks the merged Flood Conditions panel — rain, river, AND
+      // crossings all only really matter once there's an actual Warning, not just a Watch.
       if (floodRank[flood.properties.event] >= 4) {
+        document.getElementById("floodDataBar").style.display = "block";
         fetchRainAccum();
         fetchRiverGauge();
+        fetchCrossings();
       } else {
-        document.getElementById("rainAccumBar").style.display = "none";
-        document.getElementById("riverGaugeBar").style.display = "none";
+        document.getElementById("floodDataBar").style.display = "none";
       }
     } else {
       floodBar.style.display = "none";
-      document.getElementById("crossingsBar").style.display = "none";
-      document.getElementById("rainAccumBar").style.display = "none";
-      document.getElementById("riverGaugeBar").style.display = "none";
+      document.getElementById("floodDataBar").style.display = "none";
     }
   } catch(e) {}
 }
@@ -320,7 +388,6 @@ async function fetchOneStationRain(st, workerBase) {
 
   return { id: st.id, label: st.label, dist: st.dist, past, next };
 }
-let rainExpanded = false;
 let rfHourlyExpanded = false;
 function toggleRfHourlyPanel() {
   rfHourlyExpanded = !rfHourlyExpanded;
@@ -368,15 +435,26 @@ async function fetchRfHourly() {
     }).join("");
   } catch (e) { fail(); }
 }
-function toggleRainPanel() {
-  rainExpanded = !rainExpanded;
-  document.getElementById("rainBody").style.display = rainExpanded ? "block" : "none";
-  document.getElementById("rainChevron").textContent = rainExpanded ? "\u25B2 collapse" : "\u25BC expand";
+let floodDataExpanded = false;
+function toggleFloodDataPanel() {
+  floodDataExpanded = !floodDataExpanded;
+  document.getElementById("floodDataBody").style.display = floodDataExpanded ? "block" : "none";
+  document.getElementById("floodDataChevron").textContent = floodDataExpanded ? "\u25B2 collapse" : "\u25BC expand";
+}
+// Each sub-section (rain/river/crossings) sets its own digest text + alarm flag here, then this
+// combines all three into one master header line so the merged panel never shows a stale digest
+// from whichever section fetched last.
+window.__floodDigests = { rain: "loading\u2026", river: "loading\u2026", crossings: "loading\u2026" };
+window.__floodAlarm = false;
+function renderFloodMasterDigest() {
+  const d = window.__floodDigests;
+  const parts = [d.rain, d.river, d.crossings].filter(Boolean);
+  document.getElementById("floodDataDigest").innerHTML = "\uD83C\uDF0A <b>Flood Conditions</b> \u2014 " + parts.join(" \u00B7 ");
+  const bar = document.getElementById("floodDataBar");
+  bar.style.background = window.__floodAlarm ? "rgba(254,0,0,0.06)" : "rgba(74,144,217,0.08)";
+  bar.style.border = "1px solid " + (window.__floodAlarm ? "rgba(254,0,0,0.3)" : "rgba(74,144,217,0.3)");
 }
 async function fetchRainAccum() {
-  const bar = document.getElementById("rainAccumBar");
-  bar.style.display = "block";
-  document.getElementById("rainDigest").textContent = "\uD83D\uDCA7 loading\u2026";
   document.getElementById("rainPastVal").textContent = "loading\u2026";
   document.getElementById("rainNextVal").textContent = "loading\u2026";
   document.getElementById("rainBreakdown").innerHTML = "";
@@ -394,11 +472,12 @@ async function fetchRainAccum() {
   // associated station" for the collapsed one-line summary.
   const pv = worstPast ? worstPast.past.inches : -1, nv = worstNext ? worstNext.next.inches : -1;
   if (!worstPast && !worstNext) {
-    document.getElementById("rainDigest").innerHTML = "\uD83D\uDCA7 <span style='color:#8B949E'>Rain data unavailable</span>";
+    window.__floodDigests.rain = "Rain data unavailable";
   } else {
     const d = pv >= nv ? { label: worstPast.label, value: pv, kind: "observed" } : { label: worstNext.label, value: nv, kind: "forecast" };
-    document.getElementById("rainDigest").innerHTML = "\uD83D\uDCA7 <b>Increased Rainfall</b> \u2014 " + d.label + " (" + d.value.toFixed(2) + " in " + d.kind + ")";
+    window.__floodDigests.rain = d.value.toFixed(2) + " in " + d.kind + " \u2014 " + d.label;
   }
+  renderFloodMasterDigest();
 
   document.getElementById("rainPastVal").innerHTML = !worstPast ? "<span style='color:#8B949E'>data unavailable</span>" :
     "<b>" + worstPast.past.inches.toFixed(2) + " in</b> \u00B7 " + worstPast.label +
@@ -433,14 +512,17 @@ async function fetchRainAccum() {
 // panel since they're adjacent/relevant regardless, but labeled so it's clear in the field.
 // Medina River chain ordered upstream-to-downstream: Medina Lake -> La Coste -> Macdona.
 const RIVER_GAUGES = [
-  { lid: "gcct2", dist: "D7", label: "Culebra Creek near Helotes (District 7)", short: "Culebra Creek", home: true },
-  { lid: "MDLT2", dist: "Med Co", label: "Medina River near Medina Lake (Medina County)", short: "Medina \u00B7 Medina Lk" },
-  { lid: "LACT2", dist: "Med Co", label: "Medina River near La Coste (Medina County)", short: "Medina \u00B7 La Coste" },
-  { lid: "MMDT2", dist: "D5", label: "Medina River near Macdona (District 5)", short: "Medina \u00B7 Macdona" },
-  { lid: "SMMT2", dist: "D5", label: "Medina River near Somerset (District 5)", short: "Medina \u00B7 Somerset" },
-  { lid: "SAAT2", dist: "D6", label: "Medina River at San Antonio US 281S (upstream of District 6)", short: "Medina \u00B7 San Antonio" },
-  { lid: "SNPT2", dist: "", label: "San Antonio River at Loop 410 (upstream of Elmendorf)", short: "SA River \u00B7 Loop 410" },
-  { lid: "ELMT2", dist: "D10", label: "San Antonio River at Elmendorf (District 10)", short: "SA River \u00B7 Elmendorf" }
+  // kind: creeks/small streams respond fast with small absolute stage — a smaller ft/hr rise means a lot.
+  // Large rivers respond slower with bigger absolute swings — the same ft/hr matters less. Two separate
+  // rate ladders in classifyTrend reflect that.
+  { lid: "gcct2", dist: "D7", kind: "creek", label: "Culebra Creek near Helotes (District 7)", short: "Culebra Creek", home: true },
+  { lid: "MDLT2", dist: "Med Co", kind: "river", label: "Medina River near Medina Lake (Medina County)", short: "Medina \u00B7 Medina Lk" },
+  { lid: "LACT2", dist: "Med Co", kind: "river", label: "Medina River near La Coste (Medina County)", short: "Medina \u00B7 La Coste" },
+  { lid: "MMDT2", dist: "D5", kind: "river", label: "Medina River near Macdona (District 5)", short: "Medina \u00B7 Macdona" },
+  { lid: "SMMT2", dist: "D5", kind: "river", label: "Medina River near Somerset (District 5)", short: "Medina \u00B7 Somerset" },
+  { lid: "SAAT2", dist: "D6", kind: "river", label: "Medina River at San Antonio US 281S (upstream of District 6)", short: "Medina \u00B7 San Antonio" },
+  { lid: "SNPT2", dist: "", kind: "river", label: "San Antonio River at Loop 410 (upstream of Elmendorf)", short: "SA River \u00B7 Loop 410" },
+  { lid: "ELMT2", dist: "D10", kind: "river", label: "San Antonio River at Elmendorf (District 10)", short: "SA River \u00B7 Elmendorf" }
 ];
 function categorizeStage(stage, cats) {
   // NWPS uses -9999 as a sentinel for "threshold not defined for this gauge" — treat as absent,
@@ -457,7 +539,7 @@ function categorizeStage(stage, cats) {
 // reading for a stable rate estimate, rather than comparing to the immediately-prior reading
 // (which can be noisy). Thresholds (ft/hr) are a reasonable heuristic, not an official NWS
 // standard — adjust here if field experience says otherwise.
-function classifyTrend(readings) {
+function classifyTrend(readings, kind) {
   const valid = (readings || []).filter(r => r && r.primary != null && r.primary > -990 && r.validTime);
   if (valid.length < 2) return { trend: "unknown", ratePerHr: null };
   const latest = valid[valid.length - 1];
@@ -479,12 +561,20 @@ function classifyTrend(readings) {
   const rates = [rateOver(2), rateOver(0.75)].filter(r => r != null);
   if (!rates.length) return { trend: "unknown", ratePerHr: null };
   const rate = Math.max.apply(null, rates);
-  // ft/hr thresholds — heuristic, not an official NWS standard. Tune from field experience.
+  // ft/hr thresholds — our own heuristic, NOT an official NWS standard (confirmed: NOAA has no
+  // published rate-of-rise scale; their only official measures are flood-stage category and the
+  // human-judgment flashFloodDamageThreat tag on warnings, both used elsewhere in this app).
+  // Two ladders by waterway kind: a creek's channel is small, so a modest absolute ft/hr rise is
+  // already a big relative jump; a large river needs a bigger absolute rise to mean the same thing.
+  const isCreek = kind === "creek";
+  const t = isCreek
+    ? { rising:0.1, rapidly:0.3, surging:0.75, flash:1.5 }
+    : { rising:0.1, rapidly:0.5, surging:2.0,  flash:4.0 };
   let trend;
-  if (rate >= 4.0) trend = "flash";
-  else if (rate >= 2.0) trend = "surging";
-  else if (rate >= 0.5) trend = "rapidly_rising";
-  else if (rate >= 0.1) trend = "rising";
+  if (rate >= t.flash) trend = "flash";
+  else if (rate >= t.surging) trend = "surging";
+  else if (rate >= t.rapidly) trend = "rapidly_rising";
+  else if (rate >= t.rising) trend = "rising";
   else if (rate <= -0.3) trend = "falling";
   else trend = "normal";
   return { trend, ratePerHr: rate };
@@ -505,24 +595,9 @@ function formatDelta(delta) {
   const period = Math.abs(delta.hrs - 1) < 0.25 ? "last hr" : delta.hrs < 1 ? "last " + Math.round(delta.hrs * 60) + " min" : "over " + delta.hrs.toFixed(1) + "h";
   return " (" + sign + delta.deltaFt.toFixed(2) + " ft " + period + ")";
 }
-let riverExpanded = false;
-function toggleRiverPanel() {
-  riverExpanded = !riverExpanded;
-  document.getElementById("riverBody").style.display = riverExpanded ? "block" : "none";
-  document.getElementById("riverChevron").textContent = riverExpanded ? "\u25B2 collapse" : "\u25BC expand";
-}
-let crossingsExpanded = false;
-function toggleCrossingsPanel() {
-  crossingsExpanded = !crossingsExpanded;
-  document.getElementById("crossingsBody").style.display = crossingsExpanded ? "block" : "none";
-  document.getElementById("crossingsChevron").textContent = crossingsExpanded ? "\u25B2 collapse" : "\u25BC expand";
-}
 const TREND_LABEL = { normal:"Normal Flow", rising:"Rising Flow", rapidly_rising:"Rapidly Rising Flow", surging:"Surging", flash:"\u26A0\uFE0F Flash Flood Rise", falling:"Falling", unknown:"Unavailable" };
 const TREND_COLOR = { normal:"#4ADE80", rising:"#FBBF24", rapidly_rising:"#F87171", surging:"#F97316", flash:"#DC2626", falling:"#60A5FA", unknown:"#8B949E" };
 async function fetchRiverGauge() {
-  const bar = document.getElementById("riverGaugeBar");
-  bar.style.display = "block";
-  document.getElementById("riverDigest").textContent = "\uD83C\uDF0A loading\u2026";
   document.getElementById("riverGaugeRows").innerHTML = "<div>\uD83C\uDF0A River Stage: <span style='color:#8B949E'>loading\u2026</span></div>";
   const workerBase = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
   const catColor = { normal:"#4ADE80", action:"#FBBF24", minor:"#FB923C", moderate:"#F87171", major:"#DC2626" };
@@ -551,11 +626,26 @@ async function fetchRiverGauge() {
         if (readings[i] && readings[i].primary != null && readings[i].primary > -990) { latest = readings[i]; break; }
       }
       const stage = latest ? latest.primary : null;
-      const { trend, ratePerHr } = classifyTrend(readings);
+      const { trend, ratePerHr } = classifyTrend(readings, g.kind);
       const delta = lastReadingDelta(readings);
-      return { lid: g.lid, dist: g.dist, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorizeStage(stage, cats), trend, riseRate: ratePerHr, delta, error: false };
+      // Official NWS river forecast (separate product, same endpoint family). NOT every gauge has
+      // one — RFCs don't forecast every location (e.g. Culebra Creek has no valid rating curve and
+      // NWPS itself shows "forecast unavailable"). Failure here never affects the observed reading
+      // above — degrades to "no forecast," never a guess.
+      let forecastPeak = null, forecastAvailable = false;
+      try {
+        const fc = await fetch(workerBase + encodeURIComponent("https://api.water.noaa.gov/nwps/v1/gauges/" + g.lid + "/stageflow/forecast") + "&_cb=" + Date.now(), { cache: "no-store" }).then(r => r.json());
+        const fReadings = (fc && fc.data) || [];
+        const validF = fReadings.filter(r => r && r.primary != null && r.primary > -990 && r.validTime);
+        if (validF.length) {
+          forecastAvailable = true;
+          const peak = validF.reduce((a, b) => (b.primary > a.primary ? b : a));
+          forecastPeak = { stage: peak.primary, validTime: peak.validTime, category: categorizeStage(peak.primary, cats) };
+        }
+      } catch (eF) { /* forecast unavailable — leave forecastAvailable false, never fake it */ }
+      return { lid: g.lid, dist: g.dist, label: g.label, short: g.short || g.label, home: !!g.home, stage, category: categorizeStage(stage, cats), trend, riseRate: ratePerHr, delta, validTime: latest ? latest.validTime : null, forecastPeak, forecastAvailable, error: false };
     } catch (e) {
-      return { lid: g.lid, dist: g.dist, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", riseRate: null, delta: null, error: true };
+      return { lid: g.lid, dist: g.dist, label: g.label, short: g.short || g.label, home: !!g.home, stage: null, category: null, trend: "unknown", riseRate: null, delta: null, forecastPeak: null, forecastAvailable: false, error: true };
     }
   }));
 
@@ -574,12 +664,13 @@ async function fetchRiverGauge() {
     return rateOf(g) > rateOf(best) ? g : best;
   }, null) : null;
   if (!leon) {
-    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A <span style='color:#8B949E'>River data unavailable</span>";
+    window.__floodDigests.river = "River data unavailable";
   } else if (leon.error || leon.stage == null) {
-    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A <b>" + leon.short + "</b>: <span style='color:#8B949E'>data unavailable</span>";
+    window.__floodDigests.river = "<b>" + leon.short + "</b>: <span style='color:#8B949E'>data unavailable</span>";
   } else {
-    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A <b>" + leon.short + "</b>: <span style='color:" + colorFor(leon) + ";font-weight:700'>" + labelFor(leon) + "</span>" + formatDelta(leon.delta);
+    window.__floodDigests.river = "<b>" + leon.short + "</b>: <span style='color:" + colorFor(leon) + ";font-weight:700'>" + labelFor(leon) + "</span>" + formatDelta(leon.delta);
   }
+  renderFloodMasterDigest();
 
   document.getElementById("riverGaugeRows").innerHTML =
     "<div style='display:flex;flex-wrap:wrap;gap:3px 12px;font-size:9px;color:#8B949E;margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid #30363D'>" +
@@ -598,9 +689,18 @@ async function fetchRiverGauge() {
             "<span style='color:#8B949E;font-size:10px'>" + compactDelta(g.delta) + "</span>" +
             (rt ? "<span style='color:" + (stale ? "#FFC107" : "#8B949E") + ";font-size:9px'>" + (stale ? "\u26A0 " : "") + rt + "</span>" : "") +
           "</span>";
-      return "<div style='display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:3px;font-size:11px'>" +
-        "<span style='flex:1 1 130px;min-width:0'>" + (g.short || g.label) + (g.dist ? "<span style='color:#8B949E;font-size:9px'> " + g.dist + "</span>" : "") + "</span>" +
-        stats +
+      return "<div style='margin-bottom:3px'>" +
+        "<div style='display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:11px'>" +
+          "<span style='flex:1 1 130px;min-width:0'>" + (g.short || g.label) + (g.dist ? "<span style='color:#8B949E;font-size:9px'> " + g.dist + "</span>" : "") + "</span>" +
+          stats +
+        "</div>" +
+        (!g.error ? (
+          (g.forecastAvailable && g.forecastPeak)
+            ? "<div style='font-size:10px;margin-top:1px;color:" + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? (catColor[g.forecastPeak.category] || "#8B949E") : "#8B949E") + ";font-weight:" + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? "700" : "400") + "'>" +
+              "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? "rising to " + catLabel[g.forecastPeak.category] + " " : "peaks ") +
+              "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + new Date(g.forecastPeak.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) + "</div>"
+            : "<div style='font-size:10px;margin-top:1px;color:#8B949E'>No official forecast for this gauge</div>"
+        ) : "") +
       "</div>";
     }).join("");
 }
@@ -631,7 +731,6 @@ async function fetchRedFlag() {
 }
 
 async function fetchCrossings() {
-  const bar = document.getElementById("crossingsBar");
   const CX_URL = "https://api.bexarflood.org/api/sensors/GetAll";
   const CX_RADIUS_MI = 7;
   const wx = "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=";
@@ -642,11 +741,11 @@ async function fetchCrossings() {
   const grab = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); };
   let data = null;
   try { data = await grab(wx + encodeURIComponent(CX_URL)); } catch (e1) { try { data = await grab(CX_URL); } catch (e2) { data = null; } }
-  bar.style.display = "block";
   if (!Array.isArray(data)) {
-    bar.style.background = "rgba(255,194,0,0.08)"; bar.style.border = "1px solid rgba(255,194,0,0.35)"; bar.style.color = "#FFC107";
-    document.getElementById("crossingsDigest").innerHTML = "\uD83D\uDEA7 <b>Low-Water Crossings</b> \u2014 data unavailable";
+    window.__floodDigests.crossings = "<span style='color:#FFC107'>Low-Water Crossings data unavailable</span>";
+    window.__floodAlarm = window.__floodAlarm || false;
     document.getElementById("crossingsRows").innerHTML = "";
+    renderFloodMasterDigest();
     return;
   }
   const CX_COLOR = { 1:"#FE0000", 2:"#98CD00", 3:"#808080", 4:"#FFC200" };
@@ -657,11 +756,10 @@ async function fetchCrossings() {
   const alarm = closed > 0 || caution > 0;
   const warnActive = document.getElementById("floodBar").style.display !== "none";
   const parts = []; if (closed) parts.push(closed + " CLOSED"); if (caution) parts.push(caution + " Caution");
-  const digest = alarm ? (parts.join(" \u00B7 ") + " near you") : (ao.length ? ("All " + ao.length + " crossings open near you" + (offline ? " \u00B7 " + offline + " offline" : "")) : "No monitored crossings in range");
-  bar.style.background = alarm ? "rgba(254,0,0,0.08)" : "rgba(74,144,217,0.08)";
-  bar.style.border = "1px solid " + (alarm ? "rgba(254,0,0,0.35)" : "rgba(74,144,217,0.3)");
-  bar.style.color = alarm ? "#FF8A8A" : "#9FC5E8";
-  document.getElementById("crossingsDigest").innerHTML = "\uD83D\uDEA7 <b>Low-Water Crossings</b> \u2014 " + digest;
+  const digest = alarm ? (parts.join(" \u00B7 ") + " near you") : (ao.length ? ("All " + ao.length + " open near you" + (offline ? " \u00B7 " + offline + " offline" : "")) : "No monitored crossings in range");
+  window.__floodDigests.crossings = digest;
+  window.__floodAlarm = alarm;
+  renderFloodMasterDigest();
   const dr = (d) => d === "D2" ? 0 : d === "D6" ? 1 : 9;   // group by district: D2 first, then D6
   const show = ao.filter(c => c.status !== 2 || c.watch).sort((a, b) => (dr(a.dist) - dr(b.dist)) || (cxRank[a.status] - cxRank[b.status]) || String(a.title).localeCompare(String(b.title)));
   const openOther = ao.filter(c => c.status === 2 && !c.watch).length;
@@ -679,9 +777,11 @@ async function fetchCrossings() {
 fetchBurnBan();
 fetchRedFlag();
 fetchFlood();
+fetchEro();
 setInterval(fetchBurnBan, 3600000);
 setInterval(fetchRedFlag, 1800000);
 setInterval(fetchFlood, 300000);
+setInterval(fetchEro, 10800000);
 
 const CREW = [
   {id:1,name:"Sanchez",  role:"RPIC",color:"#4A90D9",initials:"AS"},
