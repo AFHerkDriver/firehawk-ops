@@ -7084,6 +7084,7 @@ function SARModal({
     // (offline — NEVER treated as safe), 4 Caution. Filtered to within CX_RADIUS_MI of any BC2FD
     // station. Fail-loud: proxy first, direct fallback, and an explicit error state if both fail.
     useEffect(() => {
+      if (!(floodWarning && floodWarning.active)) { setCrossings(null); setCrossingsErr(false); return; }   // coupled to the flood banner — no NWS alert, no crossings
       let cancelled = false;
       const CX_URL = "https://api.bexarflood.org/api/sensors/GetAll";
       const CX_RADIUS_MI = 7;
@@ -7110,8 +7111,7 @@ function SARModal({
         setCrossings(ao);
       };
       run();
-      const ms = (floodWarning && floodWarning.active) ? 300000 : 900000;   // 5 min during any flood alert, else 15 min
-      const t = setInterval(run, ms);
+      const t = setInterval(run, 300000);   // 5 min while a flood alert is active
       return () => { cancelled = true; clearInterval(t); };
     }, [floodWarning && floodWarning.active]);
 
@@ -7464,8 +7464,8 @@ function SARModal({
             ) : null);
         })() : null,
 
-        // 🚧 Low-Water Crossings (Bexar County HALT) — always shown; alarms on Closed/Caution or active warning
-        (() => {
+        // 🚧 Low-Water Crossings (Bexar County HALT) — coupled to the flood banner: shown only during an active NWS flood alert
+        (floodWarning && floodWarning.active) ? (() => {
           if (crossingsErr) return h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:"rgba(255,178,0,0.08)", border:"1px solid rgba(255,178,0,0.35)", fontSize:11, color:C.amber } },
             h("span", null, "\uD83D\uDEA7 ", h("b", null, "Low-Water Crossings"), " \u2014 data unavailable (verify at BexarFlood.org)"));
           if (!crossings) return h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:C.panel2, border:"1px solid "+C.border, fontSize:11, color:C.dim } }, "\uD83D\uDEA7 Low-Water Crossings \u2014 loading\u2026");
@@ -7506,7 +7506,7 @@ function SARModal({
               h("div", { style:{ color:C.dim, fontSize:9, marginTop:3 } },
                 (openOther ? openOther + " other open nearby" : "") + " \u00B7 Bexar County HALT")
             ) : null);
-        })(),
+        })() : null,
 
         // Top nav (Increment 6 shell)
         h("div", { style:{ display:"flex", gap:8, marginBottom:14 } },

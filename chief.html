@@ -222,6 +222,7 @@ async function fetchFlood() {
       document.getElementById("floodEnds").textContent = "BEXAR COUNTY \u00B7 " + ends;
       document.getElementById("floodTime").textContent = "NWS";
       floodBar.style.display = "flex";
+      fetchCrossings();   // coupled to the banner — refreshes on the 5-min fetchFlood cycle while an alert is active
       // Warning-tier (rank >= 4) unlocks the water-data panels; a Watch shows on the banner only.
       if (floodRank[flood.properties.event] >= 4) {
         fetchRainAccum();
@@ -232,6 +233,7 @@ async function fetchFlood() {
       }
     } else {
       floodBar.style.display = "none";
+      document.getElementById("crossingsBar").style.display = "none";
       document.getElementById("rainAccumBar").style.display = "none";
       document.getElementById("riverGaugeBar").style.display = "none";
     }
@@ -676,11 +678,9 @@ async function fetchCrossings() {
 fetchBurnBan();
 fetchRedFlag();
 fetchFlood();
-fetchCrossings();
 setInterval(fetchBurnBan, 3600000);
 setInterval(fetchRedFlag, 1800000);
 setInterval(fetchFlood, 300000);
-setInterval(fetchCrossings, 300000);
 
 const CREW = [
   {id:1,name:"Sanchez",  role:"RPIC",color:"#4A90D9",initials:"AS"},
