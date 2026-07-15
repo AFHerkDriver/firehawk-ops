@@ -228,15 +228,15 @@ async function fetchFlood() {
   } catch(e) {}
 }
 
-const RAIN_STATIONS = [   // District 2 coverage — BC2FD stations, ordered 120-125
-  { id: "120", label: "Station 120 \u00B7 Spurs Ranch", lat: 29.3921, lon: -98.7099 },
-  { id: "121", label: "Station 121 \u00B7 Central (Talley)", lat: 29.4547, lon: -98.7553 },
-  { id: "122", label: "Station 122 \u00B7 Old Talley",  lat: 29.5052, lon: -98.7823 },
-  { id: "123", label: "Station 123 \u00B7 Marbach",     lat: 29.4049, lon: -98.7026 },
-  { id: "124", label: "Station 124 \u00B7 Omicron",     lat: 29.4134, lon: -98.7859 },
-  { id: "125", label: "Station 125 \u00B7 Roft",        lat: 29.4958, lon: -98.7446 },
-  { id: "161", label: "Station 161 \u00B7 S Loop 1604 (District 6)", lat: 29.2200, lon: -98.3400 },
-  { id: "162", label: "Station 162 \u00B7 Sandy Oaks (District 6)",  lat: 29.1680, lon: -98.2980 }
+const RAIN_STATIONS = [   // BC2FD stations — District 2 (12x) and District 6 (16x)
+  { id: "120", label: "Station 120 \u00B7 Spurs Ranch", dist: "D2", lat: 29.3921, lon: -98.7099 },
+  { id: "121", label: "Station 121 \u00B7 Central (Talley)", dist: "D2", lat: 29.4547, lon: -98.7553 },
+  { id: "122", label: "Station 122 \u00B7 Old Talley", dist: "D2", lat: 29.5052, lon: -98.7823 },
+  { id: "123", label: "Station 123 \u00B7 Marbach", dist: "D2", lat: 29.4049, lon: -98.7026 },
+  { id: "124", label: "Station 124 \u00B7 Omicron", dist: "D2", lat: 29.4134, lon: -98.7859 },
+  { id: "125", label: "Station 125 \u00B7 Roft", dist: "D2", lat: 29.4958, lon: -98.7446 },
+  { id: "161", label: "Station 161 \u00B7 S Loop 1604", dist: "D6", lat: 29.2200, lon: -98.3400 },
+  { id: "162", label: "Station 162 \u00B7 Sandy Oaks", dist: "D6", lat: 29.1680, lon: -98.2980 }
 ];
 function rainUnitToInchesFactor(unitCode) {
   const raw = String(unitCode || "");
@@ -306,7 +306,7 @@ async function fetchOneStationRain(st, workerBase) {
     next = { inches: factor != null ? Math.round(total * 100) / 100 : null, partial: coveragePct < 70, coveragePct, unitIssue: factor == null, error: false };
   } catch (eNext) { next = { inches: null, error: true }; }
 
-  return { id: st.id, label: st.label, past, next };
+  return { id: st.id, label: st.label, dist: st.dist, past, next };
 }
 let rainExpanded = false;
 let rfHourlyExpanded = false;
@@ -399,9 +399,10 @@ async function fetchRainAccum() {
     (worstNext.next.unitIssue ? " <span style='color:#8B949E' title='Forecast precipitation unit was unrecognized'>\u26A0</span>" : "");
 
   document.getElementById("rainBreakdown").innerHTML = results.map(r =>
-    "<div style='display:flex;justify-content:space-between;font-size:10px;color:#9FC5E8'>" +
-      "<span>" + r.label + "</span>" +
-      "<span>" + (r.past.error ? "past: n/a" : "past: " + r.past.inches.toFixed(2) + "in") + "&nbsp;&nbsp;\u00B7&nbsp;&nbsp;" +
+    "<div style='display:flex;align-items:baseline;gap:6px;font-size:10px;color:#9FC5E8'>" +
+      "<span style='flex-shrink:0;min-width:20px;font-weight:700;font-size:8px;letter-spacing:0.5px;color:" + (r.dist === "D6" ? "#FFB27A" : "#6EA8FF") + "'>" + (r.dist || "") + "</span>" +
+      "<span style='flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>" + r.label + "</span>" +
+      "<span style='flex-shrink:0;white-space:nowrap'>" + (r.past.error ? "past: n/a" : "past: " + r.past.inches.toFixed(2) + "in") + "&nbsp;&nbsp;\u00B7&nbsp;&nbsp;" +
                  (r.next.error ? "next: n/a" : "next: " + r.next.inches.toFixed(2) + "in") + "</span>" +
     "</div>"
   ).join("");
@@ -486,7 +487,7 @@ function lastReadingDelta(readings) {
 function formatDelta(delta) {
   if (!delta) return "";
   const sign = delta.deltaFt >= 0 ? "+" : "";
-  const period = Math.abs(delta.hrs - 1) < 0.25 ? "last hr" : "over " + delta.hrs.toFixed(1) + "h";
+  const period = Math.abs(delta.hrs - 1) < 0.25 ? "last hr" : delta.hrs < 1 ? "last " + Math.round(delta.hrs * 60) + " min" : "over " + delta.hrs.toFixed(1) + "h";
   return " (" + sign + delta.deltaFt.toFixed(2) + " ft " + period + ")";
 }
 let riverExpanded = false;
@@ -562,7 +563,7 @@ async function fetchRiverGauge() {
       ? "<span style='color:#8B949E'>data unavailable</span>"
       : "<b>" + g.stage.toFixed(2) + " ft</b> \u00B7 <span style='color:" + colorFor(g) + ";font-weight:700'>" + labelFor(g) + "</span>" + formatDelta(g.delta);
     return "<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px'>" +
-      "<span>" + ((leon && g.lid === leon.lid) ? "\u2B50 " : "") + "River Stage \u2014 " + g.label + ": " + valStr + "</span></div>";
+      "<span>" + ((leon && g.lid === leon.lid) ? "\u2B50 " : "") + g.label + ": " + valStr + "</span></div>";
   }).join("");
 }
 

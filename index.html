@@ -6851,15 +6851,15 @@ function SARModal({
       return () => { cancelled = true; clearInterval(t); };
     }, [redFlag && redFlag.active]);
 
-    const RAIN_STATIONS = [   // District 2 coverage — BC2FD stations, ordered 120-125
-      { id: "120", label: "Station 120 · Spurs Ranch", lat: 29.3921, lon: -98.7099 },
-      { id: "121", label: "Station 121 · Central (Talley)", lat: 29.4547, lon: -98.7553 },
-      { id: "122", label: "Station 122 · Old Talley",  lat: 29.5052, lon: -98.7823 },
-      { id: "123", label: "Station 123 · Marbach",     lat: 29.4049, lon: -98.7026 },
-      { id: "124", label: "Station 124 · Omicron",     lat: 29.4134, lon: -98.7859 },
-      { id: "125", label: "Station 125 · Roft",        lat: 29.4958, lon: -98.7446 },
-      { id: "161", label: "Station 161 · S Loop 1604 (District 6)", lat: 29.2200, lon: -98.3400 },
-      { id: "162", label: "Station 162 · Sandy Oaks (District 6)",  lat: 29.1680, lon: -98.2980 }
+    const RAIN_STATIONS = [   // BC2FD stations — District 2 (12x) and District 6 (16x)
+      { id: "120", label: "Station 120 · Spurs Ranch", dist: "D2", lat: 29.3921, lon: -98.7099 },
+      { id: "121", label: "Station 121 · Central (Talley)", dist: "D2", lat: 29.4547, lon: -98.7553 },
+      { id: "122", label: "Station 122 · Old Talley", dist: "D2", lat: 29.5052, lon: -98.7823 },
+      { id: "123", label: "Station 123 · Marbach", dist: "D2", lat: 29.4049, lon: -98.7026 },
+      { id: "124", label: "Station 124 · Omicron", dist: "D2", lat: 29.4134, lon: -98.7859 },
+      { id: "125", label: "Station 125 · Roft", dist: "D2", lat: 29.4958, lon: -98.7446 },
+      { id: "161", label: "Station 161 · S Loop 1604", dist: "D6", lat: 29.2200, lon: -98.3400 },
+      { id: "162", label: "Station 162 · Sandy Oaks", dist: "D6", lat: 29.1680, lon: -98.2980 }
     ];
     useEffect(() => {   // observed past-6hr + forecast next-6hr rain, per station — only fetched while a flood alert is active
       if (!(floodWarning && floodWarning.warning)) { setRainAccum(null); return; }
@@ -7330,9 +7330,10 @@ function SARModal({
                         n.next.unitIssue ? h("span", { style:{ color:C.dim }, title:"Forecast precipitation unit was unrecognized" }, " \u26A0") : null)),
                 (rainAccum && rainAccum.updated && fmtWxTime(rainAccum.updated)) ? h("span", { style:{ color:C.dim, fontSize:9 } }, fmtWxTime(rainAccum.updated)) : null),
               (rainAccum && rainAccum.stations) ? h("div", { style:{ marginTop:4, display:"flex", flexDirection:"column", gap:3 } },
-                rainAccum.stations.map(st => h("div", { key:st.id, style:{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#9FC5E8" } },
-                  h("span", null, st.label),
-                  h("span", null,
+                rainAccum.stations.map(st => h("div", { key:st.id, style:{ display:"flex", alignItems:"baseline", gap:6, fontSize:10, color:"#9FC5E8" } },
+                  h("span", { style:{ flexShrink:0, minWidth:20, fontWeight:700, fontSize:8, letterSpacing:0.5, color: st.dist === "D6" ? "#FFB27A" : "#6EA8FF" } }, st.dist || ""),
+                  h("span", { style:{ flex:1, minWidth:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, st.label),
+                  h("span", { style:{ flexShrink:0, whiteSpace:"nowrap" } },
                     (st.past.error ? "past: n/a" : "past: " + st.past.inches.toFixed(2) + "in") + "  \u00B7  " +
                     (st.next.error ? "next: n/a" : "next: " + st.next.inches.toFixed(2) + "in")
                   )
@@ -7356,7 +7357,7 @@ function SARModal({
           const formatDelta = (delta) => {
             if (!delta) return "";
             const sign = delta.deltaFt >= 0 ? "+" : "";
-            const period = Math.abs(delta.hrs - 1) < 0.25 ? "last hr" : "over " + delta.hrs.toFixed(1) + "h";
+            const period = Math.abs(delta.hrs - 1) < 0.25 ? "last hr" : delta.hrs < 1 ? "last " + Math.round(delta.hrs * 60) + " min" : "over " + delta.hrs.toFixed(1) + "h";
             return " (" + sign + delta.deltaFt.toFixed(2) + " ft " + period + ")";
           };
           // Headline = worst-condition gauge. Flood category outranks flow trend (category is the
@@ -7396,15 +7397,15 @@ function SARModal({
             riverExpanded ? h(React.Fragment, null,
               !riverGauge ? null : riverGauge.gauges.map(g => h("div", { key:g.lid, style:{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 } },
                 h("span", null,
-                  ((headline && g.lid === headline.lid) ? "\u2B50 " : ""), "River Stage \u2014 " + g.label + ": ",
+                  ((headline && g.lid === headline.lid) ? "\u2B50 " : ""), g.label + ": ",
                   g.error || g.stage == null
                     ? h("span", { style:{ color:C.dim } }, "data unavailable")
                     : h(React.Fragment, null,
                         h("b", null, g.stage.toFixed(2) + " ft"),
                         " \u00B7 ",
                         h("span", { style:{ color:colorFor(g), fontWeight:700 } }, labelFor(g)),
-                        formatDelta(g.delta))),
-                (riverGauge.updated && fmtWxTime(riverGauge.updated)) ? h("span", { style:{ color:C.dim, fontSize:9 } }, fmtWxTime(riverGauge.updated)) : null))
+                        formatDelta(g.delta))))),
+              (riverGauge && riverGauge.updated) ? h("div", { style:{ color:C.dim, fontSize:9, marginTop:2 } }, "Updated " + fmtWxTime(riverGauge.updated)) : null
             ) : null);
         })() : null,
 
