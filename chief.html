@@ -702,27 +702,26 @@ async function fetchRiverGauge() {
     results.map(g => {
       const stale = g.validTime && (Date.now() - new Date(g.validTime).getTime()) > 75 * 60000;   // NWPS gauges normally post every 15-90 min; 75 flags genuinely late, not routine cadence
       const rt = g.validTime ? new Date(g.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) : "";
+      const fcHtml = (!g.error && g.forecastAvailable && g.forecastPeak)
+        ? "<span style='font-size:10px;text-align:right;color:" + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? (catColor[g.forecastPeak.category] || "#8B949E") : "#8B949E") + ";font-weight:" + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? "700" : "400") + "'>" +
+            "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? catLabel[g.forecastPeak.category] + " " : "peaks ") +
+            "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + new Date(g.forecastPeak.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) + "</span>"
+        : "";
       const stats = (g.error || g.stage == null)
         ? "<span style='color:#8B949E'>data unavailable</span>"
-        : "<span style='display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap'>" +
-            (compactStatus(g) ? "<span style='color:" + colorFor(g) + ";font-weight:700'>" + compactStatus(g) + "</span>" : "") +
-            "<b>" + g.stage.toFixed(2) + " ft</b>" +
-            "<span style='color:" + colorFor(g) + ";font-size:10px;font-weight:700'>" + compactDelta(g.delta) + "</span>" +
-            (rt ? "<span style='color:" + (stale ? "#FFC107" : "#8B949E") + ";font-size:9px'>" + (stale ? "\u26A0 " : "") + rt + "</span>" : "") +
+        : "<span style='flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:1px'>" +
+            "<span style='display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap'>" +
+              (compactStatus(g) ? "<span style='color:" + colorFor(g) + ";font-weight:700'>" + compactStatus(g) + "</span>" : "") +
+              "<b>" + g.stage.toFixed(2) + " ft</b>" +
+              "<span style='color:" + colorFor(g) + ";font-size:10px;font-weight:700'>" + compactDelta(g.delta) + "</span>" +
+              (rt ? "<span style='color:" + (stale ? "#FFC107" : "#8B949E") + ";font-size:9px'>" + (stale ? "\u26A0 " : "") + rt + "</span>" : "") +
+            "</span>" +
+            fcHtml +
           "</span>";
-      return "<div style='margin-bottom:3px'>" +
-        "<div style='display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:11px'>" +
+      return "<div style='display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:11px;margin-bottom:3px'>" +
           "<span style='flex:1 1 130px;min-width:0'>" + (g.short || g.label) + (g.dist ? "<span style='color:#8B949E;font-size:9px'> " + g.dist + "</span>" : "") + "</span>" +
           stats +
-        "</div>" +
-        (!g.error ? (
-          (g.forecastAvailable && g.forecastPeak)
-            ? "<div style='font-size:10px;margin-top:1px;color:" + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? (catColor[g.forecastPeak.category] || "#8B949E") : "#8B949E") + ";font-weight:" + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? "700" : "400") + "'>" +
-              "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? "rising to " + catLabel[g.forecastPeak.category] + " " : "peaks ") +
-              "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + new Date(g.forecastPeak.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) + "</div>"
-            : ""
-        ) : "") +
-      "</div>";
+        "</div>";
     }).join("");
 }
 

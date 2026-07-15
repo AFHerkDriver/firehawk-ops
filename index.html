@@ -7529,25 +7529,23 @@ function SARModal({
               h("div", { style:{ display:"flex", flexWrap:"wrap", gap:"3px 12px", fontSize:9, color:C.dim, marginBottom:5, paddingBottom:4, borderBottom:"1px solid " + C.border } },
                 [["normal","Normal"],["rising","Rising"],["rapidly_rising","Rapidly"],["surging","Surging"],["flash","Flash"],["falling","Falling"]].map(kv =>
                   h("span", { key:kv[0], style:{ color: trendColor[kv[0]], fontWeight:700 } }, kv[1]))),
-              !riverGauge ? null : riverGauge.gauges.map(g => h("div", { key:g.lid, style:{ display:"flex", flexDirection:"column", marginBottom:3 } },
-                h("div", { style:{ display:"flex", alignItems:"baseline", justifyContent:"space-between", flexWrap:"wrap", gap:6, fontSize:11 } },
+              !riverGauge ? null : riverGauge.gauges.map(g => h("div", { key:g.lid, style:{ display:"flex", alignItems:"baseline", justifyContent:"space-between", flexWrap:"wrap", gap:6, fontSize:11, marginBottom:3 } },
                 h("span", { style:{ flex:"1 1 130px", minWidth:0 } },
                   (g.short || g.label),
                   g.dist ? h("span", { style:{ color:C.dim, fontSize:9 } }, " " + g.dist) : null),
                 g.error || g.stage == null
                   ? h("span", { style:{ color:C.dim, flexShrink:0 } }, "data unavailable")
-                  : h("span", { style:{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:5, whiteSpace:"nowrap" } },
-                      compactStatus(g) ? h("span", { style:{ color: colorFor(g), fontWeight:700 } }, compactStatus(g)) : null,
-                      h("b", null, g.stage.toFixed(2) + " ft"),
-                      h("span", { style:{ color: colorFor(g), fontSize:10, fontWeight:700 } }, compactDelta(g.delta)),
-                      g.validTime ? h("span", { style:{ color: readingStale(g.validTime) ? C.amber : C.dim, fontSize:9 } }, (readingStale(g.validTime) ? "\u26A0 " : "") + fmtWxTime(g.validTime)) : null)),
-                !g.error ? (
-                  (g.forecastAvailable && g.forecastPeak)
-                    ? h("div", { style:{ fontSize:10, marginTop:1, color: (g.forecastPeak.category && g.forecastPeak.category !== "normal") ? (catColor[g.forecastPeak.category] || C.dim) : C.dim, fontWeight: (g.forecastPeak.category && g.forecastPeak.category !== "normal") ? 700 : 400 } },
-                        "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? catLabel[g.forecastPeak.category] + " " : "peaks ") +
-                        "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + fmtWxTime(g.forecastPeak.validTime))
-                    : null
-                ) : null
+                  : h("span", { style:{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:1 } },
+                      h("span", { style:{ display:"inline-flex", alignItems:"baseline", gap:5, whiteSpace:"nowrap" } },
+                        compactStatus(g) ? h("span", { style:{ color: colorFor(g), fontWeight:700 } }, compactStatus(g)) : null,
+                        h("b", null, g.stage.toFixed(2) + " ft"),
+                        h("span", { style:{ color: colorFor(g), fontSize:10, fontWeight:700 } }, compactDelta(g.delta)),
+                        g.validTime ? h("span", { style:{ color: readingStale(g.validTime) ? C.amber : C.dim, fontSize:9 } }, (readingStale(g.validTime) ? "\u26A0 " : "") + fmtWxTime(g.validTime)) : null),
+                      (g.forecastAvailable && g.forecastPeak)
+                        ? h("span", { style:{ fontSize:10, textAlign:"right", color: (g.forecastPeak.category && g.forecastPeak.category !== "normal") ? (catColor[g.forecastPeak.category] || C.dim) : C.dim, fontWeight: (g.forecastPeak.category && g.forecastPeak.category !== "normal") ? 700 : 400 } },
+                            "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? catLabel[g.forecastPeak.category] + " " : "peaks ") +
+                            "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + fmtWxTime(g.forecastPeak.validTime))
+                        : null)
               )),
               (riverGauge && riverGauge.updated) ? h("div", { style:{ color:C.dim, fontSize:9, marginTop:2 } }, "Updated " + fmtWxTime(riverGauge.updated)) : null
             );
