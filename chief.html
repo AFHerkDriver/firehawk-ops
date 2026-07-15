@@ -576,9 +576,9 @@ async function fetchRiverGauge() {
   if (!leon) {
     document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A <span style='color:#8B949E'>River data unavailable</span>";
   } else if (leon.error || leon.stage == null) {
-    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A \u2B50 <b>" + leon.short + "</b>: <span style='color:#8B949E'>data unavailable</span>";
+    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A <b>" + leon.short + "</b>: <span style='color:#8B949E'>data unavailable</span>";
   } else {
-    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A \u2B50 <b>" + leon.short + "</b>: <span style='color:" + colorFor(leon) + ";font-weight:700'>" + labelFor(leon) + "</span>" + formatDelta(leon.delta);
+    document.getElementById("riverDigest").innerHTML = "\uD83C\uDF0A <b>" + leon.short + "</b>: <span style='color:" + colorFor(leon) + ";font-weight:700'>" + labelFor(leon) + "</span>" + formatDelta(leon.delta);
   }
 
   document.getElementById("riverGaugeRows").innerHTML =
@@ -592,14 +592,14 @@ async function fetchRiverGauge() {
       const stats = (g.error || g.stage == null)
         ? "<span style='color:#8B949E'>data unavailable</span>"
         : "<span style='display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap'>" +
+            (compactStatus(g) ? "<span style='color:" + colorFor(g) + ";font-weight:700'>" + compactStatus(g) + "</span>" : "") +
             "<b>" + g.stage.toFixed(2) + " ft</b>" +
             "<span style='color:" + colorFor(g) + ";font-size:9px'>\u25CF</span>" +
-            (compactStatus(g) ? "<span style='color:" + colorFor(g) + ";font-weight:700'>" + compactStatus(g) + "</span>" : "") +
             "<span style='color:#8B949E;font-size:10px'>" + compactDelta(g.delta) + "</span>" +
             (rt ? "<span style='color:" + (stale ? "#FFC107" : "#8B949E") + ";font-size:9px'>" + (stale ? "\u26A0 " : "") + rt + "</span>" : "") +
           "</span>";
       return "<div style='display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:3px;font-size:11px'>" +
-        "<span style='flex:1 1 130px;min-width:0'>" + ((leon && g.lid === leon.lid) ? "\u2B50 " : "") + (g.short || g.label) + (g.dist ? "<span style='color:#8B949E;font-size:9px'> " + g.dist + "</span>" : "") + "</span>" +
+        "<span style='flex:1 1 130px;min-width:0'>" + (g.short || g.label) + (g.dist ? "<span style='color:#8B949E;font-size:9px'> " + g.dist + "</span>" : "") + "</span>" +
         stats +
       "</div>";
     }).join("");
@@ -658,11 +658,12 @@ async function fetchCrossings() {
   const warnActive = document.getElementById("floodBar").style.display !== "none";
   const parts = []; if (closed) parts.push(closed + " CLOSED"); if (caution) parts.push(caution + " Caution");
   const digest = alarm ? (parts.join(" \u00B7 ") + " near you") : (ao.length ? ("All " + ao.length + " crossings open near you" + (offline ? " \u00B7 " + offline + " offline" : "")) : "No monitored crossings in range");
-  bar.style.background = alarm ? "rgba(254,0,0,0.08)" : "rgba(152,205,0,0.05)";
-  bar.style.border = "1px solid " + (alarm ? "rgba(254,0,0,0.35)" : "rgba(152,205,0,0.25)");
-  bar.style.color = alarm ? "#FF8A8A" : "#B9D66B";
+  bar.style.background = alarm ? "rgba(254,0,0,0.08)" : "rgba(74,144,217,0.08)";
+  bar.style.border = "1px solid " + (alarm ? "rgba(254,0,0,0.35)" : "rgba(74,144,217,0.3)");
+  bar.style.color = alarm ? "#FF8A8A" : "#9FC5E8";
   document.getElementById("crossingsDigest").innerHTML = "\uD83D\uDEA7 <b>Low-Water Crossings</b> \u2014 " + digest;
-  const show = ao.filter(c => c.status !== 2 || c.watch).sort((a, b) => (cxRank[a.status] - cxRank[b.status]) || (b.watch - a.watch) || String(a.title).localeCompare(String(b.title)));
+  const dr = (d) => d === "D2" ? 0 : d === "D6" ? 1 : 9;   // group by district: D2 first, then D6
+  const show = ao.filter(c => c.status !== 2 || c.watch).sort((a, b) => (dr(a.dist) - dr(b.dist)) || (cxRank[a.status] - cxRank[b.status]) || String(a.title).localeCompare(String(b.title)));
   const openOther = ao.filter(c => c.status === 2 && !c.watch).length;
   const fmt = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }); } catch (e) { return ""; } };
   const isStale = (c) => warnActive && c.status !== 2 && c.status !== 3 && c.updated && ((Date.now() - new Date(c.updated).getTime()) / 60000 > 120);

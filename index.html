@@ -7436,7 +7436,7 @@ function SARModal({
                   ? h("span", { style:{ color:C.dim } }, "loading\u2026")
                   : !headline
                     ? h("span", { style:{ color:C.dim } }, "River data unavailable")
-                    : h(React.Fragment, null, "\u2B50 ", h("b", null, headline.short || headline.label), ": ",
+                    : h(React.Fragment, null, h("b", null, headline.short || headline.label), ": ",
                         headline.error || headline.stage == null
                           ? h("span", { style:{ color:C.dim } }, "data unavailable")
                           : h(React.Fragment, null,
@@ -7450,14 +7450,14 @@ function SARModal({
                     h("span", { style:{ color: trendColor[kv[0]] } }, "\u25CF"), kv[1]))),
               !riverGauge ? null : riverGauge.gauges.map(g => h("div", { key:g.lid, style:{ display:"flex", alignItems:"baseline", justifyContent:"space-between", flexWrap:"wrap", gap:6, marginBottom:3, fontSize:11 } },
                 h("span", { style:{ flex:"1 1 130px", minWidth:0 } },
-                  ((headline && g.lid === headline.lid) ? "\u2B50 " : ""), (g.short || g.label),
+                  (g.short || g.label),
                   g.dist ? h("span", { style:{ color:C.dim, fontSize:9 } }, " " + g.dist) : null),
                 g.error || g.stage == null
                   ? h("span", { style:{ color:C.dim, flexShrink:0 } }, "data unavailable")
                   : h("span", { style:{ flexShrink:0, display:"inline-flex", alignItems:"baseline", gap:5, whiteSpace:"nowrap" } },
+                      compactStatus(g) ? h("span", { style:{ color: colorFor(g), fontWeight:700 } }, compactStatus(g)) : null,
                       h("b", null, g.stage.toFixed(2) + " ft"),
                       h("span", { style:{ color: colorFor(g), fontSize:9 } }, "\u25CF"),
-                      compactStatus(g) ? h("span", { style:{ color: colorFor(g), fontWeight:700 } }, compactStatus(g)) : null,
                       h("span", { style:{ color:C.dim, fontSize:10 } }, compactDelta(g.delta)),
                       g.validTime ? h("span", { style:{ color: readingStale(g.validTime) ? C.amber : C.dim, fontSize:9 } }, (readingStale(g.validTime) ? "\u26A0 " : "") + fmtWxTime(g.validTime)) : null))),
               (riverGauge && riverGauge.updated) ? h("div", { style:{ color:C.dim, fontSize:9, marginTop:2 } }, "Updated " + fmtWxTime(riverGauge.updated)) : null
@@ -7484,12 +7484,13 @@ function SARModal({
           const digest = alarm ? (parts.join(" \u00B7 ") + " near you")
             : (crossings.length ? ("All " + crossings.length + " crossings open near you" + (offline ? " \u00B7 " + offline + " offline" : ""))
                                 : "No monitored crossings in range");
-          const show = crossings.filter(c => c.status !== 2 || c.watch).sort((a, b) => (cxRank[a.status] - cxRank[b.status]) || (b.watch - a.watch) || String(a.title).localeCompare(String(b.title)));
+          const dr = (d) => d === "D2" ? 0 : d === "D6" ? 1 : 9;   // group by district: D2 first, then D6
+          const show = crossings.filter(c => c.status !== 2 || c.watch).sort((a, b) => (dr(a.dist) - dr(b.dist)) || (cxRank[a.status] - cxRank[b.status]) || String(a.title).localeCompare(String(b.title)));
           const openOther = crossings.filter(c => c.status === 2 && !c.watch).length;
           const isStale = (c) => warnActive && c.status !== 2 && c.status !== 3 && c.updated && ((Date.now() - new Date(c.updated).getTime()) / 60000 > 120);
-          const bg  = alarm ? "rgba(254,0,0,0.08)" : "rgba(152,205,0,0.05)";
-          const brd = alarm ? "rgba(254,0,0,0.35)" : "rgba(152,205,0,0.25)";
-          const hue = alarm ? "#FF8A8A" : "#B9D66B";
+          const bg  = alarm ? "rgba(254,0,0,0.08)" : "rgba(74,144,217,0.08)";
+          const brd = alarm ? "rgba(254,0,0,0.35)" : "rgba(74,144,217,0.3)";
+          const hue = alarm ? "#FF8A8A" : "#9FC5E8";
           return h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:bg, border:"1px solid "+brd, fontSize:11, color:hue, display:"flex", flexDirection:"column", gap:4 } },
             h("div", { onClick: () => setCrossingsExpanded(v => !v), style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:4, cursor:"pointer" } },
               h("span", null, "\uD83D\uDEA7 ", h("b", null, "Low-Water Crossings"), " \u2014 " + digest),
