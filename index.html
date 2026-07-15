@@ -6853,7 +6853,7 @@ function SARModal({
 
     const RAIN_STATIONS = [   // BC2FD stations — District 2 (12x) and District 6 (16x)
       { id: "120", label: "Station 120 · Spurs Ranch", dist: "D2", lat: 29.3921, lon: -98.7099 },
-      { id: "121", label: "Station 121 · Central (Talley)", dist: "D2", lat: 29.4547, lon: -98.7553 },
+      { id: "121", label: "Station 121 · Central", dist: "D2", lat: 29.4547, lon: -98.7553 },
       { id: "122", label: "Station 122 · Old Talley", dist: "D2", lat: 29.5052, lon: -98.7823 },
       { id: "123", label: "Station 123 · Marbach", dist: "D2", lat: 29.4049, lon: -98.7026 },
       { id: "124", label: "Station 124 · Omicron", dist: "D2", lat: 29.4134, lon: -98.7859 },
@@ -6942,7 +6942,7 @@ function SARModal({
           next = { inches: factor != null ? Math.round(total * 100) / 100 : null, partial: coveragePct < 70, coveragePct, unitIssue: factor == null, error: false };
         } catch (eNext) { next = { inches: null, error: true }; }
 
-        return { id: st.id, label: st.label, past, next };
+        return { id: st.id, label: st.label, dist: st.dist, past, next };
       };
       const f = async () => {
         const results = await Promise.all(RAIN_STATIONS.map(fetchStation));
@@ -7332,7 +7332,7 @@ function SARModal({
               (rainAccum && rainAccum.stations) ? h("div", { style:{ marginTop:4, display:"flex", flexDirection:"column", gap:3 } },
                 rainAccum.stations.map(st => h("div", { key:st.id, style:{ display:"flex", alignItems:"baseline", gap:6, fontSize:10, color:"#9FC5E8" } },
                   h("span", { style:{ flexShrink:0, minWidth:20, fontWeight:700, fontSize:8, letterSpacing:0.5, color: st.dist === "D6" ? "#FFB27A" : "#6EA8FF" } }, st.dist || ""),
-                  h("span", { style:{ flex:1, minWidth:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, st.label),
+                  h("span", { style:{ flex:"0 1 160px", minWidth:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" } }, st.label),
                   h("span", { style:{ flexShrink:0, whiteSpace:"nowrap" } },
                     (st.past.error ? "past: n/a" : "past: " + st.past.inches.toFixed(2) + "in") + "  \u00B7  " +
                     (st.next.error ? "next: n/a" : "next: " + st.next.inches.toFixed(2) + "in")

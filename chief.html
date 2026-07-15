@@ -230,7 +230,7 @@ async function fetchFlood() {
 
 const RAIN_STATIONS = [   // BC2FD stations — District 2 (12x) and District 6 (16x)
   { id: "120", label: "Station 120 \u00B7 Spurs Ranch", dist: "D2", lat: 29.3921, lon: -98.7099 },
-  { id: "121", label: "Station 121 \u00B7 Central (Talley)", dist: "D2", lat: 29.4547, lon: -98.7553 },
+  { id: "121", label: "Station 121 \u00B7 Central", dist: "D2", lat: 29.4547, lon: -98.7553 },
   { id: "122", label: "Station 122 \u00B7 Old Talley", dist: "D2", lat: 29.5052, lon: -98.7823 },
   { id: "123", label: "Station 123 \u00B7 Marbach", dist: "D2", lat: 29.4049, lon: -98.7026 },
   { id: "124", label: "Station 124 \u00B7 Omicron", dist: "D2", lat: 29.4134, lon: -98.7859 },
@@ -401,7 +401,7 @@ async function fetchRainAccum() {
   document.getElementById("rainBreakdown").innerHTML = results.map(r =>
     "<div style='display:flex;align-items:baseline;gap:6px;font-size:10px;color:#9FC5E8'>" +
       "<span style='flex-shrink:0;min-width:20px;font-weight:700;font-size:8px;letter-spacing:0.5px;color:" + (r.dist === "D6" ? "#FFB27A" : "#6EA8FF") + "'>" + (r.dist || "") + "</span>" +
-      "<span style='flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>" + r.label + "</span>" +
+      "<span style='flex:0 1 160px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>" + r.label + "</span>" +
       "<span style='flex-shrink:0;white-space:nowrap'>" + (r.past.error ? "past: n/a" : "past: " + r.past.inches.toFixed(2) + "in") + "&nbsp;&nbsp;\u00B7&nbsp;&nbsp;" +
                  (r.next.error ? "next: n/a" : "next: " + r.next.inches.toFixed(2) + "in") + "</span>" +
     "</div>"
