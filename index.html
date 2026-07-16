@@ -490,7 +490,7 @@
           h("button", { onClick: save, disabled: !canEditAvail || busy || !dirty, style: actionBtn("save", !canEditAvail || busy || !dirty) }, busy ? "…" : "Save"))),
 
       monthRec && monthRec.lastEditedBy ? h("div", { style:{ fontSize:10.5, color:C.dim, marginTop:8, borderTop:"1px solid "+C.border, paddingTop:8 } },
-        "Last edited by " + monthRec.lastEditedBy + " · " + new Date(monthRec.lastEditedAt).toLocaleString()) : null
+        "Last edited by " + monthRec.lastEditedBy + " · " + new Date(monthRec.lastEditedAt).toLocaleString([], { hour12: false })) : null
     );
   }
 
@@ -840,7 +840,7 @@
     // ── Deployments panel (create/edit/cancel + live list) — shown below the calendar ──
     const depInput = { background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:6, padding:"7px 9px", fontSize:12, colorScheme:"dark" };
     const depNow = new Date();
-    const fmtDep = (s) => { const t = depParse(s); return t ? t.toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—"; };
+    const fmtDep = (s) => { const t = depParse(s); return t ? t.toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit", hour12: false }) : "—"; };
     const depStatus = (dep) => {
       const s = depParse(dep.start), e = depParse(dep.end);
       if (!s || !e) return { txt:"invalid", color:C.red };
@@ -1106,7 +1106,7 @@
         h("div", null,
           h("div", { style: { fontSize: 10, color: C.dim, letterSpacing: 1.5 } }, "EXTERNAL SOURCE DIAGNOSTICS"),
           lastRun ? h("div", { style: { fontSize: 8, color: failCount ? C.red : C.green, letterSpacing: 1, marginTop: 3 } },
-            (failCount ? failCount + " FAILING" : "ALL SOURCES OK") + " \u00b7 " + lastRun.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })) : null),
+            (failCount ? failCount + " FAILING" : "ALL SOURCES OK") + " \u00b7 " + lastRun.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })) : null),
         h("button", { onClick: run, style: { padding: "6px 14px", borderRadius: 8, background: C.panel2, border: "1px solid " + C.border, color: C.text, fontSize: 9, letterSpacing: 1.5, fontFamily: "inherit", cursor: "pointer" } }, "RUN CHECK")),
       rows ? h("div", null,
         rows.map((r, i2) => h("div", { key: i2, style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 9, letterSpacing: 0.5, padding: "3.5px 0", borderBottom: i2 < rows.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" } },
@@ -1140,7 +1140,7 @@
                   pr ? h("span", { style:{ color: e.color || C.text } }, pr) : null,
                   e.tier ? h("span", { style:{ fontSize:9, letterSpacing:1, color: e.tier === "staff" ? C.dim : C.accent, marginLeft:6 } }, e.tier === "staff" ? "STAFF" : "ADMIN") : null),
                 h("span", { style:{ color:C.dim, fontSize:10 } },
-                  new Date(e.time).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", timeZone:"America/Chicago" }) + " CST"));
+                  new Date(e.time).toLocaleString("en-US", { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", timeZone:"America/Chicago", hour12: false }) + " CST"));
             }));
   }
 
@@ -1995,7 +1995,7 @@ function WeatherModal({ onClose }) {
                 severity: f.properties.severity,
                 description: (f.properties.description || "").split("\n")[0] || "",
                 ends: f.properties.ends
-                  ? new Date(f.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", timeZoneName:"short" })
+                  ? new Date(f.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", timeZoneName:"short", hour12: false })
                   : "Until further notice"
               };
             });
@@ -2045,7 +2045,7 @@ function WeatherModal({ onClose }) {
         name:        gotGPS ? "Operator Position" : "Kelly Field (KSKF)",
         regional:    regionalMETARs,
         regionalOrder: regionalOrder,
-        time:        new Date().toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) + " local",
+        time:        new Date().toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", hour12: false }) + " local",
         wind:        { dir: windDir, speed: windMph, gust: gustMph },
         visibility:  visSM,
         ceiling:     ceiling,
@@ -4358,7 +4358,7 @@ const [showComms, setShowComms] = useState(false);
     tfrContact: tfrContact(insideTfr),
     ceiling: 0, auth: "TFR \u00b7 " + (insideTfr.type || "ACTIVE"),
     lower: "SFC", upper: null,
-    times: insideTfr.exp ? ("TO " + new Date(insideTfr.exp + (insideTfr.exp.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Chicago" }) + " CT") : "ACTIVE",
+    times: insideTfr.exp ? ("TO " + new Date(insideTfr.exp + (insideTfr.exp.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Chicago", hour12: false }) + " CT") : "ACTIVE",
     agency: insideTfr.notam ? ("FAA NOTAM " + insideTfr.notam) : "FAA TFR \u2014 NOTAM ID unavailable, verify via tfr.faa.gov",
     suaSrc: "tfr.faa.gov",
     partial: (laancData && laancData.partial) || 0,
@@ -4609,7 +4609,7 @@ const [showComms, setShowComms] = useState(false);
     tfrs.length > 0 && /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 8 } },
       tfrs.slice(0, 3).map(function(t) {
         var col = tfrCol(t);
-        var when = t.exp ? (" \u00b7 to " + new Date(t.exp + (t.exp.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Chicago" })) : "";
+        var when = t.exp ? (" \u00b7 to " + new Date(t.exp + (t.exp.endsWith("Z") ? "" : "Z")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Chicago", hour12: false })) : "";
         return /*#__PURE__*/React.createElement("div", { key: t.notam || (t._clat + "," + t._clon), style: { display: "flex", alignItems: "center", gap: 8, background: isFireTfr(t) ? (t.inside ? "rgba(255,159,10,0.12)" : "rgba(255,159,10,0.07)") : (t.inside ? "rgba(255,59,48,0.12)" : "rgba(255,59,48,0.07)"), border: "1px solid " + (isFireTfr(t) ? (t.inside ? "rgba(255,159,10,0.4)" : "rgba(255,159,10,0.3)") : (t.inside ? "rgba(255,59,48,0.4)" : "rgba(255,59,48,0.3)")), borderLeft: "3px solid " + col, borderRadius: 8, padding: "7px 10px" } },
           /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: col, fontWeight: 700 } }, "TFR " + (t.notam ? t.notam : "\u2014 ID UNAVAIL") + " \u00b7 " + (t.type && t.type !== "TFR" ? t.type : "VERIFY")),
@@ -6999,7 +6999,7 @@ function SARModal({
             // on Flash Flood Warnings when there's credible evidence of Considerable/Catastrophic damage.
             // Far more authoritative than any rate-of-rise math we could compute ourselves.
             damageThreat: (hit.properties.parameters && hit.properties.parameters.flashFloodDamageThreat && hit.properties.parameters.flashFloodDamageThreat[0]) || null,
-            ends: hit.properties.ends ? new Date(hit.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) : "further notice",
+            ends: hit.properties.ends ? new Date(hit.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", hour12: false }) : "further notice",
             updated: new Date().toISOString()
           } : null);
           // Regional Disaster Watch — any Extreme-severity NWS alert that ISN'T already a flood event
@@ -7012,7 +7012,7 @@ function SARModal({
             active: true,
             event: disasterHit.properties.event,
             area: disasterHit.properties.areaDesc || "Bexar County",
-            ends: disasterHit.properties.ends ? new Date(disasterHit.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) : "further notice",
+            ends: disasterHit.properties.ends ? new Date(disasterHit.properties.ends).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", hour12: false }) : "further notice",
             updated: new Date().toISOString()
           } : null);
         } catch (e) {}
@@ -7439,7 +7439,7 @@ function SARModal({
       style: { flex:1, padding:"10px 0", fontSize:12, letterSpacing:1, borderRadius:9, border:"1px solid "+(tab===id?C.blue:C.border), background: tab===id?"rgba(59,130,246,0.16)":C.panel, color: tab===id?C.blue:C.dim } }, label);
     const topBtn = (id, label) => h("button", { onClick: () => setTopTab(id),
       style: { flex:1, padding:"10px 0", fontSize:12, letterSpacing:1, borderRadius:9, border:"1px solid "+(topTab===id?C.accent:C.border), background: topTab===id?"rgba(255,107,53,0.16)":C.panel, color: topTab===id?C.accent:C.dim } }, label);
-    const fmtWxTime = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }); } catch (e) { return ""; } };
+    const fmtWxTime = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", hour12: false }); } catch (e) { return ""; } };
     const wxBanner = (icon, label, sub, hue, bg, brd, meta) => h("div", {
       style: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, background:bg, border:"1px solid "+brd, borderRadius:10, padding:"9px 13px", marginBottom:10 }
     },
@@ -7500,7 +7500,7 @@ function SARModal({
             const cand = { p, rh, score: rhS + wS, rhLow: rh == null ? 999 : rh, windHi: hi == null ? -1 : hi };
             if (!worst || cand.score > worst.score || (cand.score === worst.score && (cand.rhLow < worst.rhLow || (cand.rhLow === worst.rhLow && cand.windHi > worst.windHi)))) worst = cand;
           });
-          const digest = worst ? (new Date(worst.p.startTime).toLocaleTimeString("en-US", { hour:"numeric" }) + " — " + (worst.rh == null ? "—" : worst.rh + "% RH") + " · " + (worst.p.windSpeed || "—") + " " + (worst.p.windDirection || "")) : null;
+          const digest = worst ? (new Date(worst.p.startTime).toLocaleTimeString("en-US", { hour:"numeric", hour12: false }) + " — " + (worst.rh == null ? "—" : worst.rh + "% RH") + " · " + (worst.p.windSpeed || "—") + " " + (worst.p.windDirection || "")) : null;
           return h("div", { style:{ margin:"-4px 0 8px", padding:"8px 12px", borderRadius:8, background:"rgba(255,59,48,0.06)", border:"1px solid rgba(255,59,48,0.28)", fontSize:11, color:"#FF9B94", display:"flex", flexDirection:"column", gap:6 } },
             h("div", { onClick: () => setRfExpanded(v => !v), style:{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:4, cursor:"pointer" } },
               h("span", null, "\uD83D\uDD25 ",
@@ -7522,7 +7522,7 @@ function SARModal({
                       const wHi = windHiOf(p.windSpeed);
                       const wH  = windHue(wHi);
                       return h("div", { key:i, style:{ flex:"1 0 56px", minWidth:56, textAlign:"center", background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:"7px 4px" } },
-                        h("div", { style:{ fontSize:9, color:C.dim } }, new Date(p.startTime).toLocaleTimeString("en-US", { hour:"numeric" })),
+                        h("div", { style:{ fontSize:9, color:C.dim } }, new Date(p.startTime).toLocaleTimeString("en-US", { hour:"numeric", hour12: false })),
                         h("div", { style:{ fontSize:13, fontWeight:700, marginTop:2, color:C.text } }, p.temperature + "\u00B0"),
                         h("div", { style:{ fontSize:10, fontWeight:700, color:rhH, marginTop:2 } }, rhv == null ? "\u2014" : rhv + "%"),
                         h("div", { style:{ fontSize:8, fontWeight: (wH === C.red || wH === C.amber) ? 700 : 400, color:wH, marginTop:2 } }, (p.windSpeed || "\u2014") + " " + (p.windDirection || "")));

@@ -199,7 +199,7 @@ async function fetchBurnBan() {
       const bar = document.getElementById("burnBanBar");
       if (data.underBan) {
         bar.style.display = "flex";
-        const t = data.updated ? new Date(data.updated).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : "";
+        const t = data.updated ? new Date(data.updated).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit', hour12: false}) : "";
         document.getElementById("burnBanTime").textContent = "TFS · " + t;
       } else {
         bar.style.display = "none";
@@ -246,7 +246,7 @@ async function fetchEro() {
     const anyError   = parsed.some(d => d.error);
     const allError   = parsed.every(d => d.error);
     const anyUnknown = parsed.some(d => d.unknown);
-    const stamp = new Date().toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
+    const stamp = new Date().toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", hour12: false });
     // MODERATE+ gate: nothing at MDT/HIGH and nothing to fail loud about → hide the bar
     // (Marginal/Slight/no-risk = the everyday noise). allError and anyUnknown always surface.
     if (!allError && !anyUnknown && !elevated) { bar.style.display = "none"; return; }
@@ -296,7 +296,7 @@ async function fetchFlood() {
     if (disaster) {
       document.getElementById("disasterEvent").textContent = disaster.properties.event.toUpperCase();
       const dEnds = disaster.properties.ends
-        ? new Date(disaster.properties.ends).toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"})
+        ? new Date(disaster.properties.ends).toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit", hour12: false})
         : "Until further notice";
       document.getElementById("disasterEnds").textContent = (disaster.properties.areaDesc || "BEXAR COUNTY").toUpperCase() + " \u00B7 " + dEnds;
       document.getElementById("disasterTime").textContent = "NWS";
@@ -316,7 +316,7 @@ async function fetchFlood() {
       floodBar.style.background = damageThreat ? "rgba(255,59,48,0.15)" : "rgba(74,144,217,0.1)";
       floodBar.style.border = "1px solid " + (damageThreat ? "rgba(255,59,48,0.6)" : "rgba(74,144,217,0.35)");
       const ends = flood.properties.ends
-        ? new Date(flood.properties.ends).toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"})
+        ? new Date(flood.properties.ends).toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit", hour12: false})
         : "Until further notice";
       document.getElementById("floodEnds").textContent = "BEXAR COUNTY \u00B7 " + ends;
       document.getElementById("floodTime").textContent = "NWS";
@@ -442,12 +442,12 @@ async function fetchRfHourly() {
       const cand = { p, rh, score: rhS + wS, rhLow: rh == null ? 999 : rh, windHi: hi == null ? -1 : hi };
       if (!worst || cand.score > worst.score || (cand.score === worst.score && (cand.rhLow < worst.rhLow || (cand.rhLow === worst.rhLow && cand.windHi > worst.windHi)))) worst = cand;
     });
-    digestEl.innerHTML = "\uD83D\uDD25 <b>Peak fire wx</b> " + new Date(worst.p.startTime).toLocaleTimeString("en-US", { hour:"numeric" }) + " \u2014 " + (worst.rh == null ? "\u2014" : worst.rh + "% RH") + " \u00B7 " + (worst.p.windSpeed || "\u2014") + " " + (worst.p.windDirection || "");
+    digestEl.innerHTML = "\uD83D\uDD25 <b>Peak fire wx</b> " + new Date(worst.p.startTime).toLocaleTimeString("en-US", { hour:"numeric", hour12: false }) + " \u2014 " + (worst.rh == null ? "\u2014" : worst.rh + "% RH") + " \u00B7 " + (worst.p.windSpeed || "\u2014") + " " + (worst.p.windDirection || "");
     stripEl.innerHTML = per.map(p => {
       const rhv = (p.relativeHumidity && p.relativeHumidity.value != null) ? p.relativeHumidity.value : null;
       const wHi = windHiOf(p.windSpeed);
       const wH  = windHue(wHi);
-      const hr  = new Date(p.startTime).toLocaleTimeString("en-US", { hour:"numeric" });
+      const hr  = new Date(p.startTime).toLocaleTimeString("en-US", { hour:"numeric", hour12: false });
       return '<div style="flex:1 0 56px;min-width:56px;text-align:center;background:#1C2230;border:1px solid #30363D;border-radius:8px;padding:7px 4px">'
         + '<div style="font-size:9px;color:#8B949E">' + hr + '</div>'
         + '<div style="font-size:13px;font-weight:700;margin-top:2px;color:#E6EDF3">' + p.temperature + '\u00B0</div>'
@@ -523,7 +523,7 @@ async function fetchRainAccum() {
       "</div>"
     ).join("");
 
-  const t = new Date().toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit"});
+  const t = new Date().toLocaleTimeString("en-US", {hour:"2-digit",minute:"2-digit", hour12: false});
   document.getElementById("rainUpdated").textContent = t;
 }
 
@@ -701,11 +701,11 @@ async function fetchRiverGauge() {
     "</div>" +
     results.map(g => {
       const stale = g.validTime && (Date.now() - new Date(g.validTime).getTime()) > 75 * 60000;   // NWPS gauges normally post every 15-90 min; 75 flags genuinely late, not routine cadence
-      const rt = g.validTime ? new Date(g.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) : "";
+      const rt = g.validTime ? new Date(g.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", hour12: false }) : "";
       const fcHtml = (!g.error && g.forecastAvailable && g.forecastPeak)
         ? "<span style='font-size:10px;text-align:right;color:" + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? (catColor[g.forecastPeak.category] || "#8B949E") : "#8B949E") + ";font-weight:" + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? "700" : "400") + "'>" +
             "Forecast: " + ((g.forecastPeak.category && g.forecastPeak.category !== "normal") ? catLabel[g.forecastPeak.category] + " " : "peaks ") +
-            "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + new Date(g.forecastPeak.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }) + "</span>"
+            "(" + g.forecastPeak.stage.toFixed(2) + " ft) by " + new Date(g.forecastPeak.validTime).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", hour12: false }) + "</span>"
         : "";
       const stats = (g.error || g.stage == null)
         ? "<span style='color:#8B949E'>data unavailable</span>"
@@ -735,7 +735,7 @@ async function fetchRedFlag() {
       const bar = document.getElementById("redFlagBar");
       if (data.active) {
         bar.style.display = "flex";
-        const t = data.updated ? new Date(data.updated).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : "";
+        const t = data.updated ? new Date(data.updated).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit', hour12: false}) : "";
         document.getElementById("redFlagTime").textContent = "NWS · " + t;
         // If red flag is active push burn ban bar down
         document.getElementById("burnBanBar").style.top = "100px";
@@ -783,7 +783,7 @@ async function fetchCrossings() {
   const dr = (d) => d === "D2" ? 0 : d === "D6" ? 1 : 9;   // group by district: D2 first, then D6
   const show = ao.filter(c => c.status !== 2 || c.watch).sort((a, b) => (dr(a.dist) - dr(b.dist)) || (cxRank[a.status] - cxRank[b.status]) || String(a.title).localeCompare(String(b.title)));
   const openOther = ao.filter(c => c.status === 2 && !c.watch).length;
-  const fmt = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" }); } catch (e) { return ""; } };
+  const fmt = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit", hour12: false }); } catch (e) { return ""; } };
   const isStale = (c) => warnActive && c.status !== 2 && c.status !== 3 && c.updated && ((Date.now() - new Date(c.updated).getTime()) / 60000 > 120);
   let rows = show.length ? show.map(c =>
     "<div style='display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:2px'>" +
@@ -887,7 +887,7 @@ function setSync(s) {
 }
 
 function clock() {
-  document.getElementById('clockEl').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('clockEl').textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit', hour12: false});
 }
 clock(); setInterval(clock,30000);
 
@@ -1031,7 +1031,7 @@ function render(weekDays,schedCache,crewData) {
   } else if (depsOnSel.length) {
     html+=depsOnSel.map(dep => {
       const e = depParseT(dep.end);
-      const ret = e ? e.toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '\u2014';
+      const ret = e ? e.toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit', hour12: false}) : '\u2014';
       const uc = dep.unit === 'UAV121' ? '#3DBEFF' : '#50FA7B';
       return `<div style="background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.5);border-left:4px solid #FF6B35;border-radius:12px;margin-bottom:12px;padding:12px 16px">
         <div style="font-size:13px;font-weight:800;letter-spacing:1.5px;color:#FF6B35;display:flex;align-items:center;gap:9px">\u25B2 ASSET DEPLOYED <span style="color:${uc};font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;line-height:1">${dep.unit}</span></div>

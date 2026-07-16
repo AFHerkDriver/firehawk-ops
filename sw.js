@@ -16,7 +16,7 @@
  * Reload button will never appear. Keep this version in step with the app's
  * on-screen version number so you can confirm what's actually running.
  */
-const CACHE = 'firehawk-sw-v36';   // <-- BUMP THIS EVERY DEPLOY
+const CACHE = 'firehawk-sw-v37';   // <-- BUMP THIS EVERY DEPLOY
 
 self.addEventListener('install', (e) => {
   // Precache the shell for an offline reopen. NO self.skipWaiting() here — the
