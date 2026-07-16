@@ -504,6 +504,8 @@
     const [savedAt, setSavedAt]     = useState(0);
     const [proposal, setProposal]   = useState(null);   // increment 3: pending smart-assignment draft
     const [confirmReset, setConfirmReset] = useState(false);   // two-step guard for a full-month wipe
+    const [deployments, setDeployments] = useState([]);        // range-record overrides (cross-month) — firehawk/deployments
+    const [depForm, setDepForm] = useState(null);              // null = closed; { id?, unit, start, end, mission } = create/edit
     const daysRef  = useRef(monthDays); daysRef.current = monthDays;
     const saveTimer = useRef(null);
 
@@ -518,6 +520,40 @@
       });
       return () => { alive = false; };
     }, [vYear, vMonth]);
+
+    // Deployments — one cross-month range-record doc (mirrors bulletins). Listen once, independent of the viewed month.
+    // A deployment is "active" purely by clock (now within [start,end]); nothing is written to day docs, so ops
+    // return to normal automatically when the window ends — no cleanup, no stale "deployed" state left behind.
+    useEffect(() => {
+      const unsub = fsListen(DEV_COL, "deployments", (data) => {
+        setDeployments(data && Array.isArray(data.deployments) ? data.deployments : []);
+      });
+      return () => { if (typeof unsub === "function") unsub(); };
+    }, []);
+    const depParse = (s) => { const t = s ? new Date(s) : null; return (t && !isNaN(t.getTime())) ? t : null; };
+    const depCoversDay = (dep, y, m, d) => {   // interval overlap of [start,end] with the whole calendar day
+      const s = depParse(dep.start), e = depParse(dep.end);
+      if (!s || !e) return false;
+      return s <= new Date(y, m, d, 23, 59, 59, 999) && e >= new Date(y, m, d, 0, 0, 0, 0);
+    };
+    const depUnitsOn = (y, m, d) => Array.from(new Set(deployments.filter(dep => depCoversDay(dep, y, m, d)).map(dep => dep.unit)));
+    const depPersist = async (next) => {   // fail loud — never silently drop a create/cancel
+      setDeployments(next);
+      const res = await fsSet(DEV_COL, "deployments", { deployments: next });
+      setLastErr(res.ok ? "" : ("Deployment save failed (" + res.status + "): " + res.detail));
+      return res;
+    };
+    const saveDeployment = async () => {
+      const f = depForm; if (!f) return;
+      const s = depParse(f.start), e = depParse(f.end);
+      if (!f.unit || !s || !e) { setLastErr("Deployment needs a unit, a start, and an end."); return; }
+      if (e <= s) { setLastErr("Deployment end must be after its start."); return; }
+      const rec = { id: f.id || ("dep_" + Date.now()), unit: f.unit, start: f.start, end: f.end, mission: (f.mission || "").trim(), createdBy: (f.createdBy != null ? f.createdBy : null), createdAt: f.createdAt || new Date().toISOString() };
+      const next = f.id ? deployments.map(x => x.id === f.id ? rec : x) : [...deployments, rec];
+      const res = await depPersist(next);
+      if (res.ok) setDepForm(null);   // keep the form (with the user's input) open if the save failed
+    };
+    const cancelDeployment = async (id) => { await depPersist(deployments.filter(x => x.id !== id)); };
 
     const scheduleSave = (daysObj) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -629,6 +665,7 @@
       const manned = a121 || a124;
       const conf = !!(dd && dd.confirmed);
       const hasOOS = dd && dd.oos && dd.oos.length;
+      const depUnits = depUnitsOn(vYear, vMonth, d);   // units deployed on this day (range-record overlay)
       const prop = (proposal && isOpen(d)) ? (proposal[d] || null) : null;   // draft for this open day
       const pUnit = prop ? unitFor(prop.rpic) : null;
       // Coloring: dashed accent = proposed draft, green = confirmed, amber = unconfirmed, red = no coverage
@@ -653,6 +690,7 @@
           (!prop && !manned) ? h("span", { style:{ fontSize:11, fontWeight:600, color:C.red, letterSpacing:1 } }, "OOS") : null),
         h("div", { style:{ display:"flex", justifyContent:"center", gap:4, height:10, fontSize:9 } },
           prop ? h("span", { style:{ color:C.accent, fontSize:8, letterSpacing:1 } }, "◇ DRAFT") : null,
+          depUnits.length ? h("span", { style:{ color:C.accent, fontSize:8, fontWeight:700, letterSpacing:0.3 } }, "▲" + depUnits.map(u => u.replace("UAV", "")).join("·")) : null,
           hasOOS ? h("span", { style:{ color:C.amber } }, "◷") : null)
       ));
     }
@@ -778,6 +816,60 @@
       if (changed) { setMonthDays(next); scheduleSave(next); }
     };
 
+    // ── Deployments panel (create/edit/cancel + live list) — shown below the calendar ──
+    const depInput = { background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:6, padding:"7px 9px", fontSize:12, colorScheme:"dark" };
+    const depNow = new Date();
+    const fmtDep = (s) => { const t = depParse(s); return t ? t.toLocaleString("en-US", { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "—"; };
+    const depStatus = (dep) => {
+      const s = depParse(dep.start), e = depParse(dep.end);
+      if (!s || !e) return { txt:"invalid", color:C.red };
+      if (depNow < s) return { txt:"Upcoming", color:C.amber };
+      if (depNow > e) return { txt:"Ended", color:C.dim };
+      return { txt:"● Active", color:C.accent };
+    };
+    // Active + upcoming only; ended windows drop off the list on their own (that IS "back to normal ops").
+    const depVisible = deployments.slice()
+      .sort((a, b) => (depParse(a.start) || 0) - (depParse(b.start) || 0))
+      .filter(dep => { const e = depParse(dep.end); return e && e >= depNow; });
+    const deploymentsPanel = h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14, marginTop:12 } },
+      h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:(depForm || depVisible.length) ? 11 : 0 } },
+        h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1 } }, "DEPLOYMENTS \u2014 OVERRIDE NORMAL OPS"),
+        (canEdit && !depForm) ? h("button", { onClick: () => setDepForm({ unit:UNIT_PRIMARY, start:"", end:"", mission:"" }),
+          style:{ background:"rgba(255,107,53,0.16)", border:"1px solid "+C.accent, color:C.accent, borderRadius:7, padding:"4px 10px", fontSize:11 } }, "+ New") : null),
+      depForm ? h("div", { style:{ background:C.panel2, border:"1px solid "+C.accent, borderRadius:8, padding:11, marginBottom:10 } },
+        h("div", { style:{ display:"flex", gap:8, alignItems:"center", marginBottom:8, flexWrap:"wrap" } },
+          h("label", { style:{ fontSize:10, color:C.dim, minWidth:34 } }, "Unit"),
+          h("select", { value:depForm.unit, onChange:e => setDepForm({ ...depForm, unit:e.target.value }), style:depInput },
+            h("option", { value:UNIT_LEAD }, UNIT_LEAD), h("option", { value:UNIT_PRIMARY }, UNIT_PRIMARY))),
+        h("div", { style:{ display:"flex", gap:8, alignItems:"center", marginBottom:8, flexWrap:"wrap" } },
+          h("label", { style:{ fontSize:10, color:C.dim, minWidth:34 } }, "From"),
+          h("input", { type:"datetime-local", value:depForm.start, onChange:e => setDepForm({ ...depForm, start:e.target.value }), style:depInput })),
+        h("div", { style:{ display:"flex", gap:8, alignItems:"center", marginBottom:8, flexWrap:"wrap" } },
+          h("label", { style:{ fontSize:10, color:C.dim, minWidth:34 } }, "To"),
+          h("input", { type:"datetime-local", value:depForm.end, onChange:e => setDepForm({ ...depForm, end:e.target.value }), style:depInput })),
+        h("input", { type:"text", value:depForm.mission, placeholder:"Mission (optional \u2014 e.g. wildfire recon, mutual aid)", onChange:e => setDepForm({ ...depForm, mission:e.target.value }),
+          style:{ ...depInput, width:"100%", marginBottom:9, boxSizing:"border-box" } }),
+        h("div", { style:{ display:"flex", gap:8, justifyContent:"flex-end" } },
+          h("button", { onClick:() => setDepForm(null), style:{ borderRadius:7, padding:"6px 12px", fontSize:11, background:C.panel, border:"1px solid "+C.border, color:C.dim } }, "Cancel"),
+          h("button", { onClick:saveDeployment, style:{ borderRadius:7, padding:"6px 14px", fontSize:11, background:"rgba(52,199,89,0.16)", border:"1px solid "+C.green, color:C.green, fontWeight:500 } }, depForm.id ? "Save" : "Add Deployment"))
+      ) : null,
+      (!depForm && depVisible.length === 0) ? h("div", { style:{ fontSize:11, color:C.dim } }, "None active or upcoming \u2014 normal ops.") : null,
+      depVisible.map(dep => {
+        const st = depStatus(dep);
+        return h("div", { key:dep.id, style:{ background:C.panel2, border:"1px solid "+C.border, borderRadius:8, padding:"9px 11px", marginBottom:8, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" } },
+          h("span", { style:{ fontSize:11, fontWeight:700, color: dep.unit === UNIT_LEAD ? U121 : U124, whiteSpace:"nowrap" } }, dep.unit),
+          h("div", { style:{ flex:"1 1 150px", minWidth:0 } },
+            h("div", { style:{ fontSize:12, color:C.text } }, fmtDep(dep.start) + " \u2192 " + fmtDep(dep.end)),
+            dep.mission ? h("div", { style:{ fontSize:10.5, color:C.dim, marginTop:1 } }, dep.mission) : null),
+          h("span", { style:{ fontSize:10, fontWeight:700, color:st.color, whiteSpace:"nowrap" } }, st.txt),
+          canEdit ? h("div", { style:{ display:"flex", gap:6 } },
+            h("button", { onClick:() => setDepForm({ id:dep.id, unit:dep.unit, start:dep.start, end:dep.end, mission:dep.mission || "", createdBy:dep.createdBy, createdAt:dep.createdAt }),
+              style:{ background:"none", border:"1px solid "+C.border, color:C.dim, borderRadius:6, padding:"3px 9px", fontSize:11 } }, "Edit"),
+            h("button", { onClick:() => cancelDeployment(dep.id),
+              style:{ background:"none", border:"1px solid "+C.red, color:C.red, borderRadius:6, padding:"3px 9px", fontSize:11 } }, "Cancel")) : null);
+      })
+    );
+
     return h("div", null,
       h("div", { style:{ background:C.panel, border:"1px solid "+C.border, borderRadius:12, padding:14 } },
         h("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 } },
@@ -809,7 +901,8 @@
           h("span", null, h("span", { style:{ color:C.red } }, "■"), " OOS"),
           h("span", null, h("span", { style:{ color:SHIFT_COLORS.A.color } }, "A"), "/", h("span", { style:{ color:SHIFT_COLORS.B.color } }, "B"), "/", h("span", { style:{ color:SHIFT_COLORS.C.color } }, "C"), " Shift"),
           h("span", null, h("span", { style:{ color:U121 } }, "121"), "/", h("span", { style:{ color:U124 } }, "124"), " Unit"),
-          h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window")),
+          h("span", null, h("span", { style:{ color:C.amber } }, "◷"), " OOS Window"),
+          h("span", null, h("span", { style:{ color:C.accent } }, "▲"), " Deployed")),
         h("div", { style:{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, paddingTop:12, borderTop:"1px solid "+C.border } },
           h("div", { style:{ fontSize:10.5, color:C.dim, display:"flex", alignItems:"center", gap:7 } },
             crewedDays.length === 0
@@ -820,6 +913,8 @@
             style:{ borderRadius:8, padding:"7px 12px", fontSize:11, border:"1px solid "+(allFinal?C.amber:C.green), background: allFinal?"rgba(255,193,7,0.12)":"rgba(52,199,89,0.14)", color: allFinal?C.amber:C.green, opacity: crewedDays.length===0?0.4:1 } },
             allFinal ? "Unfinalize Month" : "Finalize Month") : null)
       ),
+
+      deploymentsPanel,
 
       // ── Day sheet: editable for managers, read-only card for staff ──
       selDay != null ? (canEdit ? h("div", {
@@ -914,7 +1009,7 @@
   function SourceDiagnostics() {
     const [rows, setRows] = useState(null);
     const [lastRun, setLastRun] = useState(null);
-    const REF = { lat: 29.591, lon: -98.600 };   // district reference point
+    const REF = { lat: 29.465, lon: -98.730 };   // District 2 station centroid (Talley / Marbach / Omicron / Roft)
     const run = async () => {
       const out = []; setRows([{ name: "RUNNING\u2026", ok: null, note: "" }]);
       const prox = (u) => "https://firehawk-wx.usafsentinel-45e.workers.dev/?url=" + encodeURIComponent(u);
@@ -1025,6 +1120,7 @@
     const [open, setOpen] = useState(false);
     const LOG = [
       { v:"2.8", date:"July 2026", items:[
+        "Weather reference re-centered on the District 2 station footprint (far-west Bexar) so gridpoint weather and airspace framing reflect where our crews actually run, instead of a point up toward Helotes.",
         "New hourly fire-weather strip: during a Red Flag Warning, see temperature, humidity, and wind for the next 12 hours at a glance, with the most hazardous hour called out.",
         "River gauges now show how fast the water is rising \u2014 Rising, Rapidly Rising, Surging, and a Flash Flood Rise alarm \u2014 so a fast-climbing creek stands out even before it reaches a flood stage. A short-window check also catches a sudden spike the longer trend would smooth over.",
         "The flood banner always shows the most serious active alert. A newly-issued Watch can no longer bump an active Flash Flood Warning off the banner.",
