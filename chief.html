@@ -999,12 +999,15 @@ function render(weekDays,schedCache,crewData) {
   const depState = deploymentsCache || { ok:false, deployments:[] };   // undefined before first load = treat as unavailable
   const depParseT = (s) => { const t = s ? new Date(s) : null; return (t && !isNaN(t.getTime())) ? t : null; };
   const depCoversSel = (dep) => { const s=depParseT(dep.start), e=depParseT(dep.end); return !!(s && e && s <= new Date(y,m,d,23,59,59,999) && e >= new Date(y,m,d,0,0,0,0)); };
+  const depActiveNow = (dep) => { const s=depParseT(dep.start), e=depParseT(dep.end); const nw=new Date(); return !!(s && e && nw>=s && nw<=e); };
+  // "Deployed" for the day being viewed: TODAY = active right now (not merely starting later today); any other day = that day falls in the window.
+  const depDeployedSel = (dep) => (selectedOffset === 0) ? depActiveNow(dep) : depCoversSel(dep);
   const depEsc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const depsOnSel = depState.deployments.filter(depCoversSel);
+  const depsOnSel = depState.deployments.filter(depDeployedSel);
   const depUnitsSel = new Set(depsOnSel.map(dep => dep.unit));
   // Upcoming (Inc 3) — future deployments not already shown for the selected day; a heads-up before the asset leaves.
   const depUpcoming = depState.ok ? depState.deployments
-    .filter(dep => { const s = depParseT(dep.start); return s && s > new Date() && !depCoversSel(dep); })
+    .filter(dep => { const s = depParseT(dep.start); return s && s > new Date() && !depDeployedSel(dep); })
     .sort((a, b) => depParseT(a.start) - depParseT(b.start)) : [];
 
   let html='';

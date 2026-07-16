@@ -56,6 +56,8 @@
   const U124       = "#50FA7B";               // UAV124 unit color (neon green)
   const U121       = "#3DBEFF";               // UAV121 unit color (neon blue) — matched punch with U124
   const ROTATION_DAYS = 7;                    // smart-assignment rotation block length (tunable 5–7)
+  // iOS (incl. iPadOS) gets the native datetime wheel; desktop gets a typeable text field (native datetime-local is a pain to type on desktop).
+  const IS_IOS = (() => { try { const ua = navigator.userAgent || ""; return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); } catch (e) { return false; } })();
   const isActive  = (c) => !c.archived;  // archived pilots are benched: not solicited, not auto-assigned
   const FS_PROJECT = "firehawk-scheduler";
   const FS_API_KEY = "AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ";
@@ -530,7 +532,16 @@
       });
       return () => { if (typeof unsub === "function") unsub(); };
     }, []);
-    const depParse = (s) => { const t = s ? new Date(s) : null; return (t && !isNaN(t.getTime())) ? t : null; };
+    const depParse = (s) => {
+      if (!s) return null;
+      let t = new Date(s);
+      if (!isNaN(t.getTime())) return t;
+      // tolerant of desktop typing: "YYYY-M-D HH:MM" or with a T, single-digit month/day/hour ok
+      const m = /^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})$/.exec(String(s).trim());
+      if (m) { t = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]); if (!isNaN(t.getTime())) return t; }
+      return null;
+    };
+    const depCanon = (dt) => { const p = (n) => String(n).padStart(2, "0"); return dt.getFullYear() + "-" + p(dt.getMonth() + 1) + "-" + p(dt.getDate()) + "T" + p(dt.getHours()) + ":" + p(dt.getMinutes()); };
     const depCoversDay = (dep, y, m, d) => {   // interval overlap of [start,end] with the whole calendar day
       const s = depParse(dep.start), e = depParse(dep.end);
       if (!s || !e) return false;
@@ -548,7 +559,7 @@
       const s = depParse(f.start), e = depParse(f.end);
       if (!f.unit || !s || !e) { setLastErr("Deployment needs a unit, a start, and an end."); return; }
       if (e <= s) { setLastErr("Deployment end must be after its start."); return; }
-      const rec = { id: f.id || ("dep_" + Date.now()), unit: f.unit, start: f.start, end: f.end, mission: (f.mission || "").trim(), createdBy: (f.createdBy != null ? f.createdBy : null), createdAt: f.createdAt || new Date().toISOString() };
+      const rec = { id: f.id || ("dep_" + Date.now()), unit: f.unit, start: depCanon(s), end: depCanon(e), mission: (f.mission || "").trim(), createdBy: (f.createdBy != null ? f.createdBy : null), createdAt: f.createdAt || new Date().toISOString() };
       const next = f.id ? deployments.map(x => x.id === f.id ? rec : x) : [...deployments, rec];
       const res = await depPersist(next);
       if (res.ok) setDepForm(null);   // keep the form (with the user's input) open if the save failed
@@ -853,10 +864,15 @@
             h("option", { value:UNIT_LEAD }, UNIT_LEAD), h("option", { value:UNIT_PRIMARY }, UNIT_PRIMARY))),
         h("div", { style:{ display:"flex", gap:8, alignItems:"center", marginBottom:8, flexWrap:"wrap" } },
           h("label", { style:{ fontSize:10, color:C.dim, minWidth:34 } }, "From"),
-          h("input", { type:"datetime-local", value:depForm.start, onChange:e => setDepForm({ ...depForm, start:e.target.value }), style:depInput })),
+          IS_IOS
+            ? h("input", { type:"datetime-local", value:depForm.start, onChange:e => setDepForm({ ...depForm, start:e.target.value }), style:depInput })
+            : h("input", { type:"text", placeholder:"YYYY-MM-DD HH:MM", value:(depForm.start || "").replace("T", " "), onChange:e => setDepForm({ ...depForm, start:e.target.value.replace(" ", "T") }), style:depInput })),
         h("div", { style:{ display:"flex", gap:8, alignItems:"center", marginBottom:8, flexWrap:"wrap" } },
           h("label", { style:{ fontSize:10, color:C.dim, minWidth:34 } }, "To"),
-          h("input", { type:"datetime-local", value:depForm.end, onChange:e => setDepForm({ ...depForm, end:e.target.value }), style:depInput })),
+          IS_IOS
+            ? h("input", { type:"datetime-local", value:depForm.end, onChange:e => setDepForm({ ...depForm, end:e.target.value }), style:depInput })
+            : h("input", { type:"text", placeholder:"YYYY-MM-DD HH:MM", value:(depForm.end || "").replace("T", " "), onChange:e => setDepForm({ ...depForm, end:e.target.value.replace(" ", "T") }), style:depInput })),
+        !IS_IOS ? h("div", { style:{ fontSize:9, color:C.dim, marginBottom:9, marginLeft:42 } }, "24-hour, e.g. 2026-07-18 14:30") : null,
         h("input", { type:"text", value:depForm.mission, placeholder:"Mission (optional \u2014 e.g. wildfire recon, mutual aid)", onChange:e => setDepForm({ ...depForm, mission:e.target.value }),
           style:{ ...depInput, width:"100%", marginBottom:9, boxSizing:"border-box" } }),
         h("div", { style:{ display:"flex", gap:8, justifyContent:"flex-end" } },
