@@ -696,6 +696,16 @@
     }
 
     const day = selDay != null ? (monthDays[selDay] || emptyDay()) : null;
+    // Deployments covering the open day (Inc 2) — the deployed unit's assignment is overridden/locked for that day.
+    const selDeps = selDay != null ? deployments.filter(dep => depCoversDay(dep, vYear, vMonth, selDay)) : [];
+    const selDepUnits = selDeps.map(dep => dep.unit);
+    const depStripFor = (unitName) => {
+      const dep = selDeps.find(x => x.unit === unitName);
+      if (!dep) return null;
+      return h("div", { style:{ fontSize:10.5, color:C.accent, marginBottom:8, lineHeight:1.4, background:"rgba(255,107,53,0.12)", border:"1px solid rgba(255,107,53,0.5)", borderLeft:"3px solid "+C.accent, borderRadius:8, padding:"7px 10px", fontWeight:600 } },
+        "\u25B2 " + unitName + " DEPLOYED" + (dep.mission ? " \u2014 " + dep.mission : "") + " \u00b7 not on normal district ops this day. Assignment below is locked.");
+    };
+    const depLock = (unitName, card) => (selDepUnits.indexOf(unitName) !== -1) ? h("div", { style:{ opacity:0.5, pointerEvents:"none" } }, card) : card;
     const dec = day ? decodeDay(day, crew) : null;
     const u121 = dec ? dec.u121 : null;
     const u124 = dec ? dec.u124 : null;
@@ -937,8 +947,10 @@
             "⚠ Marked not available this day: " + unavailNames.join(", ")) : null,
 
           crewRoster,
-          card121,
-          card124,
+          depStripFor(UNIT_LEAD),
+          depLock(UNIT_LEAD, card121),
+          depStripFor(UNIT_PRIMARY),
+          depLock(UNIT_PRIMARY, card124),
           cardUpstaff,
 
           // OOS windows

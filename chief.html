@@ -869,6 +869,18 @@ async function fsGet(col,doc) {
   } catch(e){return null;}
 }
 
+let deploymentsCache = undefined;   // undefined = not loaded; { ok, deployments } after load. ok:false = read FAILED (fail loud, never a silent all-clear).
+async function fsGetDeployments() {
+  try {
+    const r = await fetch(FS_BASE + "/firehawk/deployments?key=" + FS_API_KEY);
+    if (r.status === 404) return { ok: true, deployments: [] };   // doc never created = legitimately none
+    if (!r.ok) return { ok: false, deployments: [] };             // real read failure → fail loud
+    const d = await r.json();
+    const res = d.fields ? fromFields(d.fields) : {};
+    return { ok: true, deployments: Array.isArray(res.deployments) ? res.deployments : [] };
+  } catch (e) { return { ok: false, deployments: [] }; }
+}
+
 function setSync(s) {
   document.getElementById('dot').className='dot '+s;
   document.getElementById('syncText').textContent=s==='synced'?'SYNCED':s==='offline'?'OFFLINE':'CONNECTING...';
@@ -940,6 +952,9 @@ async function loadData() {
   // Load crew once
   if(!crewCache) crewCache=await fsGet("firehawk","crew");
 
+  // Deployments — re-fetch every load (one cheap doc; must reflect new/cancelled deployments promptly). Fail-loud shape.
+  deploymentsCache = await fsGetDeployments();
+
   // Build 7-day window
   const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(base);d.setDate(base.getDate()+i);return d;});
 
@@ -980,6 +995,14 @@ function render(weekDays,schedCache,crewData) {
   const dayLabel=selectedOffset===0?"TODAY":"";
   const crewDayLabel=selectedOffset===0?"TODAY":selDay.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase();
 
+  // ── Deployments (Inc 2) — cross-month range records; fail loud if the read failed ──
+  const depState = deploymentsCache || { ok:false, deployments:[] };   // undefined before first load = treat as unavailable
+  const depParseT = (s) => { const t = s ? new Date(s) : null; return (t && !isNaN(t.getTime())) ? t : null; };
+  const depCoversSel = (dep) => { const s=depParseT(dep.start), e=depParseT(dep.end); return !!(s && e && s <= new Date(y,m,d,23,59,59,999) && e >= new Date(y,m,d,0,0,0,0)); };
+  const depEsc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const depsOnSel = depState.deployments.filter(depCoversSel);
+  const depUnitsSel = new Set(depsOnSel.map(dep => dep.unit));
+
   let html='';
 
   // Date + shift
@@ -994,6 +1017,22 @@ function render(weekDays,schedCache,crewData) {
       <div class="shift-label" style="color:${sc.color}">SHIFT</div>
     </div>
   </div>`;
+
+  // ── Deployment banner — fail loud if status unavailable; else one banner per deployment covering the selected day ──
+  if (!depState.ok) {
+    html+=`<div style="background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.45);border-radius:12px;margin-bottom:12px;padding:12px 16px;color:#FFC107;font-size:12px;font-weight:700;letter-spacing:0.5px">\u26A0 DEPLOYMENT STATUS UNAVAILABLE \u2014 verify with UAS Program Manager</div>`;
+  } else if (depsOnSel.length) {
+    html+=depsOnSel.map(dep => {
+      const e = depParseT(dep.end);
+      const ret = e ? e.toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '\u2014';
+      const uc = dep.unit === 'UAV121' ? '#3DBEFF' : '#50FA7B';
+      return `<div style="background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.5);border-left:4px solid #FF6B35;border-radius:12px;margin-bottom:12px;padding:12px 16px">
+        <div style="font-size:13px;font-weight:800;letter-spacing:1.5px;color:#FF6B35;display:flex;align-items:center;gap:9px">\u25B2 ASSET DEPLOYED <span style="color:${uc};font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;line-height:1">${dep.unit}</span></div>
+        ${dep.mission?`<div style="font-size:12px;color:#E6EDF3;margin-top:5px">${depEsc(dep.mission)}</div>`:''}
+        <div style="font-size:11px;color:#8B949E;margin-top:3px">Returns ${ret}</div>
+      </div>`;
+    }).join('');
+  }
 
   // 7-day strip
   html+=`<div class="outlook"><div class="outlook-label">7-DAY OUTLOOK</div><div class="week-strip">`;
@@ -1100,8 +1139,9 @@ function render(weekDays,schedCache,crewData) {
       if(members.length === 0) return '';
       const oosList = oosData[unit] || [];
       const dim = oosList.some(oosActive) ? 'opacity:0.4' : '';
+      const deployedUnit = depUnitsSel.has(unit);
       return `<div style="margin-bottom:12px">
-        <div style="font-family:'Bebas Neue';font-size:26px;line-height:1;color:#E6EDF3;letter-spacing:4px;text-align:center;padding:11px 16px;background:rgba(255,255,255,0.05);border-bottom:1px solid rgba(255,255,255,0.1)">${unit}</div>
+        <div style="font-family:'Bebas Neue';font-size:26px;line-height:1;color:#E6EDF3;letter-spacing:4px;text-align:center;padding:11px 16px;background:${deployedUnit?'rgba(255,107,53,0.14)':'rgba(255,255,255,0.05)'};border-bottom:1px solid rgba(255,255,255,0.1)">${unit}${deployedUnit?` <span style="font-family:sans-serif;font-size:10px;font-weight:800;letter-spacing:1.5px;color:#FF6B35;vertical-align:middle">\u25B2 DEPLOYED</span>`:''}</div>
         ${renderOOS(oosList)}
         ${members.map(m => `<div class="crew-row" style="${dim}">
           <div class="avatar" style="background:linear-gradient(135deg,${m.person.color},${m.person.color}88);box-shadow:0 0 14px ${m.person.color}40;border:2px solid ${m.person.color}55">${m.person.initials}</div>
