@@ -1002,6 +1002,10 @@ function render(weekDays,schedCache,crewData) {
   const depEsc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const depsOnSel = depState.deployments.filter(depCoversSel);
   const depUnitsSel = new Set(depsOnSel.map(dep => dep.unit));
+  // Upcoming (Inc 3) — future deployments not already shown for the selected day; a heads-up before the asset leaves.
+  const depUpcoming = depState.ok ? depState.deployments
+    .filter(dep => { const s = depParseT(dep.start); return s && s > new Date() && !depCoversSel(dep); })
+    .sort((a, b) => depParseT(a.start) - depParseT(b.start)) : [];
 
   let html='';
 
@@ -1032,6 +1036,26 @@ function render(weekDays,schedCache,crewData) {
         <div style="font-size:11px;color:#8B949E;margin-top:3px">Returns ${ret}</div>
       </div>`;
     }).join('');
+  }
+
+  // Upcoming deployments — a heads-up for what's still coming, regardless of the day being viewed (Inc 3)
+  if (depState.ok && depUpcoming.length) {
+    const nn0 = (() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); })();
+    html+=`<div style="background:rgba(255,107,53,0.05);border:1px dashed rgba(255,107,53,0.4);border-radius:12px;margin-bottom:12px;padding:10px 14px">
+      <div style="font-size:9px;letter-spacing:1.5px;color:#8B949E;font-weight:700;margin-bottom:6px">UPCOMING DEPLOYMENTS</div>
+      ${depUpcoming.map(dep => {
+        const s = depParseT(dep.start);
+        const dtxt = s.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+        const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+        const days = Math.round((s0 - nn0) / 86400000);
+        const inTxt = days<=0 ? 'today' : (days===1 ? 'tomorrow' : ('in '+days+' days'));
+        const uc = dep.unit==='UAV121' ? '#3DBEFF' : '#50FA7B';
+        return `<div style="font-size:11px;color:#E6EDF3;margin:3px 0;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+          <span style="color:#FF6B35;font-weight:700">\u25B2</span>
+          <span style="color:${uc};font-weight:700">${dep.unit}</span>
+          <span style="color:#8B949E">deploys ${dtxt} (${inTxt})${dep.mission?' \u00b7 '+depEsc(dep.mission):''}</span></div>`;
+      }).join('')}
+    </div>`;
   }
 
   // 7-day strip
