@@ -59,6 +59,7 @@
   .chip.r-hazmat  { border-color: #3FB950; color: #3FB950; }
   .chip.r-water   { border-color: #58A6FF; color: #58A6FF; }
   .chip.duty { border-color: #F85149; background: rgba(248,81,73,.15); color: #F85149; font-weight: 500; }
+  .whotxt { font-size: 9px; color: #F85149; margin-top: 2px; white-space: nowrap; }
   .chip.off  { border-color: #30363D; color: #8B949E; }
   .chip.flew { border-color: #3FB950; background: rgba(63,185,80,.12); color: #3FB950; }
 
@@ -290,7 +291,7 @@
       "<tr><td style='white-space:nowrap'>" + ctShort(x.t) + "</td>" +
       "<td>" + esc(x.ty) + "</td><td>" + esc(x.ad) + "</td>" +
       "<td><span class='chip r-" + x.r + "'>" + (RULE_LBL[x.r] || x.r) + "</span></td>" +
-      "<td>" + (x.st === true ? "<span class='chip duty'>PILOT ON DUTY</span>"
+      "<td>" + (x.st === true ? "<span class='chip duty'>PILOT ON DUTY</span>" + (x.who ? "<div class='whotxt'>" + esc(x.who) + "</div>" : "")
               : x.st === false ? "<span class='chip off'>unstaffed</span>"
               : "<span class='chip off'>no sched</span>") + "</td></tr>"
     ).join("") || "<tr><td colspan='5' style='color:#8B949E'>No missed missions in the archive. Keep it that way.</td></tr>";
