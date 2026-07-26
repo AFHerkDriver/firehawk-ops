@@ -79,6 +79,18 @@
   .note { font-size: 10px; color: #8B949E; line-height: 1.5; margin-top: 8px; }
   .note b { color: #D29922; font-weight: 500; }
 
+  .livehdr { display: flex; align-items: baseline; gap: 8px; font-size: 11px; margin: 10px 0 4px; }
+  .livehdr b { color: #FF6B35; }
+  .livehdr span { color: #8B949E; font-size: 10px; }
+  video.vid { width: 100%; border-radius: 8px; background: #000; display: block; border: 1px solid #30363D; }
+  .liveup { color: #3FB950; font-weight: 500; }
+  .livedown { color: #F85149; font-weight: 500; }
+  .uavIcon { background: none; border: none; }
+  .uavIcon .dot { width: 14px; height: 14px; border-radius: 50%; background: #FF6B35; border: 2px solid #0D1117;
+                  box-shadow: 0 0 0 3px rgba(255,107,53,.35); }
+  .uavIcon .tag { position: absolute; left: 18px; top: -2px; font-size: 9px; color: #FF6B35; white-space: nowrap;
+                  text-shadow: 0 0 4px #0D1117, 0 0 4px #0D1117; font-family: 'DM Mono', monospace; }
+
   .err { border: 1px solid #F85149; background: rgba(248,81,73,.1); color: #F85149; border-radius: 10px;
          padding: 12px 14px; font-size: 12px; font-weight: 500; margin-bottom: 14px; display: none; }
   .loading { color: #8B949E; font-size: 12px; padding: 30px 0; text-align: center; }
@@ -126,6 +138,12 @@
     <div class="dutyline" id="duty"></div>
 
     <div class="card">
+      <h2>Live Air <small>DroneSense &middot; refreshes every 15 s</small></h2>
+      <div id="liveBody" class="note">checking the live feed&hellip;</div>
+      <div id="liveVids"></div>
+    </div>
+
+    <div class="card">
       <h2>Missed Missions <small>UAV-appropriate calls with no UAV attached &middot; newest first &middot; times Central</small></h2>
       <div style="overflow-x:auto"><table id="missTbl">
         <thead><tr><th>When</th><th>Call</th><th>Address</th><th>Type</th><th>Duty</th></tr></thead>
@@ -149,7 +167,7 @@
     </div>
 
     <div class="card">
-      <h2>Demand Map <small>green = flown &middot; red = missed</small></h2>
+      <h2>Ops Map <small>pins = calls a UAV attached to &middot; live aircraft in orange</small></h2>
       <div id="map"></div>
     </div>
 
@@ -178,6 +196,7 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
 <script>
 (() => {
   const WORKER = "https://bc2fd-dash-auth.usafsentinel-45e.workers.dev";
@@ -234,6 +253,7 @@
       return false;
     }
     render(j);
+    startLive();
     return true;
   }
   $("refresh").addEventListener("click", () => load(true));
@@ -340,13 +360,95 @@
           L.polygon(ring.map(p => [p[1], p[0]]), { color: "#FF6B35", weight: 1.5, fill: false, opacity: .6 }).addTo(map)));
       }).catch(() => {});
     }
+    /* PINS ONLY FOR UAV-ATTACHED CALLS (department call) — missed missions live in the table and
+       counters, not as map clutter. */
+    const flown = pts.filter(p => p[2]);
     if (mapLayer) { map.removeLayer(mapLayer); }
-    mapLayer = L.layerGroup(pts.map(p =>
-      L.circleMarker([p[0], p[1]], { radius: p[2] ? 6 : 5, weight: 1,
-        color: p[2] ? "#3FB950" : "#F85149", fillColor: p[2] ? "#3FB950" : "#F85149", fillOpacity: .55 })
-        .bindTooltip((p[2] ? "flown" : "missed") + (p[3] ? " · " + (RULE_LBL[p[3]] || p[3]) : ""))));
+    mapLayer = L.layerGroup(flown.map(p =>
+      L.circleMarker([p[0], p[1]], { radius: 6, weight: 1,
+        color: "#3FB950", fillColor: "#3FB950", fillOpacity: .55 })
+        .bindTooltip("UAV flown" + (p[3] ? " · " + (RULE_LBL[p[3]] || p[3]) : ""))));
     mapLayer.addTo(map);
-    if (pts.length) map.fitBounds(pts.map(p => [p[0], p[1]]), { padding: [20, 20], maxZoom: 12 });
+    if (flown.length) map.fitBounds(flown.map(p => [p[0], p[1]]), { padding: [20, 20], maxZoom: 12 });
+  }
+
+  /* ── LIVE AIR — polls /uavdrones (Firehawk-gated) every 15 s: aircraft markers on the ops map,
+     one HLS player per stream with video. Players persist across polls so playback never restarts.
+     Fail LOUD; "nothing airborne" is only ever said by a live, successful poll. ── */
+  let liveLayer = null, liveTimer = null;
+  const players = {};   // drone id -> { wrap, video, hls, url }
+  async function liveTick() {
+    let r, j;
+    try { r = await fetch(WORKER + "/uavdrones?pin=" + encodeURIComponent(PIN)); }
+    catch (e) { liveStatus("<span class='livedown'>LIVE FEED DOWN</span> — worker unreachable.", true); return; }
+    j = await r.json().catch(() => null);   /* a non-JSON body must not mask the status checks below */
+    if (r.status === 404) { liveStatus("<span class='livedown'>WORKER UPDATE NEEDED</span> — this page expects the /uavdrones route. Paste the latest worker build.", true); return; }
+    if (r.status === 401 || r.status === 429) { liveStatus("<span class='livedown'>LIVE FEED LOCKED</span> — PIN rejected by the live route.", true); return; }
+    if (r.status === 501) { liveStatus("DroneSense relay not configured on the worker.", true); return; }
+    if (!j || !j.ok) { liveStatus("<span class='livedown'>LIVE FEED ERROR</span> — DroneSense did not answer.", true); return; }
+    const ds = j.drones || [];
+    liveStatus(ds.length
+      ? "<span class='liveup'>" + ds.length + " AIRCRAFT UP</span> — " +
+        ds.map(d => esc(d.callSign || d.model || "UAS")).join(" · ") + " · as of " + ctShort(new Date().toISOString())
+      : "Nothing airborne right now · live as of " + ctShort(new Date().toISOString()), false);
+    /* markers */
+    if (map) {
+      if (liveLayer) map.removeLayer(liveLayer);
+      liveLayer = L.layerGroup(ds.filter(d => d.lat != null && d.lng != null).map(d =>
+        L.marker([d.lat, d.lng], { icon: L.divIcon({ className: "uavIcon", iconSize: [14, 14], iconAnchor: [7, 7],
+          html: "<div class='dot'></div><div class='tag'>" + esc(d.callSign || d.model || "UAS") + "</div>" }) })
+          .bindTooltip(esc(d.callSign || d.model || "UAS") +
+            (d.altAgl != null ? " · " + Math.round(d.altAgl * 3.281) + " ft AGL" : "") +
+            (d.speed != null ? " · " + Math.round(d.speed * 2.237) + " mph" : ""))));
+      liveLayer.addTo(map);
+    }
+    /* video players — keyed by drone id, created once, torn down when the stream ends */
+    const liveIds = {};
+    for (const d of ds) {
+      if (!d.video_url) continue;
+      liveIds[d.id] = 1;
+      let p = players[d.id];
+      if (p && p.url !== d.video_url) { teardown(d.id); p = null; }
+      if (!p) {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = "<div class='livehdr'><b>" + esc(d.callSign || d.model || "UAS") + "</b><span>" +
+          esc(d.mission || "") + "</span></div>";
+        const v = document.createElement("video");
+        v.className = "vid"; v.muted = true; v.autoplay = true; v.playsInline = true; v.controls = true;
+        v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", "");
+        wrap.appendChild(v); $("liveVids").appendChild(wrap);
+        let hls = null;
+        if (window.Hls && Hls.isSupported() && /\.m3u8/i.test(d.video_url)) {
+          hls = new Hls({ liveDurationInfinity: true });
+          hls.loadSource(d.video_url); hls.attachMedia(v);
+        } else {
+          v.src = d.video_url;   /* Safari native HLS, or a direct-playable URL */
+        }
+        v.play().catch(() => {});
+        players[d.id] = { wrap, video: v, hls, url: d.video_url };
+      }
+    }
+    for (const id in players) if (!liveIds[id]) teardown(id);
+  }
+  function teardown(id) {
+    const p = players[id]; if (!p) return;
+    try { if (p.hls) p.hls.destroy(); } catch (e) {}
+    try { p.video.pause(); p.video.removeAttribute("src"); p.video.load(); } catch (e) {}
+    try { p.wrap.remove(); } catch (e) {}
+    delete players[id];
+  }
+  function liveStatus(html, isErr) {
+    $("liveBody").innerHTML = html;
+    if (isErr) for (const id in players) teardown(id);
+  }
+  function startLive() {
+    if (liveTimer) return;
+    liveTick();
+    liveTimer = setInterval(liveTick, 15000);
+    document.addEventListener("visibilitychange", () => {   /* don't burn phone battery in a background tab */
+      if (document.hidden) { clearInterval(liveTimer); liveTimer = null; }
+      else if (!liveTimer && PIN) { liveTick(); liveTimer = setInterval(liveTick, 15000); }
+    });
   }
 
   const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
