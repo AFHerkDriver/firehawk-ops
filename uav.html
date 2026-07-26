@@ -247,6 +247,7 @@
     $("loading").style.display = "none";
     if (r.status === 401) { showGate("PIN not recognized"); return false; }
     if (r.status === 429) { showGate("Too many tries — locked for 5 minutes"); return false; }
+    if (r.status === 503) { showGate("AUTH LINK DOWN — the worker can't reach firehawk-auth. Add the FHAUTH service binding in Cloudflare."); return false; }
     if (!j || !j.ok) {
       if ($("gate").style.display !== "none") { $("gerr").textContent = "Feed error — try again"; return false; }
       $("err").textContent = "DATA ERROR — the rollup failed server-side. Nothing on this page is current."; $("err").style.display = "block";
@@ -384,6 +385,7 @@
     j = await r.json().catch(() => null);   /* a non-JSON body must not mask the status checks below */
     if (r.status === 404) { liveStatus("<span class='livedown'>WORKER UPDATE NEEDED</span> — this page expects the /uavdrones route. Paste the latest worker build.", true); return; }
     if (r.status === 401 || r.status === 429) { liveStatus("<span class='livedown'>LIVE FEED LOCKED</span> — PIN rejected by the live route.", true); return; }
+    if (r.status === 503) { liveStatus("<span class='livedown'>AUTH LINK DOWN</span> — the worker can't reach firehawk-auth (FHAUTH service binding missing).", true); return; }
     if (r.status === 501) { liveStatus("DroneSense relay not configured on the worker.", true); return; }
     if (!j || !j.ok) { liveStatus("<span class='livedown'>LIVE FEED ERROR</span> — DroneSense did not answer.", true); return; }
     const ds = j.drones || [];
