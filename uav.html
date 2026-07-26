@@ -167,7 +167,7 @@
     </div>
 
     <div class="card">
-      <h2>Ops Map <small>pins = calls a UAV attached to &middot; live aircraft in orange</small></h2>
+      <h2>Ops Map <small>pins = UAV-attached calls &middot; live aircraft orange &middot; layers &#9776;: Satellite/Dark &middot; Wind Flow &middot; Radar</small></h2>
       <div id="map"></div>
     </div>
 
@@ -351,19 +351,130 @@
     drawMap(j.pts || []);
   }
 
+  /* ── MAP — the SAME stack as the wall board: Satellite/Dark/Positron bases (sun-follow default),
+     station emblems, district borders, Wind Flow particles, animated radar. Call pins are ONLY for
+     UAV-attached runs (department call) — missed missions live in the table, not as map clutter. ── */
+  const DASH = "https://afherkdriver.github.io/bcesd2-dashboard";
+  function initMap() {
+    if (map || typeof L === "undefined") return;
+    const TL = (u, o) => { o = o || {}; o.updateWhenIdle = true; o.updateWhenZooming = false; o.keepBuffer = 4; return L.tileLayer(u, o); };
+    const dark = TL("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 20 });
+    const positron = TL("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 20 });
+    const satellite = L.layerGroup([
+      TL("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 }),
+      TL("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 }),
+      TL("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 })]);
+    /* sun-follow default: satellite in daylight, dark at night (same solar math as the board) */
+    function sunUp(lat, lng) { const now = new Date(), rad = Math.PI / 180, deg = 180 / Math.PI;
+      const doy = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+      const utcH = now.getUTCHours() + now.getUTCMinutes() / 60;
+      const decl = -23.44 * Math.cos(rad * 360 / 365 * (doy + 10));
+      const B = rad * 360 / 365 * (doy - 81), eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
+      const H = 15 * ((utcH + lng / 15 + eot / 60) - 12);
+      return deg * Math.asin(Math.sin(rad * lat) * Math.sin(rad * decl) + Math.cos(rad * lat) * Math.cos(rad * decl) * Math.cos(rad * H)) > -0.833; }
+    map = L.map("map", { center: [29.44, -98.72], zoom: 10, layers: [sunUp(29.465, -98.73) ? satellite : dark],
+                         zoomControl: true, attributionControl: false });
+    /* radar frames get their own pane under the overlay pane so pins/aircraft stay on top */
+    map.createPane("radarPane"); map.getPane("radarPane").style.zIndex = 350;
+    const windOverlay = L.layerGroup(), radarOverlay = L.layerGroup();
+    L.control.layers({ "Satellite": satellite, "Dark": dark, "Positron": positron },
+      { "Wind Flow": windOverlay, "Radar": radarOverlay }, { collapsed: true, position: "topright" }).addTo(map);
+    /* station emblems — same fixed layer as the board */
+    [["120",29.392122,-98.709906],["121",29.454183,-98.755111],["122",29.505141,-98.782267],
+     ["123",29.405115,-98.701876],["124",29.413373,-98.785885],["125",29.49202,-98.74346],
+     ["161",29.21967,-98.45806],["162",29.17785,-98.42410]].forEach(s =>
+      L.marker([s[1], s[2]], { icon: L.icon({ iconUrl: DASH + "/station-" + s[0] + ".png", iconSize: [30, 30], iconAnchor: [15, 15] }),
+        interactive: false, keyboard: false, zIndexOffset: -1000 }).addTo(map));
+    fetch(DASH + "/district-bounds.json").then(r => r.json()).then(b => {
+      ["esd2", "esd6"].forEach(k => (b[k] || []).forEach(ring =>
+        L.polygon(ring.map(p => [p[1], p[0]]), { color: "#FF6B35", weight: 1.5, fill: false, opacity: .6 }).addTo(map)));
+    }).catch(() => {});
+
+    /* ── ANIMATED RADAR (manual overlay) — same 6-frame nexrad loop as the board ── */
+    const RF = ["nexrad-n0q-900913-m25m","nexrad-n0q-900913-m20m","nexrad-n0q-900913-m15m","nexrad-n0q-900913-m10m","nexrad-n0q-900913-m05m","nexrad-n0q-900913"];
+    const rUrl = (id, bk) => "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/" + id + "/{z}/{x}/{y}.png" + (bk ? "?_=" + bk : "");
+    const rLayers = RF.map(id => L.tileLayer(rUrl(id), { pane: "radarPane", opacity: 0, maxZoom: 19, updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 2 }));
+    let rAnim = null, rFi = RF.length - 1, rHold = 0, rBucket = 0;
+    function radarStep() {
+      if (rHold > 0) { rHold--; return; }
+      rLayers[rFi].setOpacity(0); rFi = (rFi + 1) % RF.length; rLayers[rFi].setOpacity(0.5);
+      if (rFi === RF.length - 1) rHold = 3;
+      const bk = Math.floor(Date.now() / 300000);
+      if (bk !== rBucket) { rBucket = bk; rLayers.forEach((l, i) => { try { l.setUrl(rUrl(RF[i], bk)); } catch (e) {} }); }
+    }
+    function radarShow(on) {
+      rLayers.forEach(l => { try { on ? map.addLayer(l) : map.removeLayer(l); } catch (e) {} });
+      if (on && !rAnim) { rFi = RF.length - 1; radarStep(); rAnim = setInterval(radarStep, 500); }
+      else if (!on && rAnim) { clearInterval(rAnim); rAnim = null; }
+    }
+
+    /* ── WIND FLOW (manual overlay) — the board's windy-style particles: Open-Meteo 6x6 county
+       model grid, IDW² steering, destination-out trail fade, zoom-scaled pacing ── */
+    let cv = null, wctx = null, parts = [], raf = null, windManual = false;
+    let windGrid = null, windGridAt = 0, windGridBusy = false;
+    function fetchWindGrid() {
+      if (windGridBusy || Date.now() - windGridAt < 15 * 60000) return;
+      windGridBusy = true;
+      const lats = [], lngs = [];
+      for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) { lats.push((29.08 + r * 0.112).toFixed(3)); lngs.push((-98.93 + c * 0.132).toFixed(3)); }
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=" + lats.join(",") + "&longitude=" + lngs.join(",") +
+            "&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=mph")
+        .then(r => r.ok ? r.json() : null).then(j => { windGridBusy = false;
+          const arr = Array.isArray(j) ? j : (j ? [j] : []), g = [];
+          arr.forEach(loc => { const c = loc && loc.current; if (!c || c.wind_direction_10m == null) return;
+            g.push({ lat: loc.latitude, lng: loc.longitude, deg: +c.wind_direction_10m,
+                     spd: (+c.wind_speed_10m || 0) + Math.max(0, ((+c.wind_gusts_10m || 0) - (+c.wind_speed_10m || 0)) * 0.3) }); });
+          if (g.length >= 8) { windGrid = g; windGridAt = Date.now(); }
+        }).catch(() => { windGridBusy = false; });
+    }
+    function wEnsure() { if (cv) return;
+      cv = document.createElement("canvas");
+      cv.style.cssText = "position:absolute;left:0;top:0;pointer-events:none;z-index:650";   /* above Leaflet's z-400 pane stack, below controls at 1000 */
+      map.getContainer().appendChild(cv); wctx = cv.getContext("2d"); }
+    function wFit() { const s = map.getSize(); if (cv.width !== s.x || cv.height !== s.y) { cv.width = s.x; cv.height = s.y; } }
+    function wField(x, y) {
+      if (!windGrid || !windGrid.length) return null;
+      let ll; try { ll = map.containerPointToLatLng([x, y]); } catch (e) { return null; }
+      let sx = 0, sy = 0, sw = 0;
+      for (const w of windGrid) {
+        const dd = Math.max(1e-6, (w.lat - ll.lat) * (w.lat - ll.lat) + (w.lng - ll.lng) * (w.lng - ll.lng));
+        const wt = 1 / (dd * dd);
+        const deg = (w.deg + 180) * Math.PI / 180;                  /* met FROM -> flow TO */
+        sx += wt * w.spd * Math.sin(deg); sy += wt * (-w.spd * Math.cos(deg)); sw += wt; }
+      return { u: sx / sw, v: sy / sw };
+    }
+    const wSpawn = () => ({ x: Math.random() * cv.width, y: Math.random() * cv.height, life: 50 + Math.random() * 90 });
+    function wStep() {
+      raf = null;
+      if (!windManual) { if (cv) { wctx.clearRect(0, 0, cv.width, cv.height); cv.style.display = "none"; parts = []; } return; }
+      fetchWindGrid();
+      wEnsure(); wFit(); cv.style.display = "block";
+      while (parts.length < 300) parts.push(wSpawn());
+      wctx.globalCompositeOperation = "destination-out";           /* fade own alpha — a dark wash compounds to black */
+      wctx.fillStyle = "rgba(0,0,0,0.08)"; wctx.fillRect(0, 0, cv.width, cv.height);
+      wctx.globalCompositeOperation = "source-over";
+      wctx.strokeStyle = "rgba(190,230,255,0.55)"; wctx.lineWidth = 1.1; wctx.beginPath();
+      const kz = 0.028 * Math.min(3, Math.max(0.5, Math.pow(2, (map.getZoom() || 12) - 12)));
+      for (let i = 0; i < parts.length; i++) { const p = parts[i];
+        const f = wField(p.x, p.y); if (!f) { parts[i] = wSpawn(); continue; }
+        const nx = p.x + f.u * kz, ny = p.y + f.v * kz;
+        wctx.moveTo(p.x, p.y); wctx.lineTo(nx, ny);
+        p.x = nx; p.y = ny; p.life--;
+        if (p.life <= 0 || nx < -4 || ny < -4 || nx > cv.width + 4 || ny > cv.height + 4) parts[i] = wSpawn(); }
+      wctx.stroke();
+      raf = requestAnimationFrame(wStep);
+    }
+    const wKick = () => { if (!raf) raf = requestAnimationFrame(wStep); };
+    map.on("overlayadd", e => { if (e.layer === windOverlay) { windManual = true; fetchWindGrid(); wKick(); }
+                                if (e.layer === radarOverlay) radarShow(true); });
+    map.on("overlayremove", e => { if (e.layer === windOverlay) { windManual = false; wKick(); }
+                                   if (e.layer === radarOverlay) radarShow(false); });
+    map.on("move zoom", () => { if (cv && wctx) wctx.clearRect(0, 0, cv.width, cv.height); });
+  }
   function drawMap(pts) {
     if (typeof L === "undefined") { $("map").innerHTML = '<div class="loading">Map library failed to load — points unavailable.</div>'; return; }
-    if (!map) {
-      map = L.map("map", { zoomControl: true, attributionControl: false }).setView([29.44, -98.72], 10);
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 18 }).addTo(map);
-      fetch("https://afherkdriver.github.io/bcesd2-dashboard/district-bounds.json").then(r => r.json()).then(b => {
-        ["esd2", "esd6"].forEach(k => (b[k] || []).forEach(ring =>
-          L.polygon(ring.map(p => [p[1], p[0]]), { color: "#FF6B35", weight: 1.5, fill: false, opacity: .6 }).addTo(map)));
-      }).catch(() => {});
-    }
-    /* PINS ONLY FOR UAV-ATTACHED CALLS (department call) — missed missions live in the table and
-       counters, not as map clutter. */
-    const flown = pts.filter(p => p[2]);
+    initMap();
+    const flown = pts.filter(p => p[2]);                            /* UAV-attached pins only */
     if (mapLayer) { map.removeLayer(mapLayer); }
     mapLayer = L.layerGroup(flown.map(p =>
       L.circleMarker([p[0], p[1]], { radius: 6, weight: 1,
