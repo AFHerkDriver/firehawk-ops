@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Firehawk UAV Ops — BC2FD</title>
+<link rel="icon" href="https://afherkdriver.github.io/bcesd2-dashboard/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: #0D1117; color: #E6EDF3; font-family: 'DM Mono', monospace; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,107,53,0.3); border-radius: 2px; }
+  button { font-family: 'DM Mono', monospace; cursor: pointer; }
+  input { font-family: 'DM Mono', monospace; }
+  .fh-wrap { max-width: 520px; margin: 0 auto; padding: 14px 14px 44px; }
+  @media (min-width: 768px) { .fh-wrap { max-width: 960px; padding: 22px 24px 60px; } }
+
+  .hdr { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .hdr h1 { font-family: 'Bebas Neue', sans-serif; font-size: 34px; letter-spacing: 2px; color: #E6EDF3; }
+  .hdr h1 b { color: #FF6B35; font-weight: 400; }
+  .hdr .sub { font-size: 11px; color: #8B949E; }
+  .stamp { font-size: 10px; color: #8B949E; margin-bottom: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .stamp button { background: none; border: 1px solid #30363D; color: #8B949E; border-radius: 6px; padding: 3px 10px; font-size: 10px; }
+  .stamp button:active { border-color: #FF6B35; color: #FF6B35; }
+
+  .card { background: #161B22; border: 1px solid #30363D; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .card h2 { font-family: 'Bebas Neue', sans-serif; font-size: 19px; letter-spacing: 1.5px; color: #FF6B35; font-weight: 400; margin-bottom: 10px; }
+  .card h2 small { font-family: 'DM Mono', monospace; font-size: 10px; color: #8B949E; letter-spacing: 0; margin-left: 8px; }
+
+  .quad { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (min-width: 768px) { .quad { grid-template-columns: repeat(4, 1fr); } }
+  .qbox { border: 1px solid #30363D; border-radius: 10px; padding: 12px 12px 10px; background: #161B22; }
+  .qbox .n { font-family: 'Bebas Neue', sans-serif; font-size: 46px; line-height: 1; }
+  .qbox .l { font-size: 10px; color: #8B949E; margin-top: 4px; letter-spacing: .5px; }
+  .q-fl .n { color: #3FB950; } .q-miss .n { color: #F85149; } .q-opp .n { color: #D29922; } .q-cov .n { color: #E6EDF3; }
+  .q-miss { border-color: rgba(248,81,73,.55); background: rgba(248,81,73,.07); }
+
+  .dutyline { border: 1px solid rgba(248,81,73,.55); background: rgba(248,81,73,.08); border-radius: 10px;
+              padding: 10px 14px; font-size: 12px; margin: 14px 0; line-height: 1.55; }
+  .dutyline b { color: #F85149; }
+  .dutyline .ok { color: #8B949E; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { text-align: left; color: #8B949E; font-weight: 400; padding: 4px 6px; border-bottom: 1px solid #30363D; font-size: 10px; }
+  td { padding: 5px 6px; border-bottom: 1px solid rgba(48,54,61,.5); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .chip { display: inline-block; font-size: 9px; padding: 1px 7px; border-radius: 8px; border: 1px solid #30363D;
+          color: #E6EDF3; white-space: nowrap; }
+  .chip.r-missing { border-color: #A371F7; color: #A371F7; }
+  .chip.r-smoke   { border-color: #8B949E; color: #C9D1D9; }
+  .chip.r-brush   { border-color: #D29922; color: #D29922; }
+  .chip.r-struct  { border-color: #F85149; color: #F85149; }
+  .chip.r-hazmat  { border-color: #3FB950; color: #3FB950; }
+  .chip.r-water   { border-color: #58A6FF; color: #58A6FF; }
+  .chip.duty { border-color: #F85149; background: rgba(248,81,73,.15); color: #F85149; font-weight: 500; }
+  .chip.off  { border-color: #30363D; color: #8B949E; }
+  .chip.flew { border-color: #3FB950; background: rgba(63,185,80,.12); color: #3FB950; }
+
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 90px; }
+  .bars .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; height: 100%; }
+  .bars .b { width: 100%; border-radius: 2px 2px 0 0; min-height: 1px; }
+  .bars .lbl { font-size: 8px; color: #8B949E; }
+  .legend { font-size: 10px; color: #8B949E; margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+
+  #map { height: 320px; border-radius: 8px; background: #0D1117; border: 1px solid #30363D; }
+  .leaflet-container { background: #0D1117; font-family: 'DM Mono', monospace; }
+
+  .rulerow { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid rgba(48,54,61,.5); flex-wrap: wrap; }
+  .rulerow:last-child { border-bottom: none; }
+  .rulerow code { font-size: 9px; color: #8B949E; background: #0D1117; border: 1px solid #30363D; border-radius: 4px; padding: 2px 6px; word-break: break-all; }
+  .rulerow .cnt { margin-left: auto; font-size: 11px; color: #E6EDF3; }
+  .note { font-size: 10px; color: #8B949E; line-height: 1.5; margin-top: 8px; }
+  .note b { color: #D29922; font-weight: 500; }
+
+  .err { border: 1px solid #F85149; background: rgba(248,81,73,.1); color: #F85149; border-radius: 10px;
+         padding: 12px 14px; font-size: 12px; font-weight: 500; margin-bottom: 14px; display: none; }
+  .loading { color: #8B949E; font-size: 12px; padding: 30px 0; text-align: center; }
+
+  /* PIN gate */
+  #gate { position: fixed; inset: 0; background: #0D1117; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+  .gatebox { width: min(320px, 86vw); background: #161B22; border: 1px solid #30363D; border-radius: 12px; padding: 26px 22px; text-align: center; }
+  .gatebox h1 { font-family: 'Bebas Neue', sans-serif; font-size: 30px; letter-spacing: 2px; margin-bottom: 2px; }
+  .gatebox h1 b { color: #FF6B35; font-weight: 400; }
+  .gatebox .s { font-size: 10px; color: #8B949E; margin-bottom: 18px; }
+  .gatebox input { width: 100%; background: #0D1117; border: 1px solid #30363D; color: #E6EDF3; border-radius: 8px;
+                   padding: 12px; font-size: 20px; text-align: center; letter-spacing: 8px; outline: none; }
+  .gatebox input:focus { border-color: #FF6B35; }
+  .gatebox button { width: 100%; margin-top: 12px; background: #FF6B35; border: none; color: #0D1117; font-weight: 500;
+                    border-radius: 8px; padding: 12px; font-size: 14px; letter-spacing: 1px; }
+  .gatebox .gerr { color: #F85149; font-size: 11px; margin-top: 10px; min-height: 14px; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="gatebox">
+    <h1>FIREHAWK <b>UAV OPS</b></h1>
+    <div class="s">BEXAR COUNTY ESD NO. 2 &middot; UAS PROGRAM</div>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" maxlength="8">
+    <button id="go">Unlock</button>
+    <div class="gerr" id="gerr"></div>
+  </div>
+</div>
+
+<div class="fh-wrap" id="app" style="display:none">
+  <div class="hdr">
+    <h1>FIREHAWK <b>UAV OPS</b></h1>
+    <span class="sub">MISSION DEMAND vs FLOWN &middot; BC2FD UAS</span>
+  </div>
+  <div class="stamp">
+    <span id="stamp">loading&hellip;</span>
+    <button id="refresh">Recompute</button>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="loading" id="loading">Crunching the archive&hellip;</div>
+  <div id="content" style="display:none">
+
+    <div class="quad" id="quad"></div>
+    <div class="dutyline" id="duty"></div>
+
+    <div class="card">
+      <h2>Missed Missions <small>UAV-appropriate calls with no UAV attached &middot; newest first &middot; times Central</small></h2>
+      <div style="overflow-x:auto"><table id="missTbl">
+        <thead><tr><th>When</th><th>Call</th><th>Address</th><th>Type</th><th>Duty</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>Month by Month <small>demand vs flown</small></h2>
+      <div class="bars" id="mbars"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:#30363D"></span>UAV-appropriate calls</span>
+        <span><span class="sw" style="background:#3FB950"></span>UAV attached</span>
+        <span><span class="sw" style="background:#D29922"></span>flights of opportunity</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Demand by Hour <small>UAV-appropriate calls, Central time</small></h2>
+      <div class="bars" id="hbars"></div>
+    </div>
+
+    <div class="card">
+      <h2>Demand Map <small>green = flown &middot; red = missed</small></h2>
+      <div id="map"></div>
+    </div>
+
+    <div class="card">
+      <h2>Mission Rules <small>what counts as UAV-appropriate</small></h2>
+      <div id="rules"></div>
+      <div class="note">Rules live in the <b>bc2fd-dash-auth</b> worker (<code style="font-size:9px">UAV_RULES</code>).
+        Classification happens at read time from the permanent call archive, so editing a pattern
+        re-scores <b>all history</b> on the next recompute — nothing is baked in.</div>
+    </div>
+
+    <div class="card">
+      <h2>Call Types Seen <small>tune the rules against reality</small></h2>
+      <div style="overflow-x:auto"><table id="tyTbl">
+        <thead><tr><th>Dispatch type</th><th class="num">Calls</th><th>Rule</th><th class="num">UAV flew</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>DroneSense Flight Log <small>actual airtime, auto-logged</small></h2>
+      <div id="flights"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+  const WORKER = "https://bc2fd-dash-auth.usafsentinel-45e.workers.dev";
+  const RULE_LBL = {};   // filled from server response
+  const $ = (id) => document.getElementById(id);
+
+  const ct = (iso, opts) => {
+    try { return new Intl.DateTimeFormat("en-US", Object.assign({ timeZone: "America/Chicago" }, opts)).format(new Date(iso)); }
+    catch (e) { return String(iso || ""); }
+  };
+  const ctShort = (iso) => ct(iso, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const hrs = (secs) => (secs / 3600).toFixed(1);
+
+  /* ── PIN gate — FIREHAWK PINS ONLY: the worker verifies every pin against firehawk-auth,
+     server-side and fail-closed. Nothing about auth lives in this page. ── */
+  let PIN = sessionStorage.getItem("uavPin") || "";
+  function showGate(msg) {
+    $("gate").style.display = "flex"; $("app").style.display = "none";
+    $("gerr").textContent = msg || ""; sessionStorage.removeItem("uavPin");
+    setTimeout(() => $("pin").focus(), 50);
+  }
+  async function unlock() {
+    const p = $("pin").value.trim();
+    if (!/^\d{4,8}$/.test(p)) { $("gerr").textContent = "Enter your PIN"; return; }
+    $("gerr").textContent = "checking…";
+    PIN = p;
+    const ok = await load(false);
+    if (ok) { sessionStorage.setItem("uavPin", p); $("gate").style.display = "none"; $("app").style.display = "block"; }
+  }
+  $("go").addEventListener("click", unlock);
+  $("pin").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+
+  /* ── Fetch + render. Fail LOUD: every failure paints the red banner, never a silent blank. ── */
+  let map = null, mapLayer = null;
+  async function load(fresh) {
+    $("err").style.display = "none";
+    $("loading").style.display = "block"; $("content").style.display = "none";
+    let r, j;
+    try {
+      r = await fetch(WORKER + "/uav?pin=" + encodeURIComponent(PIN) + (fresh ? "&fresh=1" : ""));
+      j = await r.json();
+    } catch (e) {
+      $("loading").style.display = "none";
+      if ($("gate").style.display !== "none") { $("gerr").textContent = "Worker unreachable — check signal"; return false; }
+      $("err").textContent = "DATA FEED DOWN — the worker did not answer. Nothing on this page is current."; $("err").style.display = "block";
+      return false;
+    }
+    $("loading").style.display = "none";
+    if (r.status === 401) { showGate("PIN not recognized"); return false; }
+    if (r.status === 429) { showGate("Too many tries — locked for 5 minutes"); return false; }
+    if (!j || !j.ok) {
+      if ($("gate").style.display !== "none") { $("gerr").textContent = "Feed error — try again"; return false; }
+      $("err").textContent = "DATA ERROR — the rollup failed server-side. Nothing on this page is current."; $("err").style.display = "block";
+      return false;
+    }
+    render(j);
+    return true;
+  }
+  $("refresh").addEventListener("click", () => load(true));
+
+  function render(j) {
+    $("content").style.display = "block";
+    (j.rules || []).forEach(rl => RULE_LBL[rl.k] = rl.label);
+    $("stamp").textContent = "computed " + ctShort(j.gen) + " CT · archive-wide, accruing since 2026-07";
+
+    /* quadrants */
+    const fl = j.quad.fl || 0, miss = j.quad.miss || 0, opp = j.quad.opp || 0;
+    const cov = (fl + miss) ? Math.round(100 * fl / (fl + miss)) : null;
+    $("quad").innerHTML =
+      qbox("q-miss", miss, "MISSED — UAV-appropriate, no UAV sent") +
+      qbox("q-fl", fl, "FLOWN ON MISSION — UAV attached") +
+      qbox("q-opp", opp, "FLIGHTS OF OPPORTUNITY — outside the rules") +
+      qbox("q-cov", cov == null ? "—" : cov + "%", "MISSION COVERAGE — flown ÷ demand");
+    function qbox(cls, n, l) { return '<div class="qbox ' + cls + '"><div class="n">' + n + '</div><div class="l">' + l + "</div></div>"; }
+
+    /* duty-cross line */
+    const s = j.sched || {};
+    let duty = "";
+    if (s.msStaffed > 0)
+      duty = "<b>" + s.msStaffed + " missed call" + (s.msStaffed === 1 ? "" : "s") + " happened while a pilot was ON the Firehawk duty schedule.</b> ";
+    if (s.msOff > 0) duty += '<span class="ok">' + s.msOff + " missed while no pilot was scheduled.</span> ";
+    if (s.msUnk > 0) duty += '<span class="ok">' + s.msUnk + " missed with no schedule data for that day.</span>";
+    if (!duty) duty = '<span class="ok">No missed missions to cross against the duty schedule yet.</span>';
+    $("duty").innerHTML = duty;
+
+    /* missed table */
+    const tb = $("missTbl").querySelector("tbody");
+    tb.innerHTML = (j.missed || []).map(x =>
+      "<tr><td style='white-space:nowrap'>" + ctShort(x.t) + "</td>" +
+      "<td>" + esc(x.ty) + "</td><td>" + esc(x.ad) + "</td>" +
+      "<td><span class='chip r-" + x.r + "'>" + (RULE_LBL[x.r] || x.r) + "</span></td>" +
+      "<td>" + (x.st === true ? "<span class='chip duty'>PILOT ON DUTY</span>"
+              : x.st === false ? "<span class='chip off'>unstaffed</span>"
+              : "<span class='chip off'>no sched</span>") + "</td></tr>"
+    ).join("") || "<tr><td colspan='5' style='color:#8B949E'>No missed missions in the archive. Keep it that way.</td></tr>";
+
+    /* month bars */
+    const mons = Object.keys(j.months || {}).sort();
+    const mmax = Math.max(1, ...mons.map(m => (j.months[m].app || 0) + (j.months[m].opp || 0)));
+    $("mbars").innerHTML = mons.map(m => {
+      const d = j.months[m];
+      const H = (v) => Math.round(78 * v / mmax);
+      return '<div class="col">' +
+        '<div class="b" style="background:#D29922;height:' + H(d.opp || 0) + 'px" title="opportunity"></div>' +
+        '<div class="b" style="background:#3FB950;height:' + H(d.fl || 0) + 'px" title="flown"></div>' +
+        '<div class="b" style="background:#30363D;height:' + H(Math.max(0, (d.app || 0) - (d.fl || 0))) + 'px" title="missed"></div>' +
+        '<div class="lbl">' + m.slice(2).replace("-", "/") + "</div></div>";
+    }).join("") || '<div class="loading">no data yet</div>';
+
+    /* hour bars */
+    const hmax = Math.max(1, ...(j.byHour || []));
+    $("hbars").innerHTML = (j.byHour || []).map((v, h) =>
+      '<div class="col"><div class="b" style="background:' + (v ? "#FF6B35" : "#30363D") + ";height:" +
+      Math.max(2, Math.round(78 * v / hmax)) + 'px"></div><div class="lbl">' + (h % 6 === 0 ? h : "") + "</div></div>").join("");
+
+    /* rules */
+    $("rules").innerHTML = (j.rules || []).map(rl => {
+      let n = 0; mons.forEach(m => n += (j.months[m].byRule || {})[rl.k] || 0);
+      return '<div class="rulerow"><span class="chip r-' + rl.k + '">' + rl.label + "</span>" +
+        "<code>" + esc(rl.pat) + '</code><span class="cnt">' + n + "</span></div>";
+    }).join("");
+
+    /* type table */
+    $("tyTbl").querySelector("tbody").innerHTML = (j.types || []).map(t =>
+      "<tr><td>" + esc(t[0]) + "</td><td class='num'>" + t[1] + "</td>" +
+      "<td>" + (t[2] ? "<span class='chip r-" + t[2] + "'>" + (RULE_LBL[t[2]] || t[2]) + "</span>" : "") + "</td>" +
+      "<td class='num'>" + (t[3] ? "<span class='chip flew'>" + t[3] + "</span>" : "") + "</td></tr>").join("");
+
+    /* flights */
+    const f = j.flights || { n: 0, secs: 0, byCs: {}, recent: [] };
+    let fh = "";
+    if (!f.n) {
+      fh = '<div class="note">No closed flight sessions logged yet. The worker logs every DroneSense ' +
+        'stream automatically (sessions under 60&nbsp;s are ignored as stream flaps) — airtime starts ' +
+        'accruing from the moment the current worker build went live. Fly, and this fills in.</div>';
+    } else {
+      fh = '<div class="quad" style="margin-bottom:10px">' +
+        '<div class="qbox"><div class="n" style="font-size:34px">' + f.n + '</div><div class="l">SESSIONS</div></div>' +
+        '<div class="qbox"><div class="n" style="font-size:34px">' + hrs(f.secs) + '</div><div class="l">HOURS LOGGED</div></div></div>' +
+        '<div style="overflow-x:auto"><table><thead><tr><th>Aircraft</th><th class="num">Sessions</th><th class="num">Hours</th></tr></thead><tbody>' +
+        Object.entries(f.byCs).sort((a, b) => b[1].secs - a[1].secs).map(([cs, v]) =>
+          "<tr><td>" + esc(cs) + "</td><td class='num'>" + v.n + "</td><td class='num'>" + hrs(v.secs) + "</td></tr>").join("") +
+        "</tbody></table></div>" +
+        '<div class="note" style="margin-top:10px">Recent: ' + f.recent.slice(0, 6).map(x =>
+          esc(x.cs || x.mo) + " " + ctShort(x.s) + " (" + Math.round(x.dur / 60) + "m)").join(" · ") + "</div>";
+    }
+    $("flights").innerHTML = fh;
+
+    /* map */
+    drawMap(j.pts || []);
+  }
+
+  function drawMap(pts) {
+    if (typeof L === "undefined") { $("map").innerHTML = '<div class="loading">Map library failed to load — points unavailable.</div>'; return; }
+    if (!map) {
+      map = L.map("map", { zoomControl: true, attributionControl: false }).setView([29.44, -98.72], 10);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 18 }).addTo(map);
+      fetch("https://afherkdriver.github.io/bcesd2-dashboard/district-bounds.json").then(r => r.json()).then(b => {
+        ["esd2", "esd6"].forEach(k => (b[k] || []).forEach(ring =>
+          L.polygon(ring.map(p => [p[1], p[0]]), { color: "#FF6B35", weight: 1.5, fill: false, opacity: .6 }).addTo(map)));
+      }).catch(() => {});
+    }
+    if (mapLayer) { map.removeLayer(mapLayer); }
+    mapLayer = L.layerGroup(pts.map(p =>
+      L.circleMarker([p[0], p[1]], { radius: p[2] ? 6 : 5, weight: 1,
+        color: p[2] ? "#3FB950" : "#F85149", fillColor: p[2] ? "#3FB950" : "#F85149", fillOpacity: .55 })
+        .bindTooltip((p[2] ? "flown" : "missed") + (p[3] ? " · " + (RULE_LBL[p[3]] || p[3]) : ""))));
+    mapLayer.addTo(map);
+    if (pts.length) map.fitBounds(pts.map(p => [p[0], p[1]]), { padding: [20, 20], maxZoom: 12 });
+  }
+
+  const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  /* boot */
+  if (PIN) {
+    $("gate").style.display = "none"; $("app").style.display = "block";
+    load(false).then(ok => { if (!ok && $("err").style.display === "none") { /* gate already shown on 401 */ } });
+  } else {
+    showGate("");
+  }
+})();
+</script>
+</body>
+</html>
