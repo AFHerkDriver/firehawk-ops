@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
+  button:active,.btn:active,a.navbtn:active{transform:translateY(1px);filter:brightness(.85)}   /* gentle press feedback — consistent across every BC2FD page */
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body { background: #0D1117; color: #E6EDF3; font-family: 'DM Mono', monospace; }
   ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -168,7 +169,7 @@
     </div>
 
     <div class="card">
-      <h2>Ops Map <small>pins = UAV-attached calls &middot; live aircraft orange &middot; layers &#9776;: Satellite/Dark &middot; Wind Flow &middot; Radar</small></h2>
+      <h2>Ops Map <small>pins = UAV-attached calls &middot; live aircraft orange &middot; hydrants past street zoom &middot; layers &#9776;: Satellite/Dark &middot; Wind Flow &middot; Radar</small></h2>
       <div id="map"></div>
     </div>
 
@@ -471,6 +472,55 @@
     map.on("overlayremove", e => { if (e.layer === windOverlay) { windManual = false; wKick(); }
                                    if (e.layer === radarOverlay) radarShow(false); });
     map.on("move zoom", () => { if (cv && wctx) wctx.clearRect(0, 0, cv.width, cv.height); });
+
+    /* ── HYDRANTS — the board's CAD hydrant layer, verbatim behavior: teal plugs past HYD_Z, blue
+       pin for 10"+ mains (NFPA 291 Class AA proxy), RED slashed pin for officer-flagged OOS plugs.
+       The OOS list comes from the same dashboard_state doc the wall board reads (refreshed ~5 min).
+       Enhancement layer: source down -> dots simply absent, nothing else rides on it. ── */
+    const HYD_URL = "https://services.arcgis.com/g1fRTDLeMgspWrYp/arcgis/rest/services/Hydrants/FeatureServer/0/query";
+    const hydLayer = L.layerGroup().addTo(map), HYD_Z = 16.2, hydCache = {}, hydKeys = [];
+    let hydSeq = 0, hydPainted = "", oosHyd = [], oosAt = 0;
+    const hIc = (f, s) => L.icon({ iconUrl: DASH + "/" + f + ".png", iconRetinaUrl: DASH + "/" + f + "@2x.png",
+                                   iconSize: [s, s], iconAnchor: [s / 2, s] });
+    const hydIcon = hIc("hydrant-marker", 20), hydIconBig = hIc("hydrant-marker-hv", 26), hydIconOOS = hIc("hydrant-marker-oos", 26);
+    const hydNorm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const hydIsOOS = (addr) => { const a = hydNorm(addr); return !!a && oosHyd.some(o => o && o.length >= 4 && a.indexOf(o) >= 0); };
+    function oosLoad() {
+      if (Date.now() - oosAt < 5 * 60000) return; oosAt = Date.now();
+      fetch("https://firestore.googleapis.com/v1/projects/firehawk-scheduler/databases/(default)/documents/firehawk/dashboard_state?key=AIzaSyAWbzE0k8p4WDyrUaBfIRDqyLoklkfu8nQ")
+        .then(r => r.ok ? r.json() : null).then(doc => {
+          const dj = doc && doc.fields && doc.fields.stateJson && doc.fields.stateJson.stringValue; if (!dj) return;
+          let st; try { st = JSON.parse(dj); } catch (e) { return; }
+          const next = ((st && st.oosHydrants) || []).map(x => hydNorm(x && x.addr != null ? x.addr : x)).filter(Boolean);
+          if (JSON.stringify(next) !== JSON.stringify(oosHyd)) { oosHyd = next; hydPainted = ""; hydUpdate(); }
+        }).catch(() => {});
+    }
+    function hydPaint(feats, key) {
+      if (key && key === hydPainted) return; hydPainted = key || "";
+      hydLayer.clearLayers();
+      feats.slice(0, 400).forEach(f => {
+        const g = f.geometry; if (!g || g.x == null || g.y == null) return;
+        const at = f.attributes || {};
+        const icon = hydIsOOS(at.Address) ? hydIconOOS : ((+at.Main_Size || 0) >= 10 ? hydIconBig : hydIcon);
+        L.marker([g.y, g.x], { icon, interactive: false, keyboard: false, zIndexOffset: -500 }).addTo(hydLayer);
+      });
+    }
+    function hydUpdate() {
+      if (map.getZoom() < HYD_Z) { hydLayer.clearLayers(); hydPainted = ""; return; }
+      oosLoad();
+      const b = map.getBounds().pad(0.12);
+      const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(x => x.toFixed(4)).join(",");
+      if (hydCache[bbox]) { hydPaint(hydCache[bbox], bbox); return; }
+      const seq = ++hydSeq;
+      fetch(HYD_URL + "?geometry=" + bbox + "&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&spatialRel=esriSpatialRelIntersects&outFields=Main_Size,Address&returnGeometry=true&resultRecordCount=800&f=json")
+        .then(r => r.ok ? r.json() : null).then(j => {
+          if (seq !== hydSeq || !j || !Array.isArray(j.features)) return;
+          hydCache[bbox] = j.features; hydKeys.push(bbox);
+          if (hydKeys.length > 40) delete hydCache[hydKeys.shift()];
+          if (map.getZoom() >= HYD_Z) hydPaint(j.features, bbox);
+        }).catch(() => {});
+    }
+    map.on("moveend zoomend", hydUpdate);
   }
   function drawMap(pts) {
     if (typeof L === "undefined") { $("map").innerHTML = '<div class="loading">Map library failed to load — points unavailable.</div>'; return; }
