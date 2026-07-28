@@ -196,7 +196,7 @@
     <div class="card">
       <h2>Call Types Seen <small>tune the rules against reality</small></h2>
       <div style="overflow-x:auto"><table id="tyTbl">
-        <thead><tr><th>Dispatch type</th><th class="num">Calls</th><th>Rule</th><th class="num">UAV flew</th></tr></thead>
+        <thead><tr><th>Dispatch Type</th><th class="num">Calls</th><th>Rule</th><th class="num">UAV Flew</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </div>
@@ -289,8 +289,8 @@
     b.disabled = false;
     if (!r || !r.ok) { b.innerHTML = old; return; }
     const tr = b.closest("tr");
-    if (undo) { b.classList.remove("undo"); b.innerHTML = "&#10005; not ours"; if (tr) tr.classList.remove("nfu-gone"); }
-    else { b.classList.add("undo"); b.textContent = "undo"; if (tr) tr.classList.add("nfu-gone"); }
+    if (undo) { b.classList.remove("undo"); b.innerHTML = "&#10005; Not Ours"; if (tr) tr.classList.remove("nfu-gone"); }
+    else { b.classList.add("undo"); b.textContent = "Undo"; if (tr) tr.classList.add("nfu-gone"); }
   });
 
   function render(j) {
@@ -327,7 +327,7 @@
       "<td>" + (x.st === true ? "<span class='chip duty'>PILOT ON DUTY</span>" + (x.who ? "<div class='whotxt'>" + esc(x.who) + "</div>" : "")
               : x.st === false ? "<span class='chip off'>unstaffed</span>"
               : "<span class='chip off'>no sched</span>") + "</td>" +
-      "<td>" + (x.k ? "<button class='nfu' data-k='" + esc(x.k) + "'>&#10005; not ours</button>" : "") + "</td></tr>"
+      "<td>" + (x.k ? "<button class='nfu' data-k='" + esc(x.k) + "'>&#10005; Not Ours</button>" : "") + "</td></tr>"
     ).join("") || "<tr><td colspan='6' style='color:#8B949E'>No missed missions in the archive. Keep it that way.</td></tr>";
 
     /* crew-feedback summary: what's been marked, what the system has learned to exclude */
@@ -335,7 +335,7 @@
     if (ns) {
       const learnN = nf ? nf.learnN : 3;
       if (!nf || !nf.marks)
-        ns.innerHTML = "Tap <b>&#10005; not ours</b> on any call that shouldn't count — " + learnN +
+        ns.innerHTML = "Tap <b>&#10005; Not Ours</b> on any call that shouldn't count — " + learnN +
                        " marks on the same call type teach a standing exclusion.";
       else {
         const learned = (nf.types || []).filter(t => t[2]);
