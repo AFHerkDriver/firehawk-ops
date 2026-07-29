@@ -71,11 +71,10 @@
   .mini-btn:focus-visible, .btn:focus-visible, .block-head:focus-visible { outline: 2px solid var(--fire); outline-offset: 1px; }
 
   /* ---------- Sync / trainee row ---------- */
-  /* Buttons live in their own flex group so on narrow screens the whole set wraps
-     under the select as one unit — nothing ever runs off the right edge. */
+  /* Trainee name gets the full first row; the action buttons sit on their own row below. */
   .trainee-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: stretch; }
   .trainee-row select {
-    flex: 1 1 140px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    flex: 1 1 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     color: var(--text); font-family: 'Barlow', sans-serif; font-size: 16px; padding: 10px 12px;
   }
   .trainee-btns { display: flex; gap: 8px; align-items: stretch; }
