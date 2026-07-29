@@ -139,6 +139,10 @@
   .ta-chip.on { background: rgba(255,122,26,.14); border-color: var(--fire); color: var(--fire); }
   .track-gate { font-size: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px; margin-bottom: 12px; line-height: 1.4; }
   @media print { .wb-tabs, .track-assign { display: none !important; } }
+  /* Signed out: everything behind the PIN gate stays hidden — only the header,
+     trainer bar, and the Restricted Access gate card are visible. */
+  body.signed-out .trainee-row, body.signed-out .sync, body.signed-out .wb-tabs,
+  body.signed-out #trackAssign, body.signed-out .readiness, body.signed-out .footer-note { display: none !important; }
   /* ---------- Actions ---------- */
   .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
   .btn { flex: 1; min-width: 130px; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-family: 'Barlow', sans-serif; font-size: 14.5px; font-weight: 600; cursor: pointer; }
@@ -182,7 +186,7 @@
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
-<body>
+<body class="signed-out">
 
 <header>
   <div class="eyebrow">BC2FD &middot; Firehawk UAS Program</div>
@@ -1063,7 +1067,12 @@
     document.getElementById("traineeSel").style.display = (isInstructor || voSigner) ? "" : "none";
 
     // ── Gate: no data until signed in ──
+    document.body.classList.toggle("signed-out", !me);
     if (!me) {
+      // Clear anything a previous signed-in render left behind (tabs, owner track panel)
+      // so nothing about trainees survives sign-out even in the hidden DOM.
+      document.getElementById("trackTabs").innerHTML = "";
+      document.getElementById("trackAssign").innerHTML = "";
       document.getElementById("pct").textContent = "\u2014";
       document.getElementById("barFill").style.width = "0%";
       document.getElementById("statusLine").textContent = "Sign in to view training records";
