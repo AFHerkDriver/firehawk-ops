@@ -192,12 +192,12 @@
   <div class="eyebrow">BC2FD &middot; Firehawk UAS Program</div>
   <img id="wingsImg" alt="" aria-hidden="true" style="display:none; height:54px; margin:6px auto 2px;">
   <h1>Pilot Training</h1>
-  <div class="sub">Initial Operational Readiness curriculum (SOP Appendix E). Sign in to open your training folder; instructor sign-offs sync live across devices.</div>
+  <div class="sub">Initial Operational Readiness curriculum (SOP Appendix E). Sign in to open your training folder; sign-offs sync live across devices.</div>
 </header>
 
 <div class="trainer-bar" id="trainerBar">
   <span class="trainer-dot"></span>
-  <span class="trainer-info" id="trainerInfo"><span class="dim">Not signed in — sign in to record sign-offs</span></span>
+  <span class="trainer-info" id="trainerInfo"><span class="dim">Not signed in — sign in to open training records</span></span>
   <button class="mini-btn primary" id="btnSignIn">Sign In</button>
 </div>
 
@@ -236,8 +236,8 @@
 <!-- PIN modal -->
 <div class="overlay" id="pinOverlay">
   <div class="modal">
-    <h2>Trainer Sign-In</h2>
-    <p>Enter your Firehawk Ops PIN. Your identity is stamped on every sign-off you make.</p>
+    <h2>Crew Sign-In</h2>
+    <p>Enter your Firehawk Ops PIN. Trainees open their own folder; any sign-off you record is stamped with your identity.</p>
     <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="PIN" aria-label="PIN">
     <div class="err" id="pinErr"></div>
     <div class="modal-row">
@@ -838,7 +838,7 @@
       document.getElementById("actionsBar").style.display = "";
     } else {
       bar.classList.remove("on");
-      info.innerHTML = "<span class='dim'>Not signed in — sign in to record sign-offs</span>";
+      info.innerHTML = "<span class='dim'>Not signed in — sign in to open training records</span>";
       btn.style.display = "none";
       document.getElementById("actionsBar").style.display = "none";
     }
