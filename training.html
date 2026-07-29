@@ -77,7 +77,8 @@
     flex: 1 1 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     color: var(--text); font-family: 'Barlow', sans-serif; font-size: 16px; padding: 10px 12px;
   }
-  .trainee-btns { display: flex; gap: 8px; align-items: stretch; }
+  .trainee-btns { display: flex; gap: 8px; align-items: stretch; flex: 1 1 100%; }
+  .trainee-btns .mini-btn { flex: 1; }   /* visible buttons share the row evenly */
   .sync { font-size: 11.5px; color: var(--muted); text-align: right; margin: -6px 0 10px; min-height: 15px; }
   .sync.err { color: var(--nogo); }
 
