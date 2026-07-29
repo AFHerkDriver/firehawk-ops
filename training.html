@@ -71,11 +71,14 @@
   .mini-btn:focus-visible, .btn:focus-visible, .block-head:focus-visible { outline: 2px solid var(--fire); outline-offset: 1px; }
 
   /* ---------- Sync / trainee row ---------- */
-  .trainee-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: stretch; }
+  /* Buttons live in their own flex group so on narrow screens the whole set wraps
+     under the select as one unit — nothing ever runs off the right edge. */
+  .trainee-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: stretch; }
   .trainee-row select {
-    flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    flex: 1 1 140px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     color: var(--text); font-family: 'Barlow', sans-serif; font-size: 16px; padding: 10px 12px;
   }
+  .trainee-btns { display: flex; gap: 8px; align-items: stretch; }
   .sync { font-size: 11.5px; color: var(--muted); text-align: right; margin: -6px 0 10px; min-height: 15px; }
   .sync.err { color: var(--nogo); }
 
@@ -196,10 +199,12 @@
 
 <div class="trainee-row">
   <select id="traineeSel" aria-label="Trainee"></select>
-  <button class="mini-btn" id="btnNewTrainee">+ Trainee</button>
-  <button class="mini-btn" id="btnRecall">Recall</button>
-  <button class="mini-btn" id="btnArchive" style="display:none;">Archive</button>
-  <button class="mini-btn" id="btnDelTrainee" style="display:none; color: var(--nogo);">Delete</button>
+  <div class="trainee-btns">
+    <button class="mini-btn" id="btnNewTrainee">+ Trainee</button>
+    <button class="mini-btn" id="btnRecall">Recall</button>
+    <button class="mini-btn" id="btnArchive" style="display:none;">Archive</button>
+    <button class="mini-btn" id="btnDelTrainee" style="display:none; color: var(--nogo);">Delete</button>
+  </div>
 </div>
 <div class="sync" id="syncLine"></div>
 
