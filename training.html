@@ -667,10 +667,15 @@
   function sessionGet() { try { const v = localStorage.getItem(SESSION_KEY); return v ? Number(v) : null; } catch (e) { return null; } }
   function sessionSet(id) { try { if (id == null) localStorage.removeItem(SESSION_KEY); else localStorage.setItem(SESSION_KEY, String(id)); } catch (e) {} }
   function adoptMember(m) {
-    me = { id: m.id, name: m.name, label: crewLabel(m), tier: m.tier, instructor: !!m.instructor, rank: m.rank || "" };
+    me = { id: m.id, name: m.name, label: crewLabel(m), tier: m.tier, instructor: !!m.instructor, rpic: !!m.rpicQualified, rank: m.rank || "" };
     if (me.tier === "owner") seedDefaults();
-    if (!me.instructor) selTid = "c" + me.id;
+    if (!me.instructor && !me.rpic) selTid = "c" + me.id;
+    if (!me.instructor && me.rpic) track = "VO";   // VO signers land on the track they can actually sign
   }
+  // Who may record a sign-off on a given track: instructors sign anything; a fully
+  // certified RPIC (rpicQualified on the roster) may sign the VO track ONLY. The flag
+  // is roster-driven, so newly certified RPICs gain VO sign-off with no code change.
+  function canSignTrack(trId) { return !!me && (me.instructor || (me.rpic && trId === "VO")); }
   // Restore the shared app session — signed into Firehawk Ops means signed in here.
   async function restoreSession() {
     const id = sessionGet();
@@ -817,7 +822,7 @@
       bar.classList.add("on");
       info.innerHTML = "<strong></strong> <span class='dim'></span>";
       info.querySelector("strong").textContent = me.label;
-      info.querySelector(".dim").textContent = me.instructor ? "· Instructor" : "· Trainee View";
+      info.querySelector(".dim").textContent = me.instructor ? "· Instructor" : (me.rpic ? "· RPIC — VO Sign-Off" : "· Trainee View");
       btn.textContent = "Sign Out";
       btn.classList.remove("primary");
       btn.style.display = "";
@@ -878,7 +883,7 @@
   }
   function onItemTap(item) {
     if (!me) { pendingItem = item; showPin(); return; }
-    if (!me.instructor) { toast("Sign-offs are recorded by instructors"); return; }
+    if (!canSignTrack(trackObj().id)) { toast(me.rpic ? "RPICs record VO sign-offs only — " + trackObj().label + " items need an instructor" : "Sign-offs are recorded by instructors"); return; }
     if (!selTid) { toast("Add a trainee first"); return; }
     const t = db.trainees[selTid];
     if (!t) { toast("Select a trainee first"); return; }
@@ -1042,6 +1047,7 @@
     if (document.activeElement && document.activeElement.id === "trComments") return;
     renderTrainer();
     const isInstructor = !!(me && me.instructor);
+    const voSigner = !!(me && !me.instructor && me.rpic);   // certified RPIC: VO sign-off only
     const delBtn = document.getElementById("btnDelTrainee");
     delBtn.style.display = (me && me.tier === "owner" && selTid) ? "" : "none";
     delBtn.textContent = confirmDel ? "Delete?" : "Delete";
@@ -1049,7 +1055,7 @@
     arcBtn.style.display = (me && me.tier === "owner" && selTid) ? "" : "none";
     arcBtn.textContent = "Archive";
     document.getElementById("btnNewTrainee").style.display = isInstructor ? "" : "none";
-    document.getElementById("traineeSel").style.display = isInstructor ? "" : "none";
+    document.getElementById("traineeSel").style.display = (isInstructor || voSigner) ? "" : "none";
 
     // ── Gate: no data until signed in ──
     if (!me) {
@@ -1064,8 +1070,8 @@
       return;
     }
 
-    // ── Trainees: locked to their own folder ──
-    if (!isInstructor) {
+    // ── Trainees: locked to their own folder (VO signers get the picker like instructors) ──
+    if (!isInstructor && !voSigner) {
       selTid = "c" + me.id;
       if (!(db.trainees && db.trainees[selTid])) {
         document.getElementById("pct").textContent = "\u2014";
@@ -1083,11 +1089,13 @@
     sel.innerHTML = "";
     const ids = Object.keys(db && db.trainees || {})
       .filter(tid => (!db.trainees[tid].archived && folderOpen(db.trainees[tid])) || tid === selTid)
+      // VO signers only work VO folders — their picker shows VO-track trainees (plus their own record).
+      .filter(tid => !voSigner || tid === "c" + me.id || assignedTracks(db.trainees[tid]).indexOf("VO") >= 0)
       .sort((a, b) => {
         const ka = traineeSortKey(a), kb = traineeSortKey(b);
         return ka.rp - kb.rp || ka.last.localeCompare(kb.last) || ka.first.localeCompare(kb.first);
       });
-    if (isInstructor && selTid && ids.indexOf(selTid) < 0) selTid = ids.length ? ids[ids.length - 1] : null;
+    if ((isInstructor || voSigner) && selTid && ids.indexOf(selTid) < 0) selTid = ids.length ? ids[ids.length - 1] : null;
     if (!ids.length) {
       const o = document.createElement("option"); o.textContent = "No Trainees Yet"; o.value = ""; sel.appendChild(o);
     } else {
@@ -1259,7 +1267,7 @@
   });
   document.getElementById("pinInput").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("pinGo").click(); });
 
-  document.getElementById("traineeSel").addEventListener("change", function () { selTid = this.value || null; confirmDel = false; track = "RPIC"; render(); });
+  document.getElementById("traineeSel").addEventListener("change", function () { selTid = this.value || null; confirmDel = false; track = (me && !me.instructor && me.rpic) ? "VO" : "RPIC"; render(); });
   document.getElementById("btnDelTrainee").addEventListener("click", () => {
     if (!confirmDel) {
       confirmDel = true; render();

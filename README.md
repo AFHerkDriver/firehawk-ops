@@ -55,7 +55,7 @@ training-touch-icon.png, training-og.png      # Training-page icons / link previ
 ### Pilot Training (`training.html`)
 - Electronic **Initial Operational Readiness** record implementing the SOP Appendix E curriculum: prerequisites, aircraft qualifications (**DJI M30T, DJI M4T, DJI Avata**), software, and operational blocks.
 - **Operational readiness percentage** and per-block progress; each item carries an instructor **sign-off stamped by name and date**, synced live across devices.
-- PIN sign-in (same auth as the crew app). Instructors see every trainee and are the only ones who can sign items off; trainees open their own folder.
+- PIN sign-in (same auth as the crew app). Instructors see every trainee and can sign off any track; fully certified RPICs (roster `rpicQualified`) can sign off the **Visual Observer track only**; trainees open their own folder.
 - Its own **Training Record** branding (home-screen icon, favicon, and link-preview card).
 
 ## Architecture
