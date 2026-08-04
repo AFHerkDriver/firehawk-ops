@@ -380,20 +380,18 @@
   function trackComplete(t, tr) { const checks = (t && t[tr.key]) || {}; return tr.allItems.every(it => checks[it.id]); }
   // True once at least one item has actually been signed off in any assigned track —
   // distinguishes "record exists, empty shell" from "workbook genuinely open."
-  function hasAnyProgress(t) {
-    if (!t) return false;
-    return assignedTracks(t).some(trId => { const tr = TRACK_BY_ID[trId]; return tr && t[tr.key] && Object.keys(t[tr.key]).length > 0; });
-  }
   // Derived training status from OPEN assigned tracks (not from quals held):
-  //   No items signed off yet anywhere → null (not shown as "In Training" on the roster)
-  //   Instructor track assigned & not 100% → "in_upgrade"
-  //   any VO/RPIC track assigned & not 100% → "in_training"
-  //   otherwise → "qualified"
+  //   Open folder with an assigned track not yet 100% → "in_training" from the moment
+  //     the folder is created — zero sign-offs still shows the roster chip
+  //     ("in_upgrade" when the Instructor track is the one open)
+  //   Archived while a track is incomplete (shelved mid-training) → null
+  //   every assigned track 100% signed off → "qualified"
   function computeStatus(t) {
-    if (!hasAnyProgress(t)) return null;
+    if (!t) return null;
     const assigned = assignedTracks(t);
-    if (assigned.indexOf("INST") >= 0) { const itr = TRACK_BY_ID.INST; if (itr && !trackComplete(t, itr)) return "in_upgrade"; }
-    for (const trId of assigned) { if (trId === "INST") continue; const tr = TRACK_BY_ID[trId]; if (tr && !trackComplete(t, tr)) return "in_training"; }
+    if (!assigned.length) return null;
+    if (assigned.indexOf("INST") >= 0) { const itr = TRACK_BY_ID.INST; if (itr && !trackComplete(t, itr)) return t.archived ? null : "in_upgrade"; }
+    for (const trId of assigned) { if (trId === "INST") continue; const tr = TRACK_BY_ID[trId]; if (tr && !trackComplete(t, tr)) return t.archived ? null : "in_training"; }
     return "qualified";
   }
   // A trainee's "folder" is open while any assigned track still has incomplete items;
@@ -926,6 +924,8 @@
     // A fully-complete folder shows "closed" regardless of the archived flag (see folderOpen/status
     // labeling) — so archiving an already-closed record is harmless and just stays "closed".
     toast(folderOpen(prev) ? ((prev.name || "Trainee") + " archived") : ((prev.name || "Trainee") + " is already closed"));
+    // Shelving an incomplete folder drops the roster chip; a completed one stays "qualified".
+    await syncStatus(db.trainees[tid]);
   }
   async function deleteTrainee() {
     if (!me || me.tier !== "owner" || !selTid) return;
@@ -953,9 +953,9 @@
     db.trainees[tid] = rec; selTid = tid; render();
     const res = await fsUpdate(COL, DOC, { trainees: { [tid]: rec } }, ["trainees." + tid]);
     if (!res.ok) { delete db.trainees[tid]; selTid = null; render(); toast("Save failed — trainee not created"); return false; }
-    // Roster shows "In Training" once real work starts (first item signed off), not just
-    // because an empty record exists — see hasAnyProgress()/computeStatus() and signOff().
-    await loadCrew();
+    // Opening a folder puts the trainee In Training on the roster immediately —
+    // the chip shows from day one, not just after the first sign-off (see computeStatus).
+    await syncStatus(rec);
     return true;
   }
 
