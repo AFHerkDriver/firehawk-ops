@@ -1379,16 +1379,29 @@
 
   function CrewMgmtView(props) {
     const { crew, saveCrew, flash, isOwner, myId, sessionPin } = props;
+    // Dot colours, chosen so any two can be told apart at a glance on the dark
+    // roster panel. The old list had four near-identical reds, four oranges and
+    // so on; picking from it (or from the free-hand spectrum that used to sit
+    // behind the colour button) produced lookalikes such as #3ADFB3 / #3ADFC6.
+    //
+    // These 27 are packed by perceptual distance (OKLab): the closest pair sits
+    // at 0.102, matching the closest pair already on the roster, so nothing here
+    // is harder to tell apart than what crew already read fine. 28 is the
+    // practical ceiling — a 29th drops some pair to 0.094 and it starts to show.
+    //
+    // #7D3C98 and #8B4513 are darker than the rest against C.panel; both are
+    // long-standing assigned colours, kept so no pilot is forced to change.
     const PALETTE = [
-      "#7B1E17","#C0392B","#E74C3C","#FF7066",              // reds
-      "#A84300","#D35400","#E67E22","#F39C12",              // oranges
-      "#B7791F","#C8A84B","#F1C40F","#FDE38A",              // yellows / golds
-      "#145A32","#27AE60","#2ECC71","#7BED9F",              // greens
-      "#0E6655","#16A085","#1ABC9C","#00CEC9",              // teals / cyan
-      "#1B4F72","#2980B9","#3498DB","#4A90D9","#74B9FF",    // blues
-      "#4A235A","#7D3C98","#8E44AD","#9B59B6","#C39BD3",    // purples
-      "#A32C6C","#E84393","#FD79A8",                        // pinks
-      "#5D4037","#8B4513"                                   // brown
+      "#C0392B","#DC606C","#F8CA96",                        // red / salmon / peach
+      "#E67E22","#C8A84B","#937C2F",                        // orange / gold / olive
+      "#C5E250","#82A446","#2F932F",                        // lime / moss / forest
+      "#1FC140","#77C59A","#22F1B3",                        // green / sage / mint
+      "#319B9B","#0EBEDD","#8ED9EB",                        // teal / cyan / sky
+      "#3A6D88","#1C5BCE","#4A90D9",                        // slate / deep blue / blue
+      "#9CAAF2","#9476E5","#7D3C98",                        // periwinkle / lavender / purple
+      "#B44DC7","#F29CF2","#B2387B",                        // violet / orchid / plum
+      "#EB47A9","#D194A0",                                  // pink / dusty rose
+      "#8B4513"                                             // brown
     ];
     const [showAdd, setShowAdd]           = useState(false);
     // Narrow screens (phones) abbreviate the first name so the last name always fits.
@@ -1438,8 +1451,11 @@
       || (a.first || "").localeCompare(b.first || "", undefined, { sensitivity:"base" });
     const activeList   = crew.filter(c => !c.archived).sort(byRoster);
     const archivedList = crew.filter(c => c.archived).sort(byRoster);
-    const usedColors   = activeList.map(c => c.color);                          // taken by active/reserve pilots
-    const availColors  = PALETTE.filter(col => usedColors.indexOf(col) === -1);
+    const usedColors   = activeList.map(c => (c.color || "").toUpperCase());    // taken by active/reserve pilots
+    const myColor      = editId != null ? ((crew.find(x => x.id === editId) || {}).color || "") : "";
+    // Free colours, plus the one this pilot already wears — otherwise opening
+    // Edit would show their own colour as unavailable and drop it from the grid.
+    const availColors  = PALETTE.filter(col => usedColors.indexOf(col.toUpperCase()) === -1 || col.toUpperCase() === myColor.toUpperCase());
     const swatchColors = availColors.length ? availColors : PALETTE;            // fallback if every color is taken
     const addYears = (s, n) => { try { const d = new Date(s + "T00:00:00Z"); d.setUTCFullYear(d.getUTCFullYear() + n); return d.toISOString().slice(0, 10); } catch (e) { return s; } };
 
@@ -1548,8 +1564,6 @@
     const fieldLabel = (t) => h("div", { style:{ fontSize:10, color:C.dim, letterSpacing:1, marginBottom: narrow ? 2 : 5, marginTop: narrow ? 4 : 10 } }, t);
     const textInput = (val, set, ph, max) => h("input", { value:val, onChange: e => set(e.target.value), placeholder:ph, maxLength: max || null,
       style:{ width:"100%", boxSizing:"border-box", background:C.bg, color:C.text, border:"1px solid "+C.border, borderRadius:8, padding: narrow ? "7px 10px" : "9px 11px", fontSize:13, colorScheme:"dark" } });
-    const hslToHex = (hh, ss, ll) => { ss/=100; ll/=100; const k = n => (n + hh/30) % 12; const a = ss * Math.min(ll, 1-ll); const f = n => ll - a * Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1))); const to = x => Math.round(255*x).toString(16).padStart(2,"0"); return "#" + to(f(0)) + to(f(8)) + to(f(4)); };
-    const pickHue = (e) => { const r = e.currentTarget.getBoundingClientRect(); const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); setFColor(hslToHex(Math.round(x*360)%360, 72, 55)); };
     const fcol = (lbl, el) => h("div", { style:{ flex:1, minWidth:0 } }, fieldLabel(lbl), el);
     const secLbl = (t) => h("div", { style:{ fontSize:8.5, color:C.dim, letterSpacing:2, margin:"16px 0 2px" } }, t);
     const NWCG = [["UASM","UAS Manager"],["UASL","UAS Module Leader"],["UASD","UAS Data Specialist"]];
@@ -1660,11 +1674,15 @@
             h("div", { onClick: e => e.stopPropagation(), style:{ width:"100%", maxWidth:320, background:C.panel, border:"1px solid "+C.border, borderRadius:14, padding:16, boxShadow:"0 12px 48px rgba(0,0,0,0.6)" } },
               h("div", { style:{ display:"flex", alignItems:"center", gap:12, marginBottom:12 } },
                 h("span", { style:{ width:34, height:34, borderRadius:"50%", background: fColor || "#4B5563", border:"2px solid "+C.border, flexShrink:0 } }),
-                h("div", { style:{ fontSize:11, color:C.dim } }, "Drag or tap the spectrum")),
-              h("div", { onPointerDown: e => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch(_){} pickHue(e); },
-                onPointerMove: e => { if (e.buttons) pickHue(e); },
-                style:{ width:"100%", height:34, borderRadius:8, border:"1px solid "+C.border, cursor:"crosshair", touchAction:"none",
-                  background:"linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)" } }),
+                h("div", { style:{ fontSize:11, color:C.dim } }, swatchColors.length + (swatchColors.length === 1 ? " color free" : " colors free"))),
+              // Fixed swatches, not a free-hand spectrum: every colour here is a
+              // measured distance from every other, and taken ones are filtered
+              // out, so two pilots can no longer end up with lookalike dots.
+              h("div", { style:{ display:"flex", flexWrap:"wrap", gap:10 } },
+                swatchColors.map(col => h("button", { key:col, onClick: () => { setFColor(col); setColorPop(false); }, title:col,
+                  "aria-label": "Use color " + col,
+                  style:{ width:34, height:34, borderRadius:"50%", background:col, cursor:"pointer", padding:0, display:"block",
+                    border: (fColor || "").toUpperCase() === col.toUpperCase() ? "3px solid "+C.text : "2px solid "+C.border } }))),
               h("button", { onClick: () => setColorPop(false), style:{ width:"100%", borderRadius:8, padding:"9px 0", fontSize:13, background:"rgba(59,130,246,0.16)", border:"1px solid "+C.blue, color:C.blue, cursor:"pointer", marginTop:12 } }, "Done"))) : null)) : null,
 
 
